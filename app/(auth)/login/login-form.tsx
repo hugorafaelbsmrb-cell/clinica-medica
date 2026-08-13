@@ -17,7 +17,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Field, FieldError } from "@/components/ui/field"
-import { HeartPulse } from "lucide-react"
 
 const loginSchema = z.object({
   email: z.string().email("E-mail inválido"),
@@ -66,17 +65,13 @@ export function LoginForm({ logoDataUrl, clinicName }: LoginFormProps) {
   return (
     <Card className="w-full max-w-md">
       <CardHeader className="text-center">
-        {logoDataUrl ? (
+        {logoDataUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={logoDataUrl}
             alt={clinicName ?? "Logo da clínica"}
-            className="mx-auto h-20 w-20 rounded-full border bg-background object-cover"
+            className="mx-auto h-20 w-20 object-contain"
           />
-        ) : (
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
-            <HeartPulse className="h-10 w-10 text-primary" />
-          </div>
         )}
         <CardTitle className="text-2xl">{clinicName ?? "Clínica Médica"}</CardTitle>
         <CardDescription>
