@@ -390,9 +390,10 @@ export function CadastroWizard() {
           <Button
             type="button"
             variant="outline"
-            onClick={() =>
+            onClick={() => {
+              setCpfStatus("idle")
               setPhase(existingPatient ? "consultas" : "cadastro")
-            }
+            }}
             className="h-12 text-base"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -517,6 +518,7 @@ export function CadastroWizard() {
               type="button"
               variant="ghost"
               onClick={() => {
+                setCpfStatus("idle")
                 setPhase("cadastro")
                 setCadStep(0)
               }}
@@ -1105,7 +1107,7 @@ export function CadastroWizard() {
                   )}
                 </Button>
               )}
-              {agStep > 0 && (
+              {(agStep > 0 || existingPatient) && (
                 <Button
                   type="button"
                   variant="ghost"
