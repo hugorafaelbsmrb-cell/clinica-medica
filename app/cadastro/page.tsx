@@ -8,6 +8,10 @@ export const metadata: Metadata = {
   description: "Pré-cadastro de paciente para atendimento na clínica",
 }
 
+// Dinâmica: busca os dados da clínica no banco a cada requisição e não
+// depende do banco no momento do build (evita falha de deploy no Render).
+export const dynamic = "force-dynamic"
+
 /**
  * Página pública de pré-cadastro (autoatendimento).
  * O link pode ser enviado ao paciente no primeiro contato.
