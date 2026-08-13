@@ -10,6 +10,7 @@ export type ClinicInfo = {
   phone?: string | null
   email?: string | null
   cnpj?: string | null
+  horarioAtendimento?: string | null
   logoDataUrl?: string | null
 }
 
@@ -27,6 +28,7 @@ export async function getClinicSettings(): Promise<ClinicInfo> {
         phone: settings.phone,
         email: settings.email,
         cnpj: settings.cnpj,
+        horarioAtendimento: settings.horarioAtendimento,
         logoDataUrl: settings.logoDataUrl,
       }
     : DEFAULTS

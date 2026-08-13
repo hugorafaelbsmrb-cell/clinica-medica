@@ -20,6 +20,7 @@ const clinicSchema = z.object({
     .union([z.string().email("E-mail inválido"), z.literal("")])
     .optional(),
   cnpj: z.string().optional(),
+  horarioAtendimento: z.string().optional(),
   logoDataUrl: z.string().optional(),
 })
 
@@ -66,6 +67,7 @@ export async function saveClinicSettings(
     phone: formData.get("phone"),
     email: formData.get("email"),
     cnpj: formData.get("cnpj"),
+    horarioAtendimento: formData.get("horarioAtendimento"),
     logoDataUrl: logoDataUrl || undefined,
   })
 
@@ -85,6 +87,7 @@ export async function saveClinicSettings(
       phone: data.phone || null,
       email: data.email || null,
       cnpj: data.cnpj || null,
+      horarioAtendimento: data.horarioAtendimento || null,
       logoDataUrl: data.logoDataUrl || null,
     },
     create: {
@@ -94,6 +97,7 @@ export async function saveClinicSettings(
       phone: data.phone || null,
       email: data.email || null,
       cnpj: data.cnpj || null,
+      horarioAtendimento: data.horarioAtendimento || null,
       logoDataUrl: data.logoDataUrl || null,
     },
   })

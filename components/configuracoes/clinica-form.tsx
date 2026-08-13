@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { ImagePlus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldLabel } from "@/components/ui/field"
 import {
@@ -19,6 +20,7 @@ export type ClinicInitialData = {
   phone?: string | null
   email?: string | null
   cnpj?: string | null
+  horarioAtendimento?: string | null
   logoDataUrl?: string | null
 }
 
@@ -176,6 +178,20 @@ export function ClinicaForm({ initial }: { initial: ClinicInitialData }) {
               defaultValue={initial.address ?? ""}
               placeholder="Rua Exemplo, 123 — Centro, São Paulo/SP — CEP 00000-000"
             />
+          </Field>
+
+          <Field>
+            <FieldLabel>Horário de atendimento</FieldLabel>
+            <Textarea
+              name="horarioAtendimento"
+              defaultValue={initial.horarioAtendimento ?? ""}
+              placeholder="Ex.: Segunda a sexta, das 8h às 17h"
+              rows={2}
+            />
+            <p className="text-xs text-muted-foreground">
+              Texto que o assistente virtual do WhatsApp responde quando
+              perguntam o horário de funcionamento.
+            </p>
           </Field>
 
           <div className="flex gap-3">

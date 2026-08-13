@@ -102,6 +102,7 @@ model ClinicSettings {
   phone          String?
   email          String?
   cnpj           String?
+  horarioAtendimento String? @db.Text // texto livre exibido pelo bot (ex.: "Seg. a sex., 8h às 17h")
   logoDataUrl    String?  @db.Text
   deepseekApiKey String? // chave da DeepSeek (tela Configurações → Integrações)
   wApiInstance   String? // instanceId da W-API
@@ -224,6 +225,7 @@ model Message {
   direction   String        @default("OUT") // OUT = enviada ao paciente, IN = resposta recebida
   content     String        @db.Text
   status      MessageStatus @default(PENDENTE)
+  needsAttention Boolean    @default(false) // mensagem que o bot marcou para a equipe (ex.: pedido de atendente)
   scheduledFor DateTime?
   sentAt      DateTime?
   deliveredAt DateTime?
@@ -234,6 +236,14 @@ model Message {
   @@index([patientId])
   @@index([status])
   @@index([scheduledFor])
+}
+
+// Sessão do bot de atendimento: lembra em qual etapa o paciente está
+// no WhatsApp (ex.: aguardando o CPF para consultar agendamentos).
+model BotSession {
+  phone     String   @id // número normalizado com DDI (ex.: 5511999990000)
+  state     String   @default("MENU") // MENU | AGUARDANDO_CPF
+  updatedAt DateTime @updatedAt
 }
 
 model MessageTemplate {

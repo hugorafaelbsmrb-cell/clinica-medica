@@ -45,7 +45,7 @@ export default async function WhatsAppPage() {
   const [messages, templates, followUps, patients] = await Promise.all([
     prisma.message.findMany({
       include: { patient: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ needsAttention: "desc" }, { createdAt: "desc" }],
       take: 50,
     }),
     prisma.messageTemplate.findMany({ orderBy: { createdAt: "desc" } }),
@@ -110,7 +110,12 @@ export default async function WhatsAppPage() {
                   </TableHeader>
                   <TableBody>
                     {messages.map((message) => (
-                      <TableRow key={message.id}>
+                      <TableRow
+                        key={message.id}
+                        className={
+                          message.needsAttention ? "bg-amber-500/10" : undefined
+                        }
+                      >
                         <TableCell className="whitespace-nowrap">
                           {format(message.createdAt, "dd/MM HH:mm", { locale: ptBR })}
                         </TableCell>
@@ -122,11 +127,16 @@ export default async function WhatsAppPage() {
                           {message.direction === "IN" ? "Recebida" : "Enviada"}
                         </TableCell>
                         <TableCell>
-                          <Badge
-                            variant={message.status === "FALHA" ? "destructive" : "outline"}
-                          >
-                            {STATUS_LABELS[message.status] ?? message.status}
-                          </Badge>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Badge
+                              variant={message.status === "FALHA" ? "destructive" : "outline"}
+                            >
+                              {STATUS_LABELS[message.status] ?? message.status}
+                            </Badge>
+                            {message.needsAttention && (
+                              <Badge variant="destructive">Pediu atendente</Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="hidden max-w-xs truncate lg:table-cell">
                           {message.content}

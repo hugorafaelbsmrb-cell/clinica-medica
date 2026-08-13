@@ -332,12 +332,16 @@ export async function processPendingMessages(
   return { sent, failed }
 }
 
-/** Registra resposta recebida do paciente (via webhook). */
+/**
+ * Registra resposta recebida do paciente (via webhook).
+ * Retorna o id da mensagem criada, ou null se o remetente não é paciente
+ * cadastrado (nesse caso nada é arquivado).
+ */
 export async function registerIncoming(
   from: string,
   content: string,
   receivedAt: Date
-): Promise<void> {
+): Promise<string | null> {
   const normalized = normalizePhone(from)
   const patient = await prisma.patient.findFirst({
     where: { phone: { contains: normalized.slice(2) } },
@@ -345,10 +349,10 @@ export async function registerIncoming(
 
   if (!patient) {
     console.log(`[WhatsApp] Mensagem de número não cadastrado: ${normalized}`)
-    return
+    return null
   }
 
-  await prisma.message.create({
+  const created = await prisma.message.create({
     data: {
       patientId: patient.id,
       type: "RESPOSTA",
@@ -358,4 +362,6 @@ export async function registerIncoming(
       createdAt: receivedAt,
     },
   })
+
+  return created.id
 }
