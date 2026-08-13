@@ -79,7 +79,7 @@ export default async function WhatsAppPage() {
       </div>
 
       <Tabs defaultValue="mensagens">
-        <TabsList>
+        <TabsList className="max-w-full overflow-x-auto">
           <TabsTrigger value="mensagens">Mensagens</TabsTrigger>
           <TabsTrigger value="enviar">Enviar manual</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
@@ -102,10 +102,10 @@ export default async function WhatsAppPage() {
                     <TableRow>
                       <TableHead>Data</TableHead>
                       <TableHead>Paciente</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Direção</TableHead>
+                      <TableHead className="hidden md:table-cell">Tipo</TableHead>
+                      <TableHead className="hidden sm:table-cell">Direção</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Mensagem</TableHead>
+                      <TableHead className="hidden lg:table-cell">Mensagem</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -115,8 +115,10 @@ export default async function WhatsAppPage() {
                           {format(message.createdAt, "dd/MM HH:mm", { locale: ptBR })}
                         </TableCell>
                         <TableCell>{message.patient.name}</TableCell>
-                        <TableCell>{TYPE_LABELS[message.type] ?? message.type}</TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          {TYPE_LABELS[message.type] ?? message.type}
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell">
                           {message.direction === "IN" ? "Recebida" : "Enviada"}
                         </TableCell>
                         <TableCell>
@@ -126,7 +128,7 @@ export default async function WhatsAppPage() {
                             {STATUS_LABELS[message.status] ?? message.status}
                           </Badge>
                         </TableCell>
-                        <TableCell className="max-w-xs truncate">
+                        <TableCell className="hidden max-w-xs truncate lg:table-cell">
                           {message.content}
                         </TableCell>
                       </TableRow>
@@ -195,7 +197,7 @@ export default async function WhatsAppPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Paciente</TableHead>
-                      <TableHead>Intervalo</TableHead>
+                      <TableHead className="hidden sm:table-cell">Intervalo</TableHead>
                       <TableHead>Próximo envio</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Ações</TableHead>

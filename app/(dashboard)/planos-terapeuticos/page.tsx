@@ -2,7 +2,7 @@ import Link from "next/link"
 import type { Metadata } from "next"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { Plus, ClipboardList, Sparkles } from "lucide-react"
+import { ClipboardList, Eye, Pencil, Plus, Sparkles } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
@@ -68,10 +68,10 @@ export default async function PlanosPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Paciente</TableHead>
-                  <TableHead>Diagnóstico</TableHead>
-                  <TableHead>Origem</TableHead>
+                  <TableHead className="hidden sm:table-cell">Diagnóstico</TableHead>
+                  <TableHead className="hidden md:table-cell">Origem</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Atualizado</TableHead>
+                  <TableHead className="hidden md:table-cell">Atualizado</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -86,10 +86,10 @@ export default async function PlanosPage() {
                         {plan.patient.name}
                       </Link>
                     </TableCell>
-                    <TableCell className="max-w-64 truncate">
+                    <TableCell className="hidden max-w-64 truncate sm:table-cell">
                       {plan.diagnosis}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">
                       {plan.source === "IA" ? (
                         <Badge variant="secondary">
                           <Sparkles className="mr-1 h-3 w-3" />
@@ -108,7 +108,7 @@ export default async function PlanosPage() {
                         {STATUS_LABELS[plan.status]}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="hidden text-muted-foreground md:table-cell">
                       {format(plan.updatedAt, "dd/MM/yyyy", { locale: ptBR })}
                     </TableCell>
                     <TableCell className="flex justify-end gap-2">
@@ -119,7 +119,8 @@ export default async function PlanosPage() {
                           <Link href={`/planos-terapeuticos/${plan.id}`} />
                         }
                       >
-                        Ver
+                        <Eye className="h-4 w-4 sm:hidden" />
+                        <span className="hidden sm:inline">Ver</span>
                       </Button>
                       <Button
                         variant="outline"
@@ -130,7 +131,8 @@ export default async function PlanosPage() {
                           />
                         }
                       >
-                        Editar
+                        <Pencil className="h-4 w-4 sm:hidden" />
+                        <span className="hidden sm:inline">Editar</span>
                       </Button>
                     </TableCell>
                   </TableRow>

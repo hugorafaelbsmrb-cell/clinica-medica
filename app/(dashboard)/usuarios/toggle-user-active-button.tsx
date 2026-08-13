@@ -3,7 +3,7 @@
 import { useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
+import { Loader2, UserCheck, UserX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toggleUserActive } from "@/lib/actions/usuarios"
 
@@ -40,8 +40,12 @@ export function ToggleUserActiveButton({
     >
       {pending ? (
         <Loader2 className="h-4 w-4 animate-spin" />
-      ) : null}
-      {active ? "Desativar" : "Ativar"}
+      ) : active ? (
+        <UserX className="h-4 w-4 sm:hidden" />
+      ) : (
+        <UserCheck className="h-4 w-4 sm:hidden" />
+      )}
+      <span className="hidden sm:inline">{active ? "Desativar" : "Ativar"}</span>
     </Button>
   )
 }

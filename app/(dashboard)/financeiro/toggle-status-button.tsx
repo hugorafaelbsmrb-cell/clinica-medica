@@ -43,7 +43,9 @@ export function ToggleStatusButton({
       ) : (
         <Check className="h-4 w-4" />
       )}
-      {isPaid ? "Reabrir" : "Marcar pago"}
+      <span className="hidden sm:inline">
+        {isPaid ? "Reabrir" : "Marcar pago"}
+      </span>
     </Button>
   )
 }

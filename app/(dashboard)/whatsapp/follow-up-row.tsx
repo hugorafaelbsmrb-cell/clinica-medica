@@ -42,7 +42,7 @@ export function FollowUpRow({
   return (
     <TableRow>
       <TableCell className="font-medium">{name}</TableCell>
-      <TableCell>{intervalDays} dias</TableCell>
+      <TableCell className="hidden sm:table-cell">{intervalDays} dias</TableCell>
       <TableCell>
         {nextDueAt
           ? format(nextDueAt, "dd/MM/yyyy", { locale: ptBR })

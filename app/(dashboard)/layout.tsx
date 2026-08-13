@@ -21,7 +21,7 @@ export default async function DashboardLayout({
         clinicName={clinic.name}
         logoDataUrl={clinic.logoDataUrl}
       />
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center justify-between gap-2 border-b bg-background px-3 sm:px-4">
           <MobileSidebar
             role={session.user.role}
@@ -34,7 +34,7 @@ export default async function DashboardLayout({
             role={session.user.role}
           />
         </header>
-        <main className="flex-1 bg-muted/30 p-4 md:p-6">{children}</main>
+        <main className="min-w-0 flex-1 bg-muted/30 p-4 md:p-6">{children}</main>
       </div>
     </div>
   )

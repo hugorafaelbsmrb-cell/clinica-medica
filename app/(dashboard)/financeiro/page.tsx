@@ -2,7 +2,7 @@ import Link from "next/link"
 import type { Metadata } from "next"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { Plus, Wallet, TrendingUp, TrendingDown, AlertTriangle } from "lucide-react"
+import { AlertTriangle, Pencil, Plus, TrendingDown, TrendingUp, Wallet } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
@@ -227,8 +227,8 @@ export default async function FinanceiroPage({
                 <TableRow>
                   <TableHead>Vencimento</TableHead>
                   <TableHead>Descrição</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Tipo</TableHead>
+                  <TableHead className="hidden lg:table-cell">Categoria</TableHead>
+                  <TableHead className="hidden md:table-cell">Tipo</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -252,10 +252,10 @@ export default async function FinanceiroPage({
                           </span>
                         )}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
+                      <TableCell className="hidden text-muted-foreground lg:table-cell">
                         {CATEGORY_LABELS[entry.category] ?? entry.category}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">
                         <Badge
                           variant={
                             entry.type === "RECEITA" ? "secondary" : "outline"
@@ -294,7 +294,8 @@ export default async function FinanceiroPage({
                             <Link href={`/financeiro/${entry.id}/editar`} />
                           }
                         >
-                          Editar
+                          <Pencil className="h-4 w-4 sm:hidden" />
+                          <span className="hidden sm:inline">Editar</span>
                         </Button>
                         <DeleteEntryButton entryId={entry.id} />
                       </TableCell>

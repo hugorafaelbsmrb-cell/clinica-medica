@@ -2,7 +2,7 @@ import Link from "next/link"
 import type { Metadata } from "next"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { Plus, FileText } from "lucide-react"
+import { Eye, FileText, Plus, Printer } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
@@ -60,8 +60,8 @@ export default async function PrescricoesPage() {
                 <TableRow>
                   <TableHead>Data</TableHead>
                   <TableHead>Paciente</TableHead>
-                  <TableHead>Médico</TableHead>
-                  <TableHead>Medicamentos</TableHead>
+                  <TableHead className="hidden md:table-cell">Médico</TableHead>
+                  <TableHead className="hidden sm:table-cell">Medicamentos</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -79,10 +79,10 @@ export default async function PrescricoesPage() {
                         {prescription.patient.name}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="hidden text-muted-foreground md:table-cell">
                       {prescription.doctor?.name ?? "—"}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       {prescription.items
                         .map((item) => item.medication)
                         .join(", ")}
@@ -93,7 +93,8 @@ export default async function PrescricoesPage() {
                         size="sm"
                         render={<Link href={`/prescricoes/${prescription.id}`} />}
                       >
-                        Ver
+                        <Eye className="h-4 w-4 sm:hidden" />
+                        <span className="hidden sm:inline">Ver</span>
                       </Button>
                       <Button
                         variant="outline"
@@ -102,7 +103,8 @@ export default async function PrescricoesPage() {
                           <Link href={`/prescricoes/${prescription.id}/imprimir`} />
                         }
                       >
-                        Imprimir
+                        <Printer className="h-4 w-4 sm:hidden" />
+                        <span className="hidden sm:inline">Imprimir</span>
                       </Button>
                     </TableCell>
                   </TableRow>

@@ -2,7 +2,7 @@ import Link from "next/link"
 import type { Metadata } from "next"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { Plus, UserCog } from "lucide-react"
+import { Pencil, Plus, UserCog } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { ROLE_LABELS } from "@/lib/rbac"
@@ -61,10 +61,10 @@ export default async function UsuariosPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nome</TableHead>
-                  <TableHead>E-mail</TableHead>
-                  <TableHead>Perfil</TableHead>
+                  <TableHead className="hidden md:table-cell">E-mail</TableHead>
+                  <TableHead className="hidden sm:table-cell">Perfil</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Criado em</TableHead>
+                  <TableHead className="hidden md:table-cell">Criado em</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -79,8 +79,8 @@ export default async function UsuariosPage() {
                         </span>
                       )}
                     </TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">{user.email}</TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       <Badge variant="outline">
                         {ROLE_LABELS[user.role]}
                       </Badge>
@@ -90,7 +90,7 @@ export default async function UsuariosPage() {
                         {user.active ? "Ativo" : "Desativado"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="hidden text-muted-foreground md:table-cell">
                       {format(user.createdAt, "dd/MM/yyyy", { locale: ptBR })}
                     </TableCell>
                     <TableCell className="flex justify-end gap-2">
@@ -99,7 +99,8 @@ export default async function UsuariosPage() {
                         size="sm"
                         render={<Link href={`/usuarios/${user.id}/editar`} />}
                       >
-                        Editar
+                        <Pencil className="h-4 w-4 sm:hidden" />
+                        <span className="hidden sm:inline">Editar</span>
                       </Button>
                       <ToggleUserActiveButton
                         userId={user.id}

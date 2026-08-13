@@ -1,6 +1,6 @@
 import Link from "next/link"
 import type { Metadata } from "next"
-import { Plus, Search, Users } from "lucide-react"
+import { Eye, Pencil, Plus, Search, Users } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
@@ -125,9 +125,9 @@ export default async function PacientesPage({
               <TableHeader>
                 <TableRow>
                   <TableHead>Nome</TableHead>
-                  <TableHead>CPF</TableHead>
-                  <TableHead>Telefone</TableHead>
-                  <TableHead>Bairro</TableHead>
+                  <TableHead className="hidden lg:table-cell">CPF</TableHead>
+                  <TableHead className="hidden md:table-cell">Telefone</TableHead>
+                  <TableHead className="hidden lg:table-cell">Bairro</TableHead>
                   <TableHead>WhatsApp</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
@@ -148,13 +148,15 @@ export default async function PacientesPage({
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="hidden text-muted-foreground lg:table-cell">
                       {patient.cpf ?? "—"}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="hidden text-muted-foreground md:table-cell">
                       {patient.phone ?? "—"}
                     </TableCell>
-                    <TableCell>{patient.neighborhood ?? "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      {patient.neighborhood ?? "—"}
+                    </TableCell>
                     <TableCell>
                       {patient.whatsappEnabled ? (
                         <Badge variant="secondary">Ativo</Badge>
@@ -168,14 +170,16 @@ export default async function PacientesPage({
                         size="sm"
                         render={<Link href={`/pacientes/${patient.id}`} />}
                       >
-                        Ver
+                        <Eye className="h-4 w-4 sm:hidden" />
+                        <span className="hidden sm:inline">Ver</span>
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         render={<Link href={`/pacientes/${patient.id}/editar`} />}
                       >
-                        Editar
+                        <Pencil className="h-4 w-4 sm:hidden" />
+                        <span className="hidden sm:inline">Editar</span>
                       </Button>
                       <DeletePatientButton patientId={patient.id} name={patient.name} />
                     </TableCell>

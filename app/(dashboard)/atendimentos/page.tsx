@@ -107,9 +107,9 @@ export default async function AtendimentosPage({
                 <TableRow>
                   <TableHead>Data</TableHead>
                   <TableHead>Paciente</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Médico</TableHead>
-                  <TableHead>Valor</TableHead>
+                  <TableHead className="hidden sm:table-cell">Tipo</TableHead>
+                  <TableHead className="hidden md:table-cell">Médico</TableHead>
+                  <TableHead className="hidden md:table-cell">Valor</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
@@ -130,11 +130,13 @@ export default async function AtendimentosPage({
                         {attendance.patient.name}
                       </Link>
                     </TableCell>
-                    <TableCell>{TYPE_LABELS[attendance.type]}</TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="hidden sm:table-cell">
+                      {TYPE_LABELS[attendance.type]}
+                    </TableCell>
+                    <TableCell className="hidden text-muted-foreground md:table-cell">
                       {attendance.doctor?.name ?? "—"}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">
                       R$ {Number(attendance.value).toFixed(2)}
                     </TableCell>
                     <TableCell>
