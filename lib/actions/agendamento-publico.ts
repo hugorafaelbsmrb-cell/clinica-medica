@@ -314,6 +314,28 @@ const resumoDe = (a: {
   cancelToken: a.cancelToken ?? "",
 })
 
+/** Próxima consulta (AGENDADO no futuro) + última consulta (passado). */
+async function consultasDoPaciente(patientId: string): Promise<{
+  next: ConsultaResumo | null
+  last: ConsultaResumo | null
+}> {
+  const now = new Date()
+  const [next, last] = await Promise.all([
+    prisma.attendance.findFirst({
+      where: { patientId, status: "AGENDADO", scheduledAt: { gt: now } },
+      orderBy: { scheduledAt: "asc" },
+    }),
+    prisma.attendance.findFirst({
+      where: { patientId, scheduledAt: { lt: now } },
+      orderBy: { scheduledAt: "desc" },
+    }),
+  ])
+  return {
+    next: next ? resumoDe(next) : null,
+    last: last ? resumoDe(last) : null,
+  }
+}
+
 /**
  * Resumo das consultas do paciente a partir do token público do link:
  * a próxima consulta agendada (se houver) e a última consulta anterior.
@@ -330,25 +352,47 @@ export async function getConsultasPublicas(
   })
   if (!link) return { found: false, firstName: "", next: null, last: null }
 
-  const patientId = link.patient.id
-  const now = new Date()
-
-  const [next, last] = await Promise.all([
-    prisma.attendance.findFirst({
-      where: { patientId, status: "AGENDADO", scheduledAt: { gt: now } },
-      orderBy: { scheduledAt: "asc" },
-    }),
-    prisma.attendance.findFirst({
-      where: { patientId, scheduledAt: { lt: now } },
-      orderBy: { scheduledAt: "desc" },
-    }),
-  ])
+  const { next, last } = await consultasDoPaciente(link.patient.id)
 
   return {
     found: true,
     firstName: link.patient.name.split(" ")[0],
-    next: next ? resumoDe(next) : null,
-    last: last ? resumoDe(last) : null,
+    next,
+    last,
+  }
+}
+
+/**
+ * Resumo das consultas do paciente reconhecido pelo CPF no wizard /cadastro.
+ * A autorização aqui é o próprio CPF (mesma confiança do lookup), então o
+ * paciente consegue ver, remarcar e cancelar sem precisar do link enviado.
+ */
+export async function getConsultasByCpf(
+  cpf: string
+): Promise<ConsultasPublicasResult> {
+  const digits = cpf.replace(/\D/g, "")
+  if (digits.length !== 11) {
+    return { found: false, firstName: "", next: null, last: null }
+  }
+
+  const formatted = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(
+    6,
+    9
+  )}-${digits.slice(9)}`
+
+  const patient = await prisma.patient.findFirst({
+    where: { cpf: { in: [digits, formatted] } },
+    select: { id: true, name: true },
+  })
+  if (!patient) return { found: false, firstName: "", next: null, last: null }
+
+  const { next, last } = await consultasDoPaciente(patient.id)
+
+  return {
+    found: true,
+    firstName: patient.name.split(" ")[0],
+    next,
+    last,
   }
 }
 

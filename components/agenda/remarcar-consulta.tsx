@@ -31,7 +31,14 @@ type PickerState = "idle" | "day" | "slot" | "done"
  * Fluxo de remarcação pública: escolhe novo dia, novo horário e confirma.
  * O token é o cancelToken da consulta agendada (autorização do paciente).
  */
-export function RemarcarConsulta({ token }: { token: string }) {
+export function RemarcarConsulta({
+  token,
+  onDone,
+}: {
+  token: string
+  /** Chamado após remarcar com sucesso (ex.: para atualizar a lista do wizard). */
+  onDone?: () => void
+}) {
   const router = useRouter()
   const [state, setState] = useState<PickerState>("idle")
   const [days, setDays] = useState<PickerDay[]>([])
@@ -70,6 +77,7 @@ export function RemarcarConsulta({ token }: { token: string }) {
       }
       setSuccess(result.message)
       setState("done")
+      onDone?.()
       router.refresh()
     })
   }

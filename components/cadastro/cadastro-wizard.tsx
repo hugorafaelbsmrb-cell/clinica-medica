@@ -5,12 +5,15 @@ import { toast } from "sonner"
 import {
   AlertTriangle,
   BadgeCheck,
+  CalendarCheck2,
+  CalendarClock,
   CalendarDays,
   Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock,
+  History,
   Loader2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -19,6 +22,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { PublicDayPicker } from "@/components/agenda/public-day-picker"
+import { RemarcarConsulta } from "@/components/agenda/remarcar-consulta"
+import { CancelarConsultaButton } from "@/components/agenda/cancelar-consulta-button"
 import {
   cadastroPublico,
   type CadastroState,
@@ -26,8 +31,10 @@ import {
 import { validateWhatsAppNumber } from "@/lib/actions/whatsapp-validate"
 import {
   agendarPublico,
+  getConsultasByCpf,
   getPublicAgenda,
   lookupPatientByCpf,
+  type ConsultasPublicasResult,
   type PublicAgendaResult,
 } from "@/lib/actions/agendamento-publico"
 
@@ -71,6 +78,38 @@ function formatDateTime(iso: string): { date: string; time: string } {
   }
 }
 
+/**
+ * Máscara progressiva dd/mm/aaaa para a data de nascimento: insere as
+ * barras sozinha e limita dia (1-31) e mês (1-12) enquanto o paciente digita.
+ * Mais simples para idosos do que o calendário nativo do celular.
+ */
+function maskBirthDate(value: string): string {
+  const d = value.replace(/\D/g, "").slice(0, 8)
+  let day = d.slice(0, 2)
+  if (day.length === 2) {
+    const n = Number(day)
+    if (n < 1) day = "01"
+    if (n > 31) day = "31"
+  }
+  let month = d.slice(2, 4)
+  if (month.length === 2) {
+    const n = Number(month)
+    if (n < 1) month = "01"
+    if (n > 12) month = "12"
+  }
+  let out = day
+  if (d.length > 2) out += `/${month}`
+  if (d.length > 4) out += `/${d.slice(4)}`
+  return out
+}
+
+/** Converte dd/mm/aaaa para aaaa-mm-dd (formato que o servidor espera). */
+function toIsoBirthDate(value: string): string {
+  const d = value.replace(/\D/g, "")
+  if (d.length !== 8) return ""
+  return `${d.slice(4)}-${d.slice(2, 4)}-${d.slice(0, 2)}`
+}
+
 type ExistingPatient = {
   id: string
   name: string
@@ -86,7 +125,7 @@ type ExistingPatient = {
  */
 export function CadastroWizard() {
   const [phase, setPhase] = useState<
-    "cadastro" | "agendamento" | "sem-vagas" | "sucesso"
+    "cadastro" | "consultas" | "agendamento" | "sem-vagas" | "sucesso"
   >("cadastro")
 
   // Fase de cadastro
@@ -115,6 +154,12 @@ export function CadastroWizard() {
     null
   )
   const [patientId, setPatientId] = useState("")
+
+  // Consultas do paciente reconhecido pelo CPF (próxima + última)
+  const [consultas, setConsultas] = useState<ConsultasPublicasResult | null>(
+    null
+  )
+  const [, startLoadingConsultas] = useTransition()
 
   // Fase de agendamento
   const [agStep, setAgStep] = useState(0)
@@ -171,8 +216,12 @@ export function CadastroWizard() {
               lgpdConsent: result.lgpdConsent ?? false,
             })
             setPatientId(result.patientId)
-            setPhase("agendamento")
-            setAgStep(0)
+            // Carrega as consultas do paciente antes de trocar de tela
+            startLoadingConsultas(async () => {
+              const consultas = await getConsultasByCpf(cpf)
+              setConsultas(consultas)
+              setPhase("consultas")
+            })
             return
           }
           setCpfStatus("notfound")
@@ -183,6 +232,13 @@ export function CadastroWizard() {
           return
         }
       }
+    }
+    const birthDigits = birthDate.replace(/\D/g, "")
+    if (birthDigits.length > 0 && birthDigits.length < 8) {
+      setError(
+        "Informe a data de nascimento completa (dd/mm/aaaa) ou deixe em branco."
+      )
+      return
     }
     if (cadStep === 1 && phone.replace(/\D/g, "").length < 10) {
       setError("Por favor, informe seu telefone com DDD.")
@@ -234,6 +290,14 @@ export function CadastroWizard() {
     })
   }
 
+  // Atualiza a lista de consultas após remarcar ou cancelar
+  function refreshConsultas() {
+    startLoadingConsultas(async () => {
+      const result = await getConsultasByCpf(cpf)
+      if (result.found) setConsultas(result)
+    })
+  }
+
   // Fase de agendamento: carrega a agenda ao sair do passo de motivo
   function nextAgendamento() {
     setAgendarError("")
@@ -263,10 +327,9 @@ export function CadastroWizard() {
   function backAgendamento() {
     setAgendarError("")
     if (agStep === 0) {
-      // Paciente existente: volta para o primeiro passo do cadastro
+      // Paciente existente: volta para a tela de consultas dele
       if (existingPatient) {
-        setPhase("cadastro")
-        setCadStep(0)
+        setPhase("consultas")
       }
       return
     }
@@ -324,6 +387,17 @@ export function CadastroWizard() {
             A clínica ainda não liberou horários para agendamento online. Nossa
             equipe entrará em contato para marcar sua consulta.
           </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() =>
+              setPhase(existingPatient ? "consultas" : "cadastro")
+            }
+            className="h-12 text-base"
+          >
+            <ChevronLeft className="h-5 w-5" />
+            Voltar
+          </Button>
         </CardContent>
       </Card>
     )
@@ -348,6 +422,110 @@ export function CadastroWizard() {
               ? `${displayName}, enviaremos a confirmação pelo WhatsApp, se você autorizou o contato.`
               : "Enviaremos a confirmação pelo WhatsApp, se você autorizou o contato."}
           </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // ── Tela: consultas do paciente reconhecido pelo CPF ─────────────────
+  if (phase === "consultas") {
+    const next = consultas?.next ?? null
+    const last = consultas?.last ?? null
+    return (
+      <Card className="w-full max-w-md">
+        <CardContent className="flex flex-col gap-5 py-6">
+          <div className="text-center">
+            <p className="text-lg font-semibold text-primary">
+              Olá, {existingPatient?.name}!
+            </p>
+            <h2 className="text-2xl font-semibold">Suas consultas</h2>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <h3 className="flex items-center gap-2 text-lg font-semibold">
+              <CalendarCheck2 className="h-5 w-5 text-primary" />
+              Próxima consulta
+            </h3>
+            {next ? (
+              <>
+                <div className="rounded-xl border-2 border-border p-4 text-center">
+                  <p className="text-lg font-semibold capitalize">
+                    {formatDateTime(next.scheduledAt).date}
+                  </p>
+                  <p className="text-3xl font-bold text-primary">
+                    {formatDateTime(next.scheduledAt).time}
+                  </p>
+                  {next.slotNote && (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Motivo: {next.slotNote}
+                    </p>
+                  )}
+                </div>
+                <RemarcarConsulta
+                  token={next.cancelToken}
+                  onDone={refreshConsultas}
+                />
+                <CancelarConsultaButton
+                  token={next.cancelToken}
+                  onDone={refreshConsultas}
+                />
+              </>
+            ) : (
+              <p className="rounded-xl border-2 border-border p-4 text-center text-muted-foreground">
+                Você não tem consultas agendadas no momento.
+              </p>
+            )}
+          </div>
+
+          {last && (
+            <div className="flex flex-col gap-3">
+              <h3 className="flex items-center gap-2 text-lg font-semibold">
+                <History className="h-5 w-5 text-muted-foreground" />
+                Última consulta
+              </h3>
+              <div className="rounded-xl border-2 border-border p-4">
+                <p className="text-base font-semibold capitalize">
+                  {formatDateTime(last.scheduledAt).date}
+                </p>
+                <p className="text-xl font-bold text-primary">
+                  {formatDateTime(last.scheduledAt).time}
+                </p>
+                {last.slotNote && (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Motivo: {last.slotNote}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-3">
+            <Button
+              type="button"
+              onClick={() => {
+                setMotivo("")
+                setAgenda(null)
+                setAgStep(0)
+                setPhase("agendamento")
+              }}
+              className="h-14 w-full text-lg"
+            >
+              <CalendarClock className="h-5 w-5" />
+              Agendar nova consulta
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setPhase("cadastro")
+                setCadStep(0)
+              }}
+              className="h-12 text-base"
+            >
+              <ChevronLeft className="h-5 w-5" />
+              Voltar
+            </Button>
+          </div>
         </CardContent>
       </Card>
     )
@@ -397,7 +575,7 @@ export function CadastroWizard() {
             {/* Campos ocultos sempre montados: os inputs visíveis são
                 controlados por estado e mudam de passo a passo */}
             <input type="hidden" name="name" value={name} />
-            <input type="hidden" name="birthDate" value={birthDate} />
+            <input type="hidden" name="birthDate" value={toIsoBirthDate(birthDate)} />
             <input type="hidden" name="cpf" value={cpf} />
             <input type="hidden" name="phone" value={phone} />
             <input type="hidden" name="street" value={street} />
@@ -438,13 +616,20 @@ export function CadastroWizard() {
                   </label>
                   <Input
                     id="cadastro-nascimento"
-                    type="date"
+                    type="text"
+                    inputMode="numeric"
                     value={birthDate}
-                    onChange={(event) => setBirthDate(event.target.value)}
+                    onChange={(event) =>
+                      setBirthDate(maskBirthDate(event.target.value))
+                    }
+                    placeholder="Ex.: 25/12/1960"
+                    maxLength={10}
+                    autoComplete="bday"
                     className="h-14 text-lg"
                   />
                   <p className="text-sm text-muted-foreground">
-                    Se não souber, pode deixar em branco.
+                    Digite só os números — as barras entram sozinhas. Se não
+                    souber, pode deixar em branco.
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 rounded-xl border-2 border-primary/40 bg-primary/5 p-4">

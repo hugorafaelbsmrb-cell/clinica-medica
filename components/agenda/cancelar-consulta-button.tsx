@@ -9,7 +9,14 @@ import { cancelarConsultaPublica } from "@/lib/actions/agendamento-publico"
  * Botão de cancelamento público: chama a action e mostra o resultado
  * (sucesso, já cancelada ou recusa por estar muito próximo da consulta).
  */
-export function CancelarConsultaButton({ token }: { token: string }) {
+export function CancelarConsultaButton({
+  token,
+  onDone,
+}: {
+  token: string
+  /** Chamado após cancelar com sucesso (ex.: para atualizar a lista do wizard). */
+  onDone?: () => void
+}) {
   const [result, setResult] = useState<{
     success: boolean
     message: string
@@ -20,6 +27,7 @@ export function CancelarConsultaButton({ token }: { token: string }) {
     startTransition(async () => {
       const response = await cancelarConsultaPublica(token)
       setResult({ success: response.success, message: response.message })
+      if (response.success) onDone?.()
     })
   }
 
