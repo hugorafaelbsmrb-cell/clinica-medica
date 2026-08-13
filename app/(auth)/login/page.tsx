@@ -1,5 +1,12 @@
 import { redirect } from "next/navigation"
 import type { Metadata } from "next"
+import {
+  CalendarDays,
+  DollarSign,
+  FileText,
+  HeartPulse,
+  MessageCircle,
+} from "lucide-react"
 import { auth } from "@/lib/auth"
 import { getClinicSettings } from "@/lib/clinic"
 import { LoginForm } from "./login-form"
@@ -16,23 +23,41 @@ export default async function LoginPage() {
 
   return (
     <main className="flex min-h-screen flex-col bg-background md:flex-row">
-      {/* Metade da tela: imagem com a frase sobre o Home Care */}
-      <section className="relative flex h-48 shrink-0 flex-col justify-end overflow-hidden md:h-auto md:min-h-screen md:w-1/2">
+      {/* Metade da tela: imagem com o resumo das funcionalidades */}
+      <section className="relative flex h-72 shrink-0 flex-col justify-end overflow-hidden md:h-auto md:min-h-screen md:w-1/2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/login-homecare.jpg"
-          alt="Profissional de saúde realizando atendimento domiciliar Home Care"
+          src="/login-cover.jpg"
+          alt="Profissional de saúde realizando atendimento Home Care"
           className="absolute inset-0 h-full w-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/35 to-black/15" />
-        <div className="relative flex flex-col gap-2 p-6 text-white md:p-12">
-          <p className="text-xl font-bold leading-snug md:text-3xl">
-            Cuidar de quem você ama, sem sair de casa.
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/15" />
+        <div className="relative flex flex-col gap-3 p-5 text-white md:p-10">
+          <p className="text-lg font-bold leading-snug md:text-2xl">
+            Tudo o que sua clínica precisa, em um só lugar
           </p>
-          <p className="text-sm font-medium text-white/90 md:text-lg">
-            Atendimento Home Care: nossa equipe leva saúde, carinho e segurança
-            até a porta da sua casa.
-          </p>
+          <ul className="flex flex-col gap-1.5 text-xs font-medium text-white/95 md:gap-2.5 md:text-base">
+            <li className="flex items-center gap-2">
+              <CalendarDays className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
+              Agendamento online de consultas
+            </li>
+            <li className="flex items-center gap-2">
+              <HeartPulse className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
+              Atendimento Home Care
+            </li>
+            <li className="flex items-center gap-2">
+              <FileText className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
+              Prescrições e planos terapêuticos
+            </li>
+            <li className="flex items-center gap-2">
+              <MessageCircle className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
+              Comunicação por WhatsApp
+            </li>
+            <li className="flex items-center gap-2">
+              <DollarSign className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
+              Controle financeiro da clínica
+            </li>
+          </ul>
         </div>
       </section>
 
