@@ -10,6 +10,8 @@ import {
   KeyRound,
   Loader2,
   MessageCircle,
+  Phone,
+  QrCode,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,9 +25,12 @@ import {
 } from "@/components/ui/card"
 import { Field, FieldLabel } from "@/components/ui/field"
 import {
+  generatePairingCode,
+  generateQrCode,
   saveIntegrations,
   testIntegration,
   type ActionState,
+  type ConnectResult,
 } from "@/lib/actions/integracoes"
 
 export type IntegrationInitialData = {
@@ -60,6 +65,28 @@ export function IntegracoesForm({
     saveIntegrations,
     null
   )
+
+  const [pairingPhone, setPairingPhone] = useState("")
+  const [pairingResult, setPairingResult] = useState<ConnectResult | null>(null)
+  const [qrResult, setQrResult] = useState<ConnectResult | null>(null)
+  const [pendingPairing, startPairing] = useTransition()
+  const [pendingQr, startQr] = useTransition()
+
+  function handlePairing() {
+    setPairingResult(null)
+    startPairing(async () => {
+      const result = await generatePairingCode(pairingPhone)
+      setPairingResult(result)
+    })
+  }
+
+  function handleQr() {
+    setQrResult(null)
+    startQr(async () => {
+      const result = await generateQrCode()
+      setQrResult(result)
+    })
+  }
 
   useEffect(() => {
     if (state?.success) {
@@ -200,14 +227,14 @@ export function IntegracoesForm({
                   WhatsApp (W-API)
                 </div>
                 <Badge variant={wapiConfigured ? "secondary" : "outline"}>
-                  {wapiConfigured ? "Conectada" : "Não configurada"}
+                  {wapiConfigured ? "Configurada" : "Não configurada"}
                 </Badge>
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Envio de mensagens, PDFs e validação de números. As
-                credenciais ficam no painel da W-API (w-api.app) — aba
-                Instância, botão &quot;Autenticar&quot; para conectar o WhatsApp.
+                Envio de mensagens, PDFs e validação de números. Após salvar as
+                credenciais, conecte o número do WhatsApp na seção
+                &quot;Conectar WhatsApp&quot; logo abaixo.
               </p>
 
               <Field>
@@ -289,6 +316,123 @@ export function IntegracoesForm({
                 Sem W-API, o sistema usa o modo simulação — mensagens não são
                 enviadas de verdade.
               </p>
+            </div>
+          </div>
+
+          {/* ===== Conectar WhatsApp ===== */}
+          <div className="flex flex-col gap-4 rounded-lg border p-4">
+            <div className="flex items-center gap-2 font-medium">
+              <QrCode className="h-4 w-4 text-primary" />
+              Conectar WhatsApp
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Depois de salvar as credenciais, conecte o número da clínica aqui
+              mesmo — pelo código de pareamento (mais fácil) ou pelo QR code.
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* Conexão por código */}
+              <div className="flex flex-col gap-3 rounded-md border p-3">
+                <p className="text-sm font-medium">Por código (recomendado)</p>
+                <Field>
+                  <FieldLabel>Número do WhatsApp da clínica</FieldLabel>
+                  <Input
+                    value={pairingPhone}
+                    onChange={(event) => {
+                      setPairingPhone(event.target.value)
+                      setPairingResult(null)
+                    }}
+                    placeholder="5594999999999"
+                    inputMode="numeric"
+                    autoComplete="off"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Com DDI e DDD, só números (ex.: 5594999999999)
+                  </p>
+                </Field>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handlePairing}
+                  disabled={pendingPairing || !pairingPhone.trim()}
+                >
+                  {pendingPairing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Phone className="h-4 w-4" />
+                  )}
+                  Gerar código de pareamento
+                </Button>
+
+                {pairingResult &&
+                  (pairingResult.success ? (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-sm text-green-600 dark:text-green-400">
+                        {pairingResult.message}
+                      </p>
+                      <div className="rounded-md border bg-muted px-3 py-2 text-center font-mono text-2xl tracking-widest">
+                        {pairingResult.pairingCode}
+                      </div>
+                      <ol className="list-decimal pl-4 text-xs text-muted-foreground">
+                        <li>
+                          No celular, abra o WhatsApp e toque em
+                          Configurações/Ajustes.
+                        </li>
+                        <li>
+                          Toque em &quot;Aparelhos conectados&quot; e depois em
+                          &quot;Conectar aparelho&quot;.
+                        </li>
+                        <li>
+                          Escolha &quot;Conectar com número de telefone&quot; e
+                          digite o código acima.
+                        </li>
+                      </ol>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-destructive">
+                      {pairingResult.message}
+                    </p>
+                  ))}
+              </div>
+
+              {/* Conexão por QR code */}
+              <div className="flex flex-col gap-3 rounded-md border p-3">
+                <p className="text-sm font-medium">Por QR code</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleQr}
+                  disabled={pendingQr}
+                >
+                  {pendingQr ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <QrCode className="h-4 w-4" />
+                  )}
+                  Gerar QR code
+                </Button>
+
+                {qrResult &&
+                  (qrResult.success ? (
+                    <div className="flex flex-col gap-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={qrResult.qrcode}
+                        alt="QR code de conexão do WhatsApp"
+                        className="mx-auto h-52 w-52 rounded-md border"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        No celular: WhatsApp → Configurações → Aparelhos
+                        conectados → Conectar aparelho → escaneie o código.
+                        Ele expira em cerca de 20 segundos — se expirar, clique
+                        em &quot;Gerar QR code&quot; de novo.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-destructive">
+                      {qrResult.message}
+                    </p>
+                  ))}
+              </div>
             </div>
           </div>
 

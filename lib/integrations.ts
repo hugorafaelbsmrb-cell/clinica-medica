@@ -110,3 +110,111 @@ export async function testWApiConnection(
     }
   }
 }
+
+export type WApiConnectResult = {
+  success: boolean
+  message: string
+  pairingCode?: string
+  qrcode?: string
+}
+
+/**
+ * Gera o código de pareamento da instância — conexão por telefone.
+ * GET /instance/pairing-code?instanceId=...&phoneNumber=...
+ * O usuário digita o código no WhatsApp do celular (Aparelhos conectados
+ * → Conectar aparelho → Conectar com número de telefone).
+ */
+export async function getWApiPairingCode(
+  instanceId: string,
+  token: string,
+  phoneNumber: string
+): Promise<WApiConnectResult> {
+  try {
+    const url = `https://api.w-api.app/v1/instance/pairing-code?instanceId=${encodeURIComponent(instanceId)}&phoneNumber=${encodeURIComponent(phoneNumber)}`
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    const text = await response.text()
+    let data: { error?: boolean; message?: string; pairingCode?: string } = {}
+    try {
+      data = text ? JSON.parse(text) : {}
+    } catch {
+      data = {}
+    }
+
+    if (!response.ok || data.error) {
+      return {
+        success: false,
+        message: data.message ?? `W-API respondeu ${response.status}`,
+      }
+    }
+    if (!data.pairingCode) {
+      return {
+        success: false,
+        message: "A W-API não retornou o código de pareamento.",
+      }
+    }
+    return {
+      success: true,
+      message: "Código gerado com sucesso",
+      pairingCode: data.pairingCode,
+    }
+  } catch {
+    return {
+      success: false,
+      message: "Falha ao conectar na W-API. Verifique sua internet.",
+    }
+  }
+}
+
+/**
+ * Gera o QR code da instância em base64 (data URL pronto para <img>).
+ * GET /instance/qr-code?instanceId=...&image=disable
+ * O código expira em cerca de 20 segundos; se já houver conexão ativa,
+ * a W-API recusa gerar um novo QR.
+ */
+export async function getWApiQrCode(
+  instanceId: string,
+  token: string
+): Promise<WApiConnectResult> {
+  try {
+    const url = `https://api.w-api.app/v1/instance/qr-code?instanceId=${encodeURIComponent(instanceId)}&image=disable`
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    const text = await response.text()
+    let data: { error?: boolean; message?: string; qrcode?: string } = {}
+    try {
+      data = text ? JSON.parse(text) : {}
+    } catch {
+      data = {}
+    }
+
+    if (!response.ok || data.error) {
+      return {
+        success: false,
+        message: data.message ?? `W-API respondeu ${response.status}`,
+      }
+    }
+    if (!data.qrcode) {
+      return {
+        success: false,
+        message: "A W-API não retornou o QR code.",
+      }
+    }
+    return {
+      success: true,
+      message: "QR code gerado",
+      qrcode: data.qrcode,
+    }
+  } catch {
+    return {
+      success: false,
+      message: "Falha ao conectar na W-API. Verifique sua internet.",
+    }
+  }
+}

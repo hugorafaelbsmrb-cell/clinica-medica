@@ -5,6 +5,9 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import {
+  getIntegrationSettings,
+  getWApiPairingCode,
+  getWApiQrCode,
   invalidateIntegrationCache,
   testDeepSeekConnection,
   testWApiConnection,
@@ -119,4 +122,64 @@ export async function testIntegration(input: {
     }
   }
   return testWApiConnection(instance, token)
+}
+
+export type ConnectResult = {
+  success: boolean
+  message: string
+  pairingCode?: string
+  qrcode?: string
+}
+
+/** Credenciais salvas da W-API (a conexão usa o que está no banco). */
+async function savedWApiCredentials(): Promise<
+  | { ok: true; instance: string; token: string }
+  | { ok: false; message: string }
+> {
+  const session = await auth()
+  if (!session?.user || session.user.role !== "ADMIN") {
+    return {
+      ok: false,
+      message: "Apenas administradores podem conectar o WhatsApp",
+    }
+  }
+  const settings = await getIntegrationSettings()
+  if (!settings.wApiInstance || !settings.wApiToken) {
+    return {
+      ok: false,
+      message:
+        "Salve o ID da instância e o token da W-API antes de conectar o WhatsApp",
+    }
+  }
+  return { ok: true, instance: settings.wApiInstance, token: settings.wApiToken }
+}
+
+/**
+ * Gera o código de pareamento usando as credenciais salvas.
+ * O número informado vira digits com DDI 55 quando necessário.
+ */
+export async function generatePairingCode(
+  phoneNumber: string
+): Promise<ConnectResult> {
+  const creds = await savedWApiCredentials()
+  if (!creds.ok) return { success: false, message: creds.message }
+
+  const digits = phoneNumber.replace(/\D/g, "")
+  if (digits.length < 10) {
+    return {
+      success: false,
+      message:
+        "Informe o número do WhatsApp com DDI e DDD (ex.: 5594999999999)",
+    }
+  }
+  const normalized = digits.length <= 11 ? `55${digits}` : digits
+
+  return getWApiPairingCode(creds.instance, creds.token, normalized)
+}
+
+/** Gera o QR code de conexão usando as credenciais salvas. */
+export async function generateQrCode(): Promise<ConnectResult> {
+  const creds = await savedWApiCredentials()
+  if (!creds.ok) return { success: false, message: creds.message }
+  return getWApiQrCode(creds.instance, creds.token)
 }
