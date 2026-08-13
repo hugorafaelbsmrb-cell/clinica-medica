@@ -202,7 +202,8 @@ export function DisponibilidadeForm({
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <form action={rulesAction} className="flex flex-col gap-4">
-            <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-3 gap-y-2">
+            <div className="overflow-x-auto">
+              <div className="grid min-w-[340px] grid-cols-[1fr_auto_auto_auto] items-center gap-x-3 gap-y-2">
               <div className="text-sm font-medium text-muted-foreground">
                 Dia
               </div>
@@ -244,9 +245,10 @@ export function DisponibilidadeForm({
                   </div>
                 )
               })}
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 border-t pt-4">
+            <div className="grid gap-4 sm:grid-cols-2 border-t pt-4">
               <div className="flex flex-col gap-1">
                 <label htmlFor="slot-duration" className="text-sm font-medium">
                   Duração da consulta (min)
@@ -370,7 +372,7 @@ export function DisponibilidadeForm({
             <p className="text-sm font-semibold">
               Liberar faixa extra em uma data
             </p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid gap-3 sm:grid-cols-3">
               <Input
                 type="date"
                 name="date"

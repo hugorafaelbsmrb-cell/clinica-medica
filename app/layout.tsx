@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/sonner"
@@ -19,6 +19,12 @@ export const metadata: Metadata = {
     template: "%s | Clínica Médica",
   },
   description: "Sistema de gestão para clínica médica",
+}
+
+// Garante a escala correta em telas pequenas (celulares).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 }
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
