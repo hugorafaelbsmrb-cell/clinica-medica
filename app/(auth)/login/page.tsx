@@ -24,36 +24,36 @@ export default async function LoginPage() {
   return (
     <main className="flex min-h-screen flex-col bg-background md:flex-row">
       {/* Metade da tela: imagem com o resumo das funcionalidades */}
-      <section className="relative flex h-72 shrink-0 flex-col justify-end overflow-hidden md:h-auto md:min-h-screen md:w-1/2">
+      <section className="relative flex h-72 shrink-0 flex-col justify-center overflow-hidden md:h-auto md:min-h-screen md:w-1/2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/login-cover.jpg"
           alt="Profissional de saúde realizando atendimento Home Care"
           className="absolute inset-0 h-full w-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/15" />
-        <div className="relative flex flex-col gap-3 p-5 text-white md:p-10">
+        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/30" />
+        <div className="relative flex flex-col items-center gap-3 p-5 text-center text-white md:p-10">
           <p className="text-lg font-bold leading-snug md:text-2xl">
             Tudo o que sua clínica precisa, em um só lugar
           </p>
-          <ul className="flex flex-col gap-1.5 text-xs font-medium text-white/95 md:gap-2.5 md:text-base">
-            <li className="flex items-center gap-2">
+          <ul className="flex flex-col items-center gap-1.5 text-xs font-medium text-white/95 md:gap-2.5 md:text-base">
+            <li className="flex items-center justify-center gap-2">
               <CalendarDays className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
               Agendamento online de consultas
             </li>
-            <li className="flex items-center gap-2">
+            <li className="flex items-center justify-center gap-2">
               <HeartPulse className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
               Atendimento Home Care
             </li>
-            <li className="flex items-center gap-2">
+            <li className="flex items-center justify-center gap-2">
               <FileText className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
               Prescrições e planos terapêuticos
             </li>
-            <li className="flex items-center gap-2">
+            <li className="flex items-center justify-center gap-2">
               <MessageCircle className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
               Comunicação por WhatsApp
             </li>
-            <li className="flex items-center gap-2">
+            <li className="flex items-center justify-center gap-2">
               <DollarSign className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
               Controle financeiro da clínica
             </li>
