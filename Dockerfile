@@ -5,6 +5,9 @@ WORKDIR /app
 # libc6-compat/openssl: exigidos pelos engines nativos do Prisma no alpine.
 RUN apk add --no-cache libc6-compat openssl
 COPY package.json package-lock.json ./
+# O schema do Prisma precisa estar presente antes do npm ci,
+# pois o postinstall roda `prisma generate`.
+COPY prisma ./prisma
 RUN npm ci
 
 FROM node:22-alpine AS builder
