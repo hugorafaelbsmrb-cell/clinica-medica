@@ -1,0 +1,10 @@
+node_modules
+.next
+.env
+.env.local
+.git
+.gitignore
+*.tsbuildinfo
+next-env.d.ts
+Dockerfile
+docker-compose.yml

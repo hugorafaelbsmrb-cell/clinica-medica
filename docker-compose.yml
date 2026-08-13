@@ -1,0 +1,30 @@
+# Stack do app na VPS.
+# Porta externa 8080 (80/443 pertencem ao painel do provedor).
+services:
+  app:
+    build:
+      context: .
+    container_name: clinica-medica
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8080:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Cron interno (WhatsApp): chama a rota /api/cron a cada 10 minutos.
+  # O segredo é gravado no crontab na inicialização do container.
+  cron:
+    image: alpine:3.20
+    container_name: clinica-medica-cron
+    restart: unless-stopped
+    depends_on:
+      - app
+    env_file: .env
+    entrypoint:
+      - /bin/sh
+      - -c
+      - 'echo "*/10 * * * * wget -q -O- http://app:3000/api/cron/send-messages?secret=$$CRON_SECRET" > /etc/crontabs/root && exec crond -f -l 8'
