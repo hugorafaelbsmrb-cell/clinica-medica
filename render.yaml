@@ -1,0 +1,37 @@
+# Blueprint do projeto no Render (render.com).
+# Uso: Dashboard do Render -> "New +" -> "Blueprint" -> conecte o repositório do GitHub.
+#
+# Observação importante: o Render roda o build com NODE_ENV=production, então o
+# `npm install` pula as devDependencies (typescript, tailwind, prisma CLI) e o
+# `next build` quebra. Por isso o buildCommand usa `--include=dev`.
+services:
+  - type: web
+    name: clinica-medica
+    runtime: node
+    plan: free
+    branch: master
+    autoDeploy: true
+    healthCheckPath: /
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: AUTH_SECRET
+        sync: false
+      - key: AUTH_TRUST_HOST
+        value: "true"
+      - key: W_API_TOKEN
+        sync: false
+      - key: W_API_INSTANCE
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: NEXT_PUBLIC_APP_NAME
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false
