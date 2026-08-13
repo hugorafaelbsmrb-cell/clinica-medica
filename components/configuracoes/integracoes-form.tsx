@@ -37,14 +37,17 @@ export type IntegrationInitialData = {
   deepseekApiKey: string
   wApiInstance: string
   wApiToken: string
+  clinicPhone?: string | null
 }
 
 type TestResult = { success: boolean; message: string } | null
 
 export function IntegracoesForm({
   initial,
+  clinicPhone,
 }: {
   initial: IntegrationInitialData
+  clinicPhone?: string | null
 }) {
   const router = useRouter()
 
@@ -66,7 +69,9 @@ export function IntegracoesForm({
     null
   )
 
-  const [pairingPhone, setPairingPhone] = useState("")
+  const [pairingPhone, setPairingPhone] = useState(
+    (clinicPhone ?? "").replace(/\D/g, "")
+  )
   const [pairingResult, setPairingResult] = useState<ConnectResult | null>(null)
   const [qrResult, setQrResult] = useState<ConnectResult | null>(null)
   const [pendingPairing, startPairing] = useTransition()

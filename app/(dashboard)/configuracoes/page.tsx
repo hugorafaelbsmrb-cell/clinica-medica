@@ -25,7 +25,7 @@ export default async function ConfiguracoesPage() {
         </p>
       </div>
       <ClinicaForm initial={clinic} />
-      <IntegracoesForm initial={integrations} />
+      <IntegracoesForm initial={integrations} clinicPhone={clinic.phone} />
     </div>
   )
 }
