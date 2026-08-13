@@ -1,0 +1,330 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  MEDICO
+  SECRETARIA
+  FINANCEIRO
+}
+
+enum AttendanceType {
+  PRESENCIAL
+  DOMICILIAR
+}
+
+enum AttendanceStatus {
+  AGENDADO
+  REALIZADO
+  CANCELADO
+}
+
+enum PlanSource {
+  MANUAL
+  IA
+}
+
+enum PlanStatus {
+  RASCUNHO
+  GERADO
+  APROVADO
+}
+
+enum MessageType {
+  PRIMEIRO_CONTATO
+  ACOMPANHAMENTO
+  MANUAL
+  RESPOSTA
+  DOCUMENTO
+  CONFIRMACAO_AGENDAMENTO
+  LEMBRETE_CONSULTA
+}
+
+enum MessageStatus {
+  PENDENTE
+  ENVIADA
+  ENTREGUE
+  LIDA
+  FALHA
+}
+
+enum EntryType {
+  RECEITA
+  DESPESA
+}
+
+enum EntryCategory {
+  CONSULTA_PRESENCIAL
+  CONSULTA_DOMICILIAR
+  PROCEDIMENTO
+  MEDICAMENTO
+  OPERACIONAL
+  OUTRO
+}
+
+enum EntryStatus {
+  PAGO
+  PENDENTE
+}
+
+model User {
+  id           String       @id @default(cuid())
+  name         String
+  email        String       @unique
+  password     String
+  role         Role         @default(SECRETARIA)
+  active       Boolean      @default(true)
+  crm          String? // CRM do médico (ex.: "CRM/SP 123456")
+  signatureText String? // Assinatura pré-cadastrada (ex.: "Dr. Carlos Mendes")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  attendances  Attendance[] @relation("AttendanceDoctor")
+  prescriptions Prescription[]
+  plans        TherapeuticPlan[]
+}
+
+/**
+ * Configurações da clínica (registro único, id fixo = 1).
+ * Logo armazenada como data URL (data:image/png;base64,...) para uso
+ * direto em <img> e na geração de PDF.
+ */
+model ClinicSettings {
+  id             Int      @id @default(1)
+  name           String   @default("Clínica Médica")
+  address        String?
+  phone          String?
+  email          String?
+  cnpj           String?
+  logoDataUrl    String?  @db.Text
+  deepseekApiKey String? // chave da DeepSeek (tela Configurações → Integrações)
+  wApiInstance   String? // instanceId da W-API
+  wApiToken      String? // token da W-API
+  updatedAt      DateTime @updatedAt
+}
+
+model Patient {
+  id               String         @id @default(cuid())
+  name             String
+  cpf              String?        @unique
+  birthDate        DateTime?
+  phone            String?
+  email            String?
+  street           String?
+  number           String?
+  complement       String?
+  neighborhood     String?
+  city             String?
+  state            String?
+  zipCode          String?
+  insurance        String?
+  notes            String?        @db.Text
+  consultationReason String?      @db.Text // Motivo da consulta informado no pré-cadastro online
+  lgpdConsent      Boolean        @default(false)
+  lgpdConsentAt    DateTime?
+  whatsappEnabled  Boolean        @default(false)
+  registeredVia    String         @default("MANUAL") // MANUAL = equipe, ONLINE = autoatendimento público
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  attendances      Attendance[]
+  prescriptions    Prescription[]
+  plans            TherapeuticPlan[]
+  messages         Message[]
+  followUp         FollowUpConfig?
+  auditLogs        AuditLog[]     @relation("AuditLogPatient")
+
+  @@index([name])
+  @@index([neighborhood])
+}
+
+model Attendance {
+  id               String           @id @default(cuid())
+  patientId        String
+  patient          Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId         String?
+  doctor           User?            @relation("AttendanceDoctor", fields: [doctorId], references: [id])
+  type             AttendanceType   @default(PRESENCIAL)
+  status           AttendanceStatus @default(AGENDADO)
+  origin           String           @default("INTERNO") // INTERNO = equipe, ONLINE = autoatendimento
+  slotNote         String?          // Motivo da consulta informado no agendamento online
+  cancelToken      String?          @unique // token público de cancelamento (link na confirmação)
+  scheduledAt      DateTime
+  homeAddress      String?
+  anamnesis        String?          @db.Text
+  value            Decimal          @default(0) @db.Decimal(10, 2)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  prescriptions    Prescription[]
+  financialEntries FinancialEntry[]
+  messages         Message[]
+
+  @@index([patientId])
+  @@index([scheduledAt])
+  @@index([status])
+}
+
+model Prescription {
+  id           String             @id @default(cuid())
+  patientId    String
+  patient      Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  attendanceId String?
+  attendance   Attendance?        @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  doctorId     String?
+  doctor       User?              @relation(fields: [doctorId], references: [id])
+  createdAt    DateTime           @default(now())
+  items        PrescriptionItem[]
+
+  @@index([patientId])
+}
+
+model PrescriptionItem {
+  id             String       @id @default(cuid())
+  prescriptionId String
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  medication     String
+  dosage         String?
+  frequency      String?
+  duration       String?
+  instructions   String?
+
+  @@index([prescriptionId])
+}
+
+model TherapeuticPlan {
+  id         String     @id @default(cuid())
+  patientId  String
+  patient    Patient    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId   String?
+  doctor     User?      @relation(fields: [doctorId], references: [id])
+  diagnosis  String     @db.Text
+  goals      String?    @db.Text
+  guidelines String?    @db.Text
+  summary    String?    @db.Text
+  source     PlanSource @default(MANUAL)
+  status     PlanStatus @default(RASCUNHO)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([patientId])
+}
+
+model Message {
+  id          String        @id @default(cuid())
+  patientId   String
+  patient     Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  attendanceId String? // consulta relacionada (confirmação/lembrete)
+  attendance  Attendance?   @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  type        MessageType   @default(MANUAL)
+  direction   String        @default("OUT") // OUT = enviada ao paciente, IN = resposta recebida
+  content     String        @db.Text
+  status      MessageStatus @default(PENDENTE)
+  scheduledFor DateTime?
+  sentAt      DateTime?
+  deliveredAt DateTime?
+  readAt      DateTime?
+  error       String?
+  createdAt   DateTime      @default(now())
+
+  @@index([patientId])
+  @@index([status])
+  @@index([scheduledFor])
+}
+
+model MessageTemplate {
+  id        String      @id @default(cuid())
+  name      String
+  type      MessageType @default(ACOMPANHAMENTO)
+  body      String      @db.Text // suporta variáveis: {{nome}}, {{data}}
+  active    Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model FollowUpConfig {
+  id          String    @id @default(cuid())
+  patientId   String    @unique
+  patient     Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  active      Boolean   @default(true)
+  intervalDays Int      @default(30)
+  lastSentAt  DateTime?
+  nextDueAt   DateTime?
+  templateId  String?
+}
+
+model FinancialEntry {
+  id            String        @id @default(cuid())
+  type          EntryType
+  category      EntryCategory @default(OUTRO)
+  description   String
+  value         Decimal       @db.Decimal(10, 2)
+  dueDate       DateTime
+  paymentMethod String? // PIX, DINHEIRO, CARTAO, TRANSFERENCIA
+  status        EntryStatus   @default(PENDENTE)
+  attendanceId  String?
+  attendance    Attendance?   @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([dueDate])
+  @@index([status])
+  @@index([category])
+}
+
+// Disponibilidade da agenda: grade semanal recorrente configurada pelo admin
+model AvailabilityRule {
+  id              String   @id @default(cuid())
+  weekday         Int // 0 = domingo ... 6 = sábado
+  startTime       String // "08:00"
+  endTime         String // "17:30"
+  slotDurationMin Int      @default(60)
+  bufferMin       Int      @default(15)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([weekday])
+}
+
+enum ExceptionType {
+  BLOQUEADO
+  LIVRE
+}
+
+// Exceção pontual da agenda: bloqueia um dia/faixa ou libera faixa extra
+model AvailabilityException {
+  id        String        @id @default(cuid())
+  date      DateTime      @db.Date
+  type      ExceptionType @default(BLOQUEADO)
+  startTime String? // faixa opcional ("14:00")
+  endTime   String? // faixa opcional ("16:00")
+  createdAt DateTime      @default(now())
+
+  @@index([date])
+}
+
+// Configurações gerais de agendamento (registro único, id = 1)
+model AppointmentSettings {
+  id               Int      @id @default(1)
+  minAdvanceHours  Int      @default(2) // não agendar com menos de X horas
+  maxAdvanceDays   Int      @default(60) // horizonte de agendamento
+  cancelLimitHours Int      @default(12)
+  updatedAt        DateTime @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  patientId String?
+  patient   Patient? @relation("AuditLogPatient", fields: [patientId], references: [id], onDelete: SetNull)
+  details   Json?
+  createdAt DateTime @default(now())
+}
