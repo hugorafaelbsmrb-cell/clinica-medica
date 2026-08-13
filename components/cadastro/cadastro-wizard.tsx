@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { PublicDayPicker } from "@/components/agenda/public-day-picker"
 import { RemarcarConsulta } from "@/components/agenda/remarcar-consulta"
@@ -40,6 +41,12 @@ import {
 
 const CAD_STEPS = ["Seus dados", "Seu contato", "Seu endereço", "Confirmação"]
 const AG_STEPS = ["Motivo", "Escolha o dia", "Escolha o horário", "Confirmação"]
+
+const STATUS_LABEL: Record<string, string> = {
+  AGENDADO: "Agendada",
+  REALIZADO: "Realizada",
+  CANCELADO: "Cancelada",
+}
 
 const WEEKDAY_LABELS = [
   "domingo",
@@ -443,17 +450,24 @@ export function CadastroWizard() {
           </div>
 
           <div className="flex flex-col gap-3">
-            <h3 className="flex items-center gap-2 text-lg font-semibold">
-              <CalendarCheck2 className="h-5 w-5 text-primary" />
-              Próxima consulta
-            </h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="flex items-center gap-2 text-lg font-semibold">
+                <CalendarCheck2 className="h-5 w-5 text-primary" />
+                Próxima consulta
+              </h3>
+              {next && (
+                <Badge variant="secondary">
+                  {STATUS_LABEL[next.status] ?? next.status}
+                </Badge>
+              )}
+            </div>
             {next ? (
               <>
-                <div className="rounded-xl border-2 border-border p-4 text-center">
+                <div className="rounded-xl border-2 border-emerald-500 bg-emerald-500/10 p-4 text-center shadow-sm">
                   <p className="text-lg font-semibold capitalize">
                     {formatDateTime(next.scheduledAt).date}
                   </p>
-                  <p className="text-3xl font-bold text-primary">
+                  <p className="text-3xl font-bold text-emerald-600">
                     {formatDateTime(next.scheduledAt).time}
                   </p>
                   {next.slotNote && (
@@ -480,10 +494,22 @@ export function CadastroWizard() {
 
           {last && (
             <div className="flex flex-col gap-3">
-              <h3 className="flex items-center gap-2 text-lg font-semibold">
-                <History className="h-5 w-5 text-muted-foreground" />
-                Última consulta
-              </h3>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="flex items-center gap-2 text-lg font-semibold">
+                  <History className="h-5 w-5 text-muted-foreground" />
+                  Última consulta
+                </h3>
+                <Badge
+                  variant="outline"
+                  className={
+                    last.status === "REALIZADO"
+                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700"
+                      : undefined
+                  }
+                >
+                  {STATUS_LABEL[last.status] ?? last.status}
+                </Badge>
+              </div>
               <div className="rounded-xl border-2 border-border p-4">
                 <p className="text-base font-semibold capitalize">
                   {formatDateTime(last.scheduledAt).date}
