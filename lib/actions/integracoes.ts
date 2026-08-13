@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import {
   getIntegrationSettings,
+  getWApiConnectionStatus,
   getWApiPairingCode,
   getWApiQrCode,
   invalidateIntegrationCache,
@@ -129,6 +130,7 @@ export type ConnectResult = {
   message: string
   pairingCode?: string
   qrcode?: string
+  connected?: boolean
 }
 
 /** Credenciais salvas da W-API (a conexão usa o que está no banco). */
@@ -182,4 +184,11 @@ export async function generateQrCode(): Promise<ConnectResult> {
   const creds = await savedWApiCredentials()
   if (!creds.ok) return { success: false, message: creds.message }
   return getWApiQrCode(creds.instance, creds.token)
+}
+
+/** Verifica o status da conexão da instância (conectada/desconectada). */
+export async function checkWhatsAppConnection(): Promise<ConnectResult> {
+  const creds = await savedWApiCredentials()
+  if (!creds.ok) return { success: false, message: creds.message }
+  return getWApiConnectionStatus(creds.instance, creds.token)
 }

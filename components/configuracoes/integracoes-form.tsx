@@ -12,6 +12,7 @@ import {
   MessageCircle,
   Phone,
   QrCode,
+  RefreshCw,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,6 +26,7 @@ import {
 } from "@/components/ui/card"
 import { Field, FieldLabel } from "@/components/ui/field"
 import {
+  checkWhatsAppConnection,
   generatePairingCode,
   generateQrCode,
   saveIntegrations,
@@ -77,6 +79,10 @@ export function IntegracoesForm({
   const [pendingPairing, startPairing] = useTransition()
   const [pendingQr, startQr] = useTransition()
 
+  const [connectionStatus, setConnectionStatus] =
+    useState<ConnectResult | null>(null)
+  const [pendingStatus, startStatusCheck] = useTransition()
+
   function handlePairing() {
     setPairingResult(null)
     startPairing(async () => {
@@ -93,6 +99,13 @@ export function IntegracoesForm({
     })
   }
 
+  function runStatusCheck() {
+    startStatusCheck(async () => {
+      const result = await checkWhatsAppConnection()
+      setConnectionStatus(result)
+    })
+  }
+
   useEffect(() => {
     if (state?.success) {
       toast.success(state.message)
@@ -101,6 +114,17 @@ export function IntegracoesForm({
       toast.error(state.message)
     }
   }, [state, router])
+
+  // Ao abrir a página (ou depois de salvar credenciais), já verifica o
+  // status da conexão do WhatsApp.
+  useEffect(() => {
+    if (initial.wApiInstance && initial.wApiToken) {
+      runStatusCheck()
+    } else {
+      setConnectionStatus(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial.wApiInstance, initial.wApiToken])
 
   function handleTest(service: "deepseek" | "wapi") {
     setDeepseekTest(null)
@@ -130,6 +154,20 @@ export function IntegracoesForm({
   const deepseekConfigured = !!initial.deepseekApiKey
   const wapiConfigured = !!(initial.wApiInstance && initial.wApiToken)
 
+  const statusBadge = !wapiConfigured ? (
+    <Badge variant="outline">Sem credenciais</Badge>
+  ) : !connectionStatus ? (
+    <Badge variant="outline">Verificando...</Badge>
+  ) : connectionStatus.connected ? (
+    <Badge className="bg-green-600 text-white hover:bg-green-600">
+      Conectada
+    </Badge>
+  ) : connectionStatus.success ? (
+    <Badge variant="destructive">Desconectada</Badge>
+  ) : (
+    <Badge variant="outline">Status indisponível</Badge>
+  )
+
   return (
     <Card>
       <CardHeader>
@@ -141,107 +179,110 @@ export function IntegracoesForm({
       </CardHeader>
       <CardContent>
         <form action={formAction} className="flex flex-col gap-6">
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* ===== DeepSeek ===== */}
-            <div className="flex flex-col gap-4 rounded-lg border p-4">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 font-medium">
-                  <Bot className="h-4 w-4 text-primary" />
-                  DeepSeek (IA)
-                </div>
-                <Badge variant={deepseekConfigured ? "secondary" : "outline"}>
-                  {deepseekConfigured ? "Configurada" : "Não configurada"}
-                </Badge>
+          {/* ===== DeepSeek ===== */}
+          <div className="flex flex-col gap-4 rounded-lg border p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 font-medium">
+                <Bot className="h-4 w-4 text-primary" />
+                DeepSeek (IA)
               </div>
-
-              <p className="text-xs text-muted-foreground">
-                Usada para gerar o resumo do plano terapêutico com IA. Crie a
-                chave em platform.deepseek.com (menu API Keys).
-              </p>
-
-              <Field>
-                <FieldLabel>Chave da API</FieldLabel>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Input
-                      name="deepseekApiKey"
-                      type={showDeepseek ? "text" : "password"}
-                      value={deepseekKey}
-                      onChange={(event) => {
-                        setDeepseekKey(event.target.value)
-                        setDeepseekTest(null)
-                      }}
-                      placeholder="sk-..."
-                      autoComplete="off"
-                      className="pr-9"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowDeepseek((value) => !value)}
-                      className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      aria-label={
-                        showDeepseek ? "Ocultar chave" : "Mostrar chave"
-                      }
-                    >
-                      {showDeepseek ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => handleTest("deepseek")}
-                    disabled={pendingDeepseek || !deepseekKey.trim()}
-                  >
-                    {pendingDeepseek ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <KeyRound className="h-4 w-4" />
-                    )}
-                    Testar chave
-                  </Button>
-                </div>
-              </Field>
-
-              {deepseekTest && (
-                <p
-                  className={
-                    deepseekTest.success
-                      ? "text-sm text-green-600 dark:text-green-400"
-                      : "text-sm text-destructive"
-                  }
-                >
-                  {deepseekTest.message}
-                </p>
-              )}
-
-              <p className="text-xs text-muted-foreground">
-                Sem chave, o médico escreve o resumo do plano manualmente — o
-                sistema continua funcionando.
-              </p>
+              <Badge variant={deepseekConfigured ? "secondary" : "outline"}>
+                {deepseekConfigured ? "Configurada" : "Não configurada"}
+              </Badge>
             </div>
 
-            {/* ===== W-API ===== */}
-            <div className="flex flex-col gap-4 rounded-lg border p-4">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 font-medium">
-                  <MessageCircle className="h-4 w-4 text-primary" />
-                  WhatsApp (W-API)
+            <p className="text-xs text-muted-foreground">
+              Usada para gerar o resumo do plano terapêutico com IA. Crie a
+              chave em platform.deepseek.com (menu API Keys).
+            </p>
+
+            <Field>
+              <FieldLabel>Chave da API</FieldLabel>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    name="deepseekApiKey"
+                    type={showDeepseek ? "text" : "password"}
+                    value={deepseekKey}
+                    onChange={(event) => {
+                      setDeepseekKey(event.target.value)
+                      setDeepseekTest(null)
+                    }}
+                    placeholder="sk-..."
+                    autoComplete="off"
+                    className="pr-9"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowDeepseek((value) => !value)}
+                    className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label={
+                      showDeepseek ? "Ocultar chave" : "Mostrar chave"
+                    }
+                  >
+                    {showDeepseek ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
                 </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleTest("deepseek")}
+                  disabled={pendingDeepseek || !deepseekKey.trim()}
+                >
+                  {pendingDeepseek ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <KeyRound className="h-4 w-4" />
+                  )}
+                  Testar chave
+                </Button>
+              </div>
+            </Field>
+
+            {deepseekTest && (
+              <p
+                className={
+                  deepseekTest.success
+                    ? "text-sm text-green-600 dark:text-green-400"
+                    : "text-sm text-destructive"
+                }
+              >
+                {deepseekTest.message}
+              </p>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              Sem chave, o médico escreve o resumo do plano manualmente — o
+              sistema continua funcionando.
+            </p>
+          </div>
+
+          {/* ===== WhatsApp (W-API) ===== */}
+          <div className="flex flex-col gap-4 rounded-lg border p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 font-medium">
+                <MessageCircle className="h-4 w-4 text-primary" />
+                WhatsApp (W-API)
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <Badge variant={wapiConfigured ? "secondary" : "outline"}>
                   {wapiConfigured ? "Configurada" : "Não configurada"}
                 </Badge>
+                {statusBadge}
               </div>
+            </div>
 
-              <p className="text-xs text-muted-foreground">
-                Envio de mensagens, PDFs e validação de números. Após salvar as
-                credenciais, conecte o número do WhatsApp na seção
-                &quot;Conectar WhatsApp&quot; logo abaixo.
-              </p>
+            <p className="text-xs text-muted-foreground">
+              Envio de mensagens, PDFs e validação de números. Salve as
+              credenciais e conecte o número da clínica aqui mesmo — sem
+              W-API, o sistema usa o modo simulação.
+            </p>
 
+            <div className="grid gap-4 md:grid-cols-2">
               <Field>
                 <FieldLabel>ID da instância</FieldLabel>
                 <Input
@@ -304,139 +345,166 @@ export function IntegracoesForm({
                   </Button>
                 </div>
               </Field>
+            </div>
 
-              {wapiTest && (
+            {wapiTest && (
+              <p
+                className={
+                  wapiTest.success
+                    ? "text-sm text-green-600 dark:text-green-400"
+                    : "text-sm text-destructive"
+                }
+              >
+                {wapiTest.message}
+              </p>
+            )}
+
+            {/* Status da conexão */}
+            <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+              <div className="flex flex-col gap-1">
+                <p className="text-sm font-medium">Status da conexão</p>
                 <p
                   className={
-                    wapiTest.success
-                      ? "text-sm text-green-600 dark:text-green-400"
-                      : "text-sm text-destructive"
+                    connectionStatus && !connectionStatus.success
+                      ? "text-xs text-destructive"
+                      : "text-xs text-muted-foreground"
                   }
                 >
-                  {wapiTest.message}
+                  {connectionStatus?.message ??
+                    "Informa se o número da clínica está conectado ao WhatsApp."}
                 </p>
-              )}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={runStatusCheck}
+                disabled={pendingStatus || !wapiConfigured}
+              >
+                {pendingStatus ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                Verificar status
+              </Button>
+            </div>
 
+            {/* ===== Conectar WhatsApp ===== */}
+            <div className="flex flex-col gap-4 rounded-lg border p-4">
+              <div className="flex items-center gap-2 font-medium">
+                <QrCode className="h-4 w-4 text-primary" />
+                Conectar WhatsApp
+              </div>
               <p className="text-xs text-muted-foreground">
-                Sem W-API, o sistema usa o modo simulação — mensagens não são
-                enviadas de verdade.
+                Conecte o número da clínica pelo código de pareamento (mais
+                fácil) ou pelo QR code.
               </p>
-            </div>
-          </div>
-
-          {/* ===== Conectar WhatsApp ===== */}
-          <div className="flex flex-col gap-4 rounded-lg border p-4">
-            <div className="flex items-center gap-2 font-medium">
-              <QrCode className="h-4 w-4 text-primary" />
-              Conectar WhatsApp
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Depois de salvar as credenciais, conecte o número da clínica aqui
-              mesmo — pelo código de pareamento (mais fácil) ou pelo QR code.
-            </p>
-            <div className="grid gap-4 md:grid-cols-2">
-              {/* Conexão por código */}
-              <div className="flex flex-col gap-3 rounded-md border p-3">
-                <p className="text-sm font-medium">Por código (recomendado)</p>
-                <Field>
-                  <FieldLabel>Número do WhatsApp da clínica</FieldLabel>
-                  <Input
-                    value={pairingPhone}
-                    onChange={(event) => {
-                      setPairingPhone(event.target.value)
-                      setPairingResult(null)
-                    }}
-                    placeholder="5594999999999"
-                    inputMode="numeric"
-                    autoComplete="off"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Com DDI e DDD, só números (ex.: 5594999999999)
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Conexão por código */}
+                <div className="flex flex-col gap-3 rounded-md border p-3">
+                  <p className="text-sm font-medium">
+                    Por código (recomendado)
                   </p>
-                </Field>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handlePairing}
-                  disabled={pendingPairing || !pairingPhone.trim()}
-                >
-                  {pendingPairing ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Phone className="h-4 w-4" />
-                  )}
-                  Gerar código de pareamento
-                </Button>
+                  <Field>
+                    <FieldLabel>Número do WhatsApp da clínica</FieldLabel>
+                    <Input
+                      value={pairingPhone}
+                      onChange={(event) => {
+                        setPairingPhone(event.target.value)
+                        setPairingResult(null)
+                      }}
+                      placeholder="5594999999999"
+                      inputMode="numeric"
+                      autoComplete="off"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Com DDI e DDD, só números (ex.: 5594999999999)
+                    </p>
+                  </Field>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handlePairing}
+                    disabled={pendingPairing || !pairingPhone.trim()}
+                  >
+                    {pendingPairing ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Phone className="h-4 w-4" />
+                    )}
+                    Gerar código de pareamento
+                  </Button>
 
-                {pairingResult &&
-                  (pairingResult.success ? (
-                    <div className="flex flex-col gap-2">
-                      <p className="text-sm text-green-600 dark:text-green-400">
+                  {pairingResult &&
+                    (pairingResult.success ? (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-sm text-green-600 dark:text-green-400">
+                          {pairingResult.message}
+                        </p>
+                        <div className="rounded-md border bg-muted px-3 py-2 text-center font-mono text-2xl tracking-widest">
+                          {pairingResult.pairingCode}
+                        </div>
+                        <ol className="list-decimal pl-4 text-xs text-muted-foreground">
+                          <li>
+                            No celular, abra o WhatsApp e toque em
+                            Configurações/Ajustes.
+                          </li>
+                          <li>
+                            Toque em &quot;Aparelhos conectados&quot; e depois
+                            em &quot;Conectar aparelho&quot;.
+                          </li>
+                          <li>
+                            Escolha &quot;Conectar com número de telefone&quot;
+                            e digite o código acima.
+                          </li>
+                        </ol>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-destructive">
                         {pairingResult.message}
                       </p>
-                      <div className="rounded-md border bg-muted px-3 py-2 text-center font-mono text-2xl tracking-widest">
-                        {pairingResult.pairingCode}
+                    ))}
+                </div>
+
+                {/* Conexão por QR code */}
+                <div className="flex flex-col gap-3 rounded-md border p-3">
+                  <p className="text-sm font-medium">Por QR code</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleQr}
+                    disabled={pendingQr}
+                  >
+                    {pendingQr ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <QrCode className="h-4 w-4" />
+                    )}
+                    Gerar QR code
+                  </Button>
+
+                  {qrResult &&
+                    (qrResult.success ? (
+                      <div className="flex flex-col gap-2">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={qrResult.qrcode}
+                          alt="QR code de conexão do WhatsApp"
+                          className="mx-auto h-52 w-52 rounded-md border"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          No celular: WhatsApp → Configurações → Aparelhos
+                          conectados → Conectar aparelho → escaneie o código.
+                          Ele expira em cerca de 20 segundos — se expirar,
+                          clique em &quot;Gerar QR code&quot; de novo.
+                        </p>
                       </div>
-                      <ol className="list-decimal pl-4 text-xs text-muted-foreground">
-                        <li>
-                          No celular, abra o WhatsApp e toque em
-                          Configurações/Ajustes.
-                        </li>
-                        <li>
-                          Toque em &quot;Aparelhos conectados&quot; e depois em
-                          &quot;Conectar aparelho&quot;.
-                        </li>
-                        <li>
-                          Escolha &quot;Conectar com número de telefone&quot; e
-                          digite o código acima.
-                        </li>
-                      </ol>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-destructive">
-                      {pairingResult.message}
-                    </p>
-                  ))}
-              </div>
-
-              {/* Conexão por QR code */}
-              <div className="flex flex-col gap-3 rounded-md border p-3">
-                <p className="text-sm font-medium">Por QR code</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleQr}
-                  disabled={pendingQr}
-                >
-                  {pendingQr ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <QrCode className="h-4 w-4" />
-                  )}
-                  Gerar QR code
-                </Button>
-
-                {qrResult &&
-                  (qrResult.success ? (
-                    <div className="flex flex-col gap-2">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={qrResult.qrcode}
-                        alt="QR code de conexão do WhatsApp"
-                        className="mx-auto h-52 w-52 rounded-md border"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        No celular: WhatsApp → Configurações → Aparelhos
-                        conectados → Conectar aparelho → escaneie o código.
-                        Ele expira em cerca de 20 segundos — se expirar, clique
-                        em &quot;Gerar QR code&quot; de novo.
+                    ) : (
+                      <p className="text-sm text-destructive">
+                        {qrResult.message}
                       </p>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-destructive">
-                      {qrResult.message}
-                    </p>
-                  ))}
+                    ))}
+                </div>
               </div>
             </div>
           </div>

@@ -116,6 +116,52 @@ export type WApiConnectResult = {
   message: string
   pairingCode?: string
   qrcode?: string
+  connected?: boolean
+}
+
+/**
+ * Verifica se a instância está conectada ao WhatsApp.
+ * GET /instance/status-instance?instanceId=...
+ * Resposta: { instanceId, connected: boolean }
+ */
+export async function getWApiConnectionStatus(
+  instanceId: string,
+  token: string
+): Promise<WApiConnectResult> {
+  try {
+    const url = `https://api.w-api.app/v1/instance/status-instance?instanceId=${encodeURIComponent(instanceId)}`
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    const text = await response.text()
+    let data: { connected?: boolean; error?: boolean; message?: string } = {}
+    try {
+      data = text ? JSON.parse(text) : {}
+    } catch {
+      data = {}
+    }
+
+    if (!response.ok || data.error) {
+      return {
+        success: false,
+        message: data.message ?? `W-API respondeu ${response.status}`,
+      }
+    }
+    return {
+      success: true,
+      message: data.connected
+        ? "Conectada — o número da clínica está conectado ao WhatsApp"
+        : "Desconectada — o número não está conectado ao WhatsApp",
+      connected: data.connected === true,
+    }
+  } catch {
+    return {
+      success: false,
+      message: "Falha ao conectar na W-API. Verifique sua internet.",
+    }
+  }
 }
 
 /**
