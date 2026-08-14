@@ -17,6 +17,11 @@ export default async function ConfiguracoesPage() {
     getIntegrationSettings(),
   ])
 
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    "https://clinica.vps10746.panel.icontainer.run"
+  const webhookUrl = `${appUrl}/api/webhooks/whatsapp`
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -26,7 +31,11 @@ export default async function ConfiguracoesPage() {
         </p>
       </div>
       <ClinicaForm initial={clinic} />
-      <IntegracoesForm initial={integrations} clinicPhone={clinic.phone} />
+      <IntegracoesForm
+        initial={integrations}
+        clinicPhone={clinic.phone}
+        webhookUrl={webhookUrl}
+      />
       <BotForm
         initial={{
           botEnabled: clinic.botEnabled ?? true,

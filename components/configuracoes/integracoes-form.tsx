@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
   Bot,
+  Copy,
   Eye,
   EyeOff,
   KeyRound,
@@ -13,6 +14,7 @@ import {
   Phone,
   QrCode,
   RefreshCw,
+  Webhook,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -47,9 +49,11 @@ type TestResult = { success: boolean; message: string } | null
 export function IntegracoesForm({
   initial,
   clinicPhone,
+  webhookUrl,
 }: {
   initial: IntegrationInitialData
   clinicPhone?: string | null
+  webhookUrl: string
 }) {
   const router = useRouter()
 
@@ -104,6 +108,32 @@ export function IntegracoesForm({
       const result = await checkWhatsAppConnection()
       setConnectionStatus(result)
     })
+  }
+
+  async function handleCopyWebhook() {
+    // Fallback para navegadores sem Clipboard API em contexto não seguro (HTTP).
+    async function legacyCopy() {
+      const textarea = document.createElement("textarea")
+      textarea.value = webhookUrl
+      textarea.style.position = "fixed"
+      textarea.style.opacity = "0"
+      document.body.appendChild(textarea)
+      textarea.select()
+      const ok = document.execCommand("copy")
+      document.body.removeChild(textarea)
+      if (!ok) throw new Error("copy failed")
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(webhookUrl)
+      } else {
+        await legacyCopy()
+      }
+      toast.success("Endereço do webhook copiado")
+    } catch {
+      toast.error("Não foi possível copiar — selecione o endereço manualmente")
+    }
   }
 
   useEffect(() => {
@@ -505,6 +535,37 @@ export function IntegracoesForm({
                       </p>
                     ))}
                 </div>
+              </div>
+            </div>
+
+            {/* ===== Webhook (mensagens recebidas) ===== */}
+            <div className="flex flex-col gap-3 rounded-lg border p-4">
+              <div className="flex items-center gap-2 font-medium">
+                <Webhook className="h-4 w-4 text-primary" />
+                Webhook — mensagens recebidas
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Para o bot responder sozinho, o painel da W-API precisa
+                avisar o sistema quando chega mensagem. Na W-API, em
+                Webhook, cole o endereço abaixo no campo{" "}
+                <b>Ao receber uma mensagem</b>. Os demais campos podem
+                ficar em branco.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={webhookUrl}
+                  onFocus={(event) => event.target.select()}
+                  className="flex-1 font-mono text-xs"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCopyWebhook}
+                >
+                  <Copy className="h-4 w-4" />
+                  Copiar
+                </Button>
               </div>
             </div>
           </div>
