@@ -3,10 +3,15 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, CarFront, Navigation } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
+import {
+  mapsNavigationUrl,
+  mapsSearchUrl,
+  wazeNavigationUrl,
+} from "@/lib/geo"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -39,6 +44,12 @@ export default async function AtendimentoDetalhePage({
   })
 
   if (!attendance) notFound()
+
+  const hasCoords =
+    attendance.latitude != null && attendance.longitude != null
+  const navigateUrl = hasCoords
+    ? mapsNavigationUrl(attendance.latitude!, attendance.longitude!)
+    : mapsSearchUrl(attendance.homeAddress ?? "")
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -97,6 +108,40 @@ export default async function AtendimentoDetalhePage({
             <div>
               <p className="text-muted-foreground">Endereço do domicílio</p>
               <p>{attendance.homeAddress}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  render={
+                    <a
+                      href={navigateUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    />
+                  }
+                >
+                  <Navigation className="h-4 w-4" />
+                  Navegar
+                </Button>
+                {hasCoords && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    render={
+                      <a
+                        href={wazeNavigationUrl(
+                          attendance.latitude!,
+                          attendance.longitude!
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      />
+                    }
+                  >
+                    <CarFront className="h-4 w-4" />
+                    Waze
+                  </Button>
+                )}
+              </div>
             </div>
           )}
           <Separator />

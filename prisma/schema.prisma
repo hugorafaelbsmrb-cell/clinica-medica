@@ -192,6 +192,9 @@ model Attendance {
   scheduledAt      DateTime
   startedAt        DateTime?        // médico iniciou o atendimento (módulo do dia)
   homeAddress      String?
+  latitude         Float?           // localização do domicílio deste atendimento
+  longitude        Float?
+  locationSource   String?          // GPS | GEOCODE | PATIENT (herdado do cadastro)
   anamnesis        String?          @db.Text
   value            Decimal          @default(0) @db.Decimal(10, 2)
   createdAt        DateTime         @default(now())

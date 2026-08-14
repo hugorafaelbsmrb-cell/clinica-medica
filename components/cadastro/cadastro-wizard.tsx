@@ -816,8 +816,43 @@ export function CadastroWizard() {
                     Onde você mora?
                   </h2>
                   <p className="text-muted-foreground">
-                    Para podermos atender você também em casa, se precisar.
+                    Use sua localização atual — é o jeito mais rápido e o
+                    médico navega direto até sua casa. Ou digite o endereço
+                    abaixo.
                   </p>
+                </div>
+                {/* GPS como forma padrão: o paciente está em casa agora */}
+                <div className="flex flex-col gap-2">
+                  <Button
+                    type="button"
+                    onClick={handleUseMyLocation}
+                    disabled={gpsStatus === "loading"}
+                    className="h-12 w-full text-base"
+                  >
+                    {gpsStatus === "loading" ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        Capturando...
+                      </>
+                    ) : (
+                      <>
+                        <LocateFixed className="h-5 w-5" />
+                        Usar minha localização
+                      </>
+                    )}
+                  </Button>
+                  {gpsStatus === "done" && (
+                    <p className="flex items-center gap-2 rounded-lg bg-emerald-500/10 px-4 py-3 text-base font-medium text-emerald-600">
+                      <CheckCircle2 className="h-5 w-5 shrink-0" />
+                      Localização salva — o médico poderá navegar até sua casa.
+                    </p>
+                  )}
+                  {gpsStatus === "error" && (
+                    <p className="rounded-lg bg-amber-500/10 px-4 py-3 text-base font-medium text-amber-600">
+                      Não foi possível capturar a localização. O endereço
+                      digitado já basta.
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-col gap-2">
                   <label htmlFor="cadastro-rua" className="text-lg font-medium">
@@ -876,42 +911,6 @@ export function CadastroWizard() {
                     placeholder="Ex.: São Paulo"
                     className="h-14 text-lg"
                   />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <p className="text-lg font-medium">
-                    Sua localização (opcional)
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleUseMyLocation}
-                    disabled={gpsStatus === "loading"}
-                    className="h-12 w-full text-base"
-                  >
-                    {gpsStatus === "loading" ? (
-                      <>
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        Capturando...
-                      </>
-                    ) : (
-                      <>
-                        <LocateFixed className="h-5 w-5" />
-                        Usar minha localização
-                      </>
-                    )}
-                  </Button>
-                  {gpsStatus === "done" && (
-                    <p className="flex items-center gap-2 rounded-lg bg-emerald-500/10 px-4 py-3 text-base font-medium text-emerald-600">
-                      <CheckCircle2 className="h-5 w-5 shrink-0" />
-                      Localização salva — o médico poderá navegar até sua casa.
-                    </p>
-                  )}
-                  {gpsStatus === "error" && (
-                    <p className="rounded-lg bg-amber-500/10 px-4 py-3 text-base font-medium text-amber-600">
-                      Não foi possível capturar a localização. O endereço
-                      digitado já basta.
-                    </p>
-                  )}
                 </div>
               </div>
             )}

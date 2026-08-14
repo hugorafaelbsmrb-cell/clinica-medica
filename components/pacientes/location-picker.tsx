@@ -29,7 +29,7 @@ const LeafletPicker = dynamic(
 )
 
 const SOURCE_LABEL: Record<string, string> = {
-  GPS: "GPS do paciente",
+  GPS: "GPS (posição atual)",
   GEOCODE: "Endereço",
   MANUAL: "Pino no mapa",
 }
@@ -52,6 +52,7 @@ export function LocationPicker({
   const [source, setSource] = useState(initialSource ?? "")
   const [focusKey, setFocusKey] = useState(0)
   const [searching, startSearch] = useTransition()
+  const [locating, setLocating] = useState(false)
 
   const latNum = latitude !== "" ? Number(latitude) : null
   const lngNum = longitude !== "" ? Number(longitude) : null
@@ -60,6 +61,31 @@ export function LocationPicker({
     if (!form) return ""
     const element = form.elements.namedItem(name)
     return element instanceof HTMLInputElement ? element.value.trim() : ""
+  }
+
+  // GPS como forma padrão no home care: a equipe está na casa do paciente
+  // durante o cadastro/edição — é o jeito mais preciso de marcar o ponto.
+  function handleUseMyLocation() {
+    if (!("geolocation" in navigator)) {
+      toast.error("Seu navegador não suporta localização.")
+      return
+    }
+    setLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLatitude(String(position.coords.latitude))
+        setLongitude(String(position.coords.longitude))
+        setSource("GPS")
+        setFocusKey((key) => key + 1)
+        setLocating(false)
+        toast.success("Localização capturada!")
+      },
+      () => {
+        setLocating(false)
+        toast.error("Não foi possível capturar sua localização agora.")
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    )
   }
 
   function handleGeocode(form: HTMLFormElement | null) {
@@ -108,9 +134,22 @@ export function LocationPicker({
       <div className="flex flex-wrap items-center gap-3">
         <Button
           type="button"
+          size="sm"
+          disabled={locating || searching}
+          onClick={handleUseMyLocation}
+        >
+          {locating ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <LocateFixed className="h-4 w-4" />
+          )}
+          {locating ? "Capturando..." : "Usar minha localização"}
+        </Button>
+        <Button
+          type="button"
           variant="outline"
           size="sm"
-          disabled={searching}
+          disabled={searching || locating}
           onClick={(event) => handleGeocode(event.currentTarget.form)}
         >
           {searching ? (

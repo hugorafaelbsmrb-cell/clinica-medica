@@ -63,7 +63,10 @@ export default async function AtendimentosDoDiaPage() {
 
   const cards: DayCardData[] = attendances.map((attendance) => {
     const patient = attendance.patient
+    // Endereço do atendimento tem prioridade: o agendamento pode ser
+    // em outro local diferente do cadastro do paciente.
     const address =
+      attendance.homeAddress ||
       buildAddress({
         street: patient.street,
         number: patient.number,
@@ -71,7 +74,6 @@ export default async function AtendimentosDoDiaPage() {
         city: patient.city,
         state: patient.state,
       }) ||
-      attendance.homeAddress ||
       "Endereço não informado"
 
     const lastPrescription = patient.prescriptions[0]
@@ -97,8 +99,10 @@ export default async function AtendimentosDoDiaPage() {
       reason: attendance.slotNote ?? patient.consultationReason,
       address,
       phone: patient.phone,
-      latitude: patient.latitude,
-      longitude: patient.longitude,
+      // Coordenadas do atendimento (GPS no local) têm prioridade
+      // sobre as do cadastro do paciente.
+      latitude: attendance.latitude ?? patient.latitude,
+      longitude: attendance.longitude ?? patient.longitude,
       medications,
       planDiagnosis: currentPlan ? truncate(currentPlan.diagnosis, 160) : null,
       planSummary: currentPlan?.summary ? truncate(currentPlan.summary, 200) : null,

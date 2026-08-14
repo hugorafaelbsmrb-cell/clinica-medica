@@ -17,7 +17,17 @@ export default async function NovoAtendimentoPage({
   const { paciente } = await searchParams
   const patients = await prisma.patient.findMany({
     orderBy: { name: "asc" },
-    select: { id: true, name: true, neighborhood: true },
+    select: {
+      id: true,
+      name: true,
+      street: true,
+      number: true,
+      neighborhood: true,
+      city: true,
+      state: true,
+      latitude: true,
+      longitude: true,
+    },
   })
 
   return (

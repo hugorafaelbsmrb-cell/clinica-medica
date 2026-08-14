@@ -5,6 +5,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { getClinicSettings } from "@/lib/clinic"
+import { geocodeAddress } from "@/lib/geo"
 import {
   defaultAutomationMessage,
   queueThankYouMessage,
@@ -19,6 +20,28 @@ const atendimentoSchema = z.object({
   type: z.enum(["PRESENCIAL", "DOMICILIAR"]),
   scheduledAt: z.string().min(1, "Informe a data"),
   homeAddress: z.string().optional().nullable(),
+  latitude: z
+    .string()
+    .optional()
+    .transform((value) => {
+      if (!value) return null
+      const number = Number(value)
+      return Number.isFinite(number) ? number : null
+    })
+    .pipe(z.number().min(-90).max(90).nullable()),
+  longitude: z
+    .string()
+    .optional()
+    .transform((value) => {
+      if (!value) return null
+      const number = Number(value)
+      return Number.isFinite(number) ? number : null
+    })
+    .pipe(z.number().min(-180).max(180).nullable()),
+  locationSource: z
+    .enum(["GPS", "GEOCODE", "PATIENT", "MANUAL"])
+    .optional()
+    .nullable(),
   anamnesis: z.string().optional().nullable(),
   value: z.coerce.number().min(0).default(0),
 })
@@ -41,6 +64,9 @@ export async function createAttendance(
     type: formData.get("type"),
     scheduledAt: formData.get("scheduledAt"),
     homeAddress: formData.get("homeAddress") || null,
+    latitude: formData.get("latitude") ?? undefined,
+    longitude: formData.get("longitude") ?? undefined,
+    locationSource: formData.get("locationSource") || null,
     anamnesis: formData.get("anamnesis") || null,
     value: formData.get("value") || 0,
   })
@@ -51,6 +77,15 @@ export async function createAttendance(
   }
 
   const data = parsed.data
+  const hasCoords = data.latitude !== null && data.longitude !== null
+
+  // Atendimento domiciliar precisa de endereço (valida antes de criar)
+  if (data.type === "DOMICILIAR" && !data.homeAddress) {
+    return {
+      success: false,
+      message: "Atendimento domiciliar exige o endereço do domicílio",
+    }
+  }
 
   const attendance = await prisma.attendance.create({
     data: {
@@ -59,19 +94,13 @@ export async function createAttendance(
       type: data.type,
       scheduledAt: new Date(data.scheduledAt),
       homeAddress: data.homeAddress || null,
+      latitude: hasCoords ? data.latitude : null,
+      longitude: hasCoords ? data.longitude : null,
+      locationSource: hasCoords ? data.locationSource : null,
       anamnesis: data.anamnesis || null,
       value: data.value,
     },
   })
-
-  // Atendimento domiciliar precisa de endereço
-  if (data.type === "DOMICILIAR" && !data.homeAddress) {
-    return {
-      success: false,
-      message: "Atendimento domiciliar exige o endereço do domicílio",
-      attendanceId: attendance.id,
-    }
-  }
 
   await prisma.auditLog.create({
     data: {
@@ -247,5 +276,36 @@ export async function startAttendance(id: string): Promise<ActionState> {
       ? "Atendimento iniciado, mas o aviso ao paciente falhou"
       : "Atendimento iniciado — paciente avisado",
     attendanceId: id,
+  }
+}
+
+/**
+ * Geocodifica o endereço digitado no formulário de agendamento
+ * (Nominatim). Usada pelo botão "Buscar coordenadas pelo endereço"
+ * quando o endereço do atendimento difere do cadastro do paciente.
+ */
+export async function geocodeAttendanceAddress(query: string): Promise<{
+  success: boolean
+  latitude?: number
+  longitude?: number
+  message?: string
+}> {
+  const session = await auth()
+  if (!session?.user) return { success: false, message: "Sessão expirada" }
+
+  const trimmed = query.trim()
+  if (trimmed.length < 8) {
+    return { success: false, message: "Informe um endereço completo" }
+  }
+
+  const coords = await geocodeAddress(trimmed)
+  if (!coords) {
+    return { success: false, message: "Endereço não encontrado no mapa" }
+  }
+
+  return {
+    success: true,
+    latitude: coords.latitude,
+    longitude: coords.longitude,
   }
 }
