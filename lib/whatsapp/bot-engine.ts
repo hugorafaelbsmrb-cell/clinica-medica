@@ -53,7 +53,7 @@ function extractDigits(text: string): string {
 const OPCOES_MENU = [
   "1 - Agendar uma consulta",
   "2 - Ver minha consulta",
-  "3 - Remarcar ou cancelar",
+  "3 - Remarcar consulta",
   "4 - Endereço",
   "5 - Horário de atendimento",
   "6 - Telefone e contato",
@@ -239,7 +239,7 @@ export function runBot(
       case "3":
         return pedirCpf(
           ctx,
-          "Para remarcar ou cancelar uma consulta, me envie o seu CPF."
+          "Para remarcar uma consulta, me envie o seu CPF."
         )
       case "4":
         return respostaEndereco(ctx)
@@ -252,11 +252,11 @@ export function runBot(
     }
   }
 
-  // 3) Remarcar/cancelar (antes de "marcar", que é parte de "remarcar")
+  // 3) Remarcar (antes de "marcar", que é parte de "remarcar")
   if (hasAny(text, ["remarcar", "desmarcar", "cancelar", "alterar", "mudar"])) {
     return pedirCpf(
       ctx,
-      "Para remarcar ou cancelar uma consulta, me envie o seu CPF."
+      "Para remarcar uma consulta, me envie o seu CPF."
     )
   }
 

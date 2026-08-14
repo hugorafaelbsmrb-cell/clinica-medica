@@ -127,7 +127,7 @@ async function buildCpfReply(
     })
     return [
       `${firstName}, sua próxima consulta está marcada para ${data}.`,
-      `Para remarcar ou cancelar, acesse: ${baseUrl}/cancelar/${next.cancelToken ?? ""}`,
+      `Para remarcar, acesse: ${baseUrl}/cancelar/${next.cancelToken ?? ""}`,
     ].join("\n")
   }
 

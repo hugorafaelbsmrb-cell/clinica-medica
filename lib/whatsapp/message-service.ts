@@ -195,7 +195,7 @@ export async function queueDueFollowUps(now = new Date()): Promise<number> {
 
 /**
  * Confirmação de agendamento: enfileira a mensagem com os dados da consulta
- * e o link público de cancelamento.
+ * e o link público para remarcação.
  */
 export async function queueAppointmentConfirmation(
   patientId: string,
@@ -209,20 +209,20 @@ export async function queueAppointmentConfirmation(
   })
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
-  const cancelLink = `${baseUrl}/cancelar/${attendance.cancelToken ?? ""}`
+  const manageLink = `${baseUrl}/cancelar/${attendance.cancelToken ?? ""}`
 
   const content = template
     ? renderTemplate(template.body, {
         nome: patient.name.split(" ")[0],
         data: format(attendance.scheduledAt, "dd/MM/yyyy", { locale: ptBR }),
         hora: format(attendance.scheduledAt, "HH:mm", { locale: ptBR }),
-        link: cancelLink,
+        link: manageLink,
       })
     : `Olá ${patient.name.split(" ")[0]}! Sua consulta está confirmada para ${format(
         attendance.scheduledAt,
         "dd/MM/yyyy",
         { locale: ptBR }
-      )} às ${format(attendance.scheduledAt, "HH:mm", { locale: ptBR })}. Se precisar cancelar, acesse: ${cancelLink}`
+      )} às ${format(attendance.scheduledAt, "HH:mm", { locale: ptBR })}. Se precisar remarcar, acesse: ${manageLink}`
 
   await enqueueMessage(patientId, "CONFIRMACAO_AGENDAMENTO", content, new Date(), attendance.id)
 }
