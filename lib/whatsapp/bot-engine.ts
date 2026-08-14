@@ -17,6 +17,9 @@ export type BotContext = {
   email?: string | null
   horarioAtendimento?: string | null
   baseUrl: string
+  /** Mensagens personalizadas pela clínica (vazio = usa o padrão). */
+  msgAtendente?: string | null
+  msgSaude?: string | null
 }
 
 export type BotResult = {
@@ -125,6 +128,13 @@ function respostaContato(ctx: BotContext): BotResult {
 }
 
 function respostaAtendente(ctx: BotContext): BotResult {
+  if (ctx.msgAtendente?.trim()) {
+    return {
+      reply: ctx.msgAtendente.trim(),
+      nextState: "MENU",
+      needsAttention: true,
+    }
+  }
   const urgente = ctx.phone
     ? `\nSe for urgente, ligue para ${ctx.phone}.`
     : ""
@@ -136,6 +146,9 @@ function respostaAtendente(ctx: BotContext): BotResult {
 }
 
 function respostaSaude(ctx: BotContext): BotResult {
+  if (ctx.msgSaude?.trim()) {
+    return { reply: ctx.msgSaude.trim(), nextState: "MENU", needsAttention: false }
+  }
   const contato = ctx.phone
     ? `Fale com a clínica pelo telefone ${ctx.phone} ou escreva "atendente".`
     : 'Escreva "atendente" para falar com a nossa equipe.'

@@ -12,10 +12,15 @@ export type ClinicInfo = {
   cnpj?: string | null
   horarioAtendimento?: string | null
   logoDataUrl?: string | null
+  botEnabled?: boolean
+  botMsgAtendente?: string | null
+  botMsgSaude?: string | null
+  botMsgCpfNaoEncontrado?: string | null
 }
 
 const DEFAULTS: ClinicInfo = {
   name: "Clínica Médica",
+  botEnabled: true,
 }
 
 /** Carrega as configurações da clínica, com fallback para o padrão. */
@@ -30,6 +35,10 @@ export async function getClinicSettings(): Promise<ClinicInfo> {
         cnpj: settings.cnpj,
         horarioAtendimento: settings.horarioAtendimento,
         logoDataUrl: settings.logoDataUrl,
+        botEnabled: settings.botEnabled,
+        botMsgAtendente: settings.botMsgAtendente,
+        botMsgSaude: settings.botMsgSaude,
+        botMsgCpfNaoEncontrado: settings.botMsgCpfNaoEncontrado,
       }
     : DEFAULTS
 }

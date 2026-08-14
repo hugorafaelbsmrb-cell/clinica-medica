@@ -114,3 +114,69 @@ export async function saveClinicSettings(
   revalidatePath("/", "layout")
   return { success: true, message: "Configurações salvas" }
 }
+
+/**
+ * Salva as configurações da automação (bot de atendimento do WhatsApp).
+ * Campo vazio nas mensagens = usa a mensagem padrão do bot.
+ */
+export async function saveBotSettings(
+  _prev: ActionState | null,
+  formData: FormData
+): Promise<ActionState> {
+  const session = await auth()
+  if (!session?.user || session.user.role !== "ADMIN") {
+    return {
+      success: false,
+      message: "Apenas administradores podem alterar a automação",
+    }
+  }
+
+  const botEnabled = formData.get("botEnabled") === "on"
+
+  const botSchema = z.object({
+    botMsgAtendente: z.string().max(2000).optional(),
+    botMsgSaude: z.string().max(2000).optional(),
+    botMsgCpfNaoEncontrado: z.string().max(2000).optional(),
+  })
+  const parsed = botSchema.safeParse({
+    botMsgAtendente: formData.get("botMsgAtendente"),
+    botMsgSaude: formData.get("botMsgSaude"),
+    botMsgCpfNaoEncontrado: formData.get("botMsgCpfNaoEncontrado"),
+  })
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: parsed.error.issues[0]?.message ?? "Dados inválidos",
+    }
+  }
+
+  const data = parsed.data
+  await prisma.clinicSettings.upsert({
+    where: { id: 1 },
+    update: {
+      botEnabled,
+      botMsgAtendente: data.botMsgAtendente?.trim() || null,
+      botMsgSaude: data.botMsgSaude?.trim() || null,
+      botMsgCpfNaoEncontrado: data.botMsgCpfNaoEncontrado?.trim() || null,
+    },
+    create: {
+      id: 1,
+      botEnabled,
+      botMsgAtendente: data.botMsgAtendente?.trim() || null,
+      botMsgSaude: data.botMsgSaude?.trim() || null,
+      botMsgCpfNaoEncontrado: data.botMsgCpfNaoEncontrado?.trim() || null,
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      action: "UPDATE",
+      entity: "ClinicSettings",
+      entityId: "bot",
+    },
+  })
+
+  revalidatePath("/", "layout")
+  return { success: true, message: "Automação salva" }
+}

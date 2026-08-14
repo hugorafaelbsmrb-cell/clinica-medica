@@ -26,6 +26,11 @@ export async function handleBotMessage(
   const text = normalizeText(content)
   if (!text) return
 
+  const clinic = await getClinicSettings()
+
+  // Bot desligado: a mensagem fica registrada no painel, mas sem resposta automática.
+  if (clinic.botEnabled === false) return
+
   // Estado da sessão (ignora sessões expiradas)
   let state: BotState = "MENU"
   const session = await prisma.botSession.findUnique({ where: { phone } })
@@ -33,7 +38,6 @@ export async function handleBotMessage(
     state = session.state === "AGUARDANDO_CPF" ? "AGUARDANDO_CPF" : "MENU"
   }
 
-  const clinic = await getClinicSettings()
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
 
   const result = runBot(state, text, {
@@ -43,11 +47,13 @@ export async function handleBotMessage(
     email: clinic.email,
     horarioAtendimento: clinic.horarioAtendimento,
     baseUrl,
+    msgAtendente: clinic.botMsgAtendente,
+    msgSaude: clinic.botMsgSaude,
   })
 
   let reply = result.reply
   if (result.cpfLookup) {
-    reply = await buildCpfReply(result.cpfLookup, baseUrl)
+    reply = await buildCpfReply(result.cpfLookup, baseUrl, clinic.botMsgCpfNaoEncontrado)
   }
 
   // Persiste o próximo estado da sessão
@@ -75,7 +81,11 @@ export async function handleBotMessage(
 }
 
 /** Monta a resposta com as consultas do paciente localizadas pelo CPF. */
-async function buildCpfReply(cpf: string, baseUrl: string): Promise<string> {
+async function buildCpfReply(
+  cpf: string,
+  baseUrl: string,
+  msgNaoEncontrado?: string | null
+): Promise<string> {
   const digits = cpf.replace(/\D/g, "")
   const formatted = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(
     6,
@@ -88,6 +98,9 @@ async function buildCpfReply(cpf: string, baseUrl: string): Promise<string> {
   })
 
   if (!patient) {
+    if (msgNaoEncontrado?.trim()) {
+      return msgNaoEncontrado.trim()
+    }
     return [
       "Não encontrei um cadastro com este CPF.",
       `Você pode se cadastrar e agendar pelo site: ${baseUrl}/cadastro`,

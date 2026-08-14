@@ -107,6 +107,10 @@ model ClinicSettings {
   deepseekApiKey String? // chave da DeepSeek (tela Configurações → Integrações)
   wApiInstance   String? // instanceId da W-API
   wApiToken      String? // token da W-API
+  botEnabled     Boolean  @default(true) // bot de atendimento ligado/desligado
+  botMsgAtendente String? @db.Text // resposta personalizada ao pedir atendente (vazio = padrão)
+  botMsgSaude     String? @db.Text // resposta personalizada de segurança/saúde (vazio = padrão)
+  botMsgCpfNaoEncontrado String? @db.Text // resposta personalizada de CPF não encontrado (vazio = padrão)
   updatedAt      DateTime @updatedAt
 }
 
