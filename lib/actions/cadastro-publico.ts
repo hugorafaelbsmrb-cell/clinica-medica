@@ -57,6 +57,33 @@ export type CadastroState = {
   patientId?: string
 }
 
+/**
+ * Registra a tentativa de cadastro quando o visitante informa o telefone
+ * (passo 1 do wizard). Usada pela automação de cadastro incompleto.
+ */
+export async function registerCadastroAttempt(input: {
+  name: string
+  phone: string
+}): Promise<{ success: boolean }> {
+  try {
+    const phone = normalizePhone(input.phone.replace(/\D/g, ""))
+    if (phone.length < 10) return { success: false }
+
+    const name = input.name.trim() || null
+    await prisma.registrationAttempt.upsert({
+      where: { phone },
+      // Reinicia o "timer" da tentativa, mas não reenvia lembrete
+      // para quem já recebeu um.
+      update: { name: name ?? undefined, createdAt: new Date() },
+      create: { phone, name },
+    })
+    return { success: true }
+  } catch (error) {
+    console.error("[CadastroOnline] Erro ao registrar tentativa:", error)
+    return { success: false }
+  }
+}
+
 export async function cadastroPublico(
   _prev: CadastroState | null,
   formData: FormData
@@ -149,6 +176,14 @@ export async function cadastroPublico(
         registeredVia: "ONLINE",
       },
     })
+
+    // Marca a tentativa de cadastro como convertida (finalizou).
+    // Sem await: não pode bloquear o fluxo do cadastro.
+    prisma.registrationAttempt
+      .updateMany({ where: { phone }, data: { converted: true } })
+      .catch((error) =>
+        console.error("[CadastroOnline] Erro ao converter tentativa:", error)
+      )
 
     // Registro de auditoria (LGPD)
     await prisma.auditLog.create({

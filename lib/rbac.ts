@@ -20,6 +20,7 @@ export const PERMISSIONS: Record<Role, string[]> = {
     "prescricoes",
     "planos",
     "whatsapp",
+    "automacoes",
     "financeiro",
     "relatorios",
     "usuarios",

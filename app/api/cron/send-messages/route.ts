@@ -15,6 +15,7 @@ import {
   queueAppointmentReminders,
   queueDueFollowUps,
 } from "@/lib/whatsapp/message-service"
+import { queueAutomationMessages } from "@/lib/whatsapp/automations"
 import { getIntegrationSettings } from "@/lib/integrations"
 
 export const runtime = "nodejs"
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest) {
 
   const queuedFollowUps = await queueDueFollowUps()
   const queuedReminders = await queueAppointmentReminders()
+  const automations = await queueAutomationMessages()
   const { sent, failed } = await processPendingMessages()
 
   const integrations = await getIntegrationSettings()
@@ -48,6 +50,7 @@ export async function GET(request: NextRequest) {
     ok: true,
     queuedFollowUps,
     queuedReminders,
+    automations,
     sent,
     failed,
     provider:

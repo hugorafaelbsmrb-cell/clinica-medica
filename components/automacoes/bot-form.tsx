@@ -3,7 +3,14 @@
 import { useActionState, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Bot, CalendarPlus, MessageCircle, ShieldAlert, Sparkles, UserRound } from "lucide-react"
+import {
+  Bot,
+  CalendarPlus,
+  MessageCircle,
+  ShieldAlert,
+  Sparkles,
+  UserRound,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -58,7 +65,7 @@ export function BotForm({ initial }: { initial: BotInitialData }) {
       <CardHeader>
         <div className="flex items-center justify-between gap-2">
           <div>
-            <CardTitle>Automação — Bot de atendimento</CardTitle>
+            <CardTitle>Bot de atendimento</CardTitle>
             <CardDescription>
               Respostas automáticas para quem escreve no WhatsApp da clínica
             </CardDescription>
@@ -197,7 +204,7 @@ export function BotForm({ initial }: { initial: BotInitialData }) {
 
           <div className="flex gap-3">
             <Button type="submit" disabled={pending}>
-              {pending ? "Salvando..." : "Salvar automação"}
+              {pending ? "Salvando..." : "Salvar bot"}
             </Button>
           </div>
         </form>

@@ -18,6 +18,19 @@ export type ClinicInfo = {
   botMsgCpfNaoEncontrado?: string | null
   botMsgBoasVindas?: string | null
   botMsgAgendar?: string | null
+  autoCadastroEnabled?: boolean
+  autoCadastroDelayHours?: number
+  autoCadastroMsg?: string | null
+  autoTratamentoEnabled?: boolean
+  autoTratamentoIntervalDays?: number
+  autoTratamentoMsg?: string | null
+  autoAniversarioEnabled?: boolean
+  autoAniversarioMsg?: string | null
+  autoReativacaoEnabled?: boolean
+  autoReativacaoDays?: number
+  autoReativacaoMsg?: string | null
+  autoAgradecimentoEnabled?: boolean
+  autoAgradecimentoMsg?: string | null
 }
 
 const DEFAULTS: ClinicInfo = {
@@ -43,6 +56,19 @@ export async function getClinicSettings(): Promise<ClinicInfo> {
         botMsgCpfNaoEncontrado: settings.botMsgCpfNaoEncontrado,
         botMsgBoasVindas: settings.botMsgBoasVindas,
         botMsgAgendar: settings.botMsgAgendar,
+        autoCadastroEnabled: settings.autoCadastroEnabled,
+        autoCadastroDelayHours: settings.autoCadastroDelayHours,
+        autoCadastroMsg: settings.autoCadastroMsg,
+        autoTratamentoEnabled: settings.autoTratamentoEnabled,
+        autoTratamentoIntervalDays: settings.autoTratamentoIntervalDays,
+        autoTratamentoMsg: settings.autoTratamentoMsg,
+        autoAniversarioEnabled: settings.autoAniversarioEnabled,
+        autoAniversarioMsg: settings.autoAniversarioMsg,
+        autoReativacaoEnabled: settings.autoReativacaoEnabled,
+        autoReativacaoDays: settings.autoReativacaoDays,
+        autoReativacaoMsg: settings.autoReativacaoMsg,
+        autoAgradecimentoEnabled: settings.autoAgradecimentoEnabled,
+        autoAgradecimentoMsg: settings.autoAgradecimentoMsg,
       }
     : DEFAULTS
 }

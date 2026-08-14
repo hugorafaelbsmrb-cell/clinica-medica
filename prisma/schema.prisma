@@ -45,6 +45,11 @@ enum MessageType {
   DOCUMENTO
   CONFIRMACAO_AGENDAMENTO
   LEMBRETE_CONSULTA
+  CADASTRO_INCOMPLETO
+  TRATAMENTO_PERIODICO
+  ANIVERSARIO
+  REATIVACAO
+  AGRADECIMENTO
 }
 
 enum MessageStatus {
@@ -113,6 +118,21 @@ model ClinicSettings {
   botMsgCpfNaoEncontrado String? @db.Text // resposta personalizada de CPF não encontrado (vazio = padrão)
   botMsgBoasVindas String? @db.Text // saudação inicial da conversa, antes do menu (vazio = padrão)
   botMsgAgendar   String? @db.Text // resposta ao pedido de novo agendamento (vazio = padrão com link de cadastro)
+
+  // Automações de mensagens (painel Automações)
+  autoCadastroEnabled    Boolean @default(true) // lembrete para quem iniciou o cadastro e não finalizou
+  autoCadastroDelayHours Int     @default(24)  // horas de espera após iniciar o cadastro
+  autoCadastroMsg        String? @db.Text
+  autoTratamentoEnabled  Boolean @default(true) // mensagem periódica para pacientes em tratamento
+  autoTratamentoIntervalDays Int @default(7)   // periodicidade em dias
+  autoTratamentoMsg      String? @db.Text
+  autoAniversarioEnabled Boolean @default(true) // mensagem de aniversário
+  autoAniversarioMsg     String? @db.Text
+  autoReativacaoEnabled  Boolean @default(true) // mensagem para clientes sem consulta há X dias
+  autoReativacaoDays     Int     @default(60)  // dias desde a última consulta
+  autoReativacaoMsg      String? @db.Text
+  autoAgradecimentoEnabled Boolean @default(true) // agradecimento ao finalizar a consulta
+  autoAgradecimentoMsg   String? @db.Text
   updatedAt      DateTime @updatedAt
 }
 
@@ -271,6 +291,21 @@ model FollowUpConfig {
   lastSentAt  DateTime?
   nextDueAt   DateTime?
   templateId  String?
+}
+
+// Tentativa de pré-cadastro online: registrada quando o visitante informa o
+// telefone no wizard público. Usada para lembrar quem não finalizou o cadastro.
+model RegistrationAttempt {
+  id          String   @id @default(cuid())
+  name        String?
+  phone       String   @unique
+  converted   Boolean  @default(false) // virou paciente cadastrado
+  contacted   Boolean  @default(false) // já recebeu o lembrete
+  contactedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([converted, contacted, createdAt])
 }
 
 model FinancialEntry {

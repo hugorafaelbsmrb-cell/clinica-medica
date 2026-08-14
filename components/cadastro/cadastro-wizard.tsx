@@ -27,6 +27,7 @@ import { RemarcarConsulta } from "@/components/agenda/remarcar-consulta"
 import { CancelarConsultaButton } from "@/components/agenda/cancelar-consulta-button"
 import {
   cadastroPublico,
+  registerCadastroAttempt,
   type CadastroState,
 } from "@/lib/actions/cadastro-publico"
 import { validateWhatsAppNumber } from "@/lib/actions/whatsapp-validate"
@@ -250,6 +251,11 @@ export function CadastroWizard() {
     if (cadStep === 1 && phone.replace(/\D/g, "").length < 10) {
       setError("Por favor, informe seu telefone com DDD.")
       return
+    }
+    // Passou do telefone: registra a tentativa de cadastro para a
+    // automação de lembrete de cadastro incompleto.
+    if (cadStep === 1 && phone.replace(/\D/g, "").length >= 10) {
+      registerCadastroAttempt({ name, phone }).catch(() => null)
     }
     if (cadStep === 2) {
       if (street.trim().length < 3) {

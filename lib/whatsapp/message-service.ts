@@ -24,14 +24,18 @@ export function renderTemplate(
   )
 }
 
-async function enqueue(
+export async function enqueueMessage(
   patientId: string,
   type:
     | "PRIMEIRO_CONTATO"
     | "ACOMPANHAMENTO"
     | "MANUAL"
     | "CONFIRMACAO_AGENDAMENTO"
-    | "LEMBRETE_CONSULTA",
+    | "LEMBRETE_CONSULTA"
+    | "TRATAMENTO_PERIODICO"
+    | "ANIVERSARIO"
+    | "REATIVACAO"
+    | "AGRADECIMENTO",
   content: string,
   scheduledFor?: Date,
   attendanceId?: string
@@ -68,7 +72,7 @@ export async function queueFirstContact(patientId: string): Promise<void> {
       })
     : `Olá ${patient.name.split(" ")[0]}! Aqui é da Clínica Médica. Que bom ter você com a gente!`
 
-  await enqueue(patientId, "PRIMEIRO_CONTATO", content)
+  await enqueueMessage(patientId, "PRIMEIRO_CONTATO", content)
 }
 
 /**
@@ -91,7 +95,7 @@ export async function sendManualMessage(
     return { ok: false, message: "Paciente sem telefone cadastrado" }
   }
 
-  await enqueue(patientId, "MANUAL", content)
+  await enqueueMessage(patientId, "MANUAL", content)
   return { ok: true, message: "Mensagem enfileirada para envio" }
 }
 
@@ -172,7 +176,7 @@ export async function queueDueFollowUps(now = new Date()): Promise<number> {
         })
       : `Olá ${config.patient.name.split(" ")[0]}, tudo bem? Como está a sua saúde?`
 
-    await enqueue(config.patientId, "ACOMPANHAMENTO", content, now)
+    await enqueueMessage(config.patientId, "ACOMPANHAMENTO", content, now)
 
     await prisma.followUpConfig.update({
       where: { id: config.id },
@@ -220,7 +224,7 @@ export async function queueAppointmentConfirmation(
         { locale: ptBR }
       )} às ${format(attendance.scheduledAt, "HH:mm", { locale: ptBR })}. Se precisar cancelar, acesse: ${cancelLink}`
 
-  await enqueue(patientId, "CONFIRMACAO_AGENDAMENTO", content, new Date(), attendance.id)
+  await enqueueMessage(patientId, "CONFIRMACAO_AGENDAMENTO", content, new Date(), attendance.id)
 }
 
 /**
@@ -264,7 +268,7 @@ export async function queueAppointmentReminders(now = new Date()): Promise<numbe
           { locale: ptBR }
         )} às ${format(attendance.scheduledAt, "HH:mm", { locale: ptBR })}.`
 
-    await enqueue(
+    await enqueueMessage(
       attendance.patientId,
       "LEMBRETE_CONSULTA",
       content,

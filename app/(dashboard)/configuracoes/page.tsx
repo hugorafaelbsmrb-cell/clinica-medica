@@ -5,7 +5,6 @@ import { getClinicSettings } from "@/lib/clinic"
 import { getIntegrationSettings } from "@/lib/integrations"
 import { ClinicaForm } from "@/components/configuracoes/clinica-form"
 import { IntegracoesForm } from "@/components/configuracoes/integracoes-form"
-import { BotForm } from "@/components/configuracoes/bot-form"
 
 export const metadata: Metadata = { title: "Configurações" }
 
@@ -35,16 +34,6 @@ export default async function ConfiguracoesPage() {
         initial={integrations}
         clinicPhone={clinic.phone}
         webhookUrl={webhookUrl}
-      />
-      <BotForm
-        initial={{
-          botEnabled: clinic.botEnabled ?? true,
-          botMsgAtendente: clinic.botMsgAtendente ?? "",
-          botMsgSaude: clinic.botMsgSaude ?? "",
-          botMsgCpfNaoEncontrado: clinic.botMsgCpfNaoEncontrado ?? "",
-          botMsgBoasVindas: clinic.botMsgBoasVindas ?? "",
-          botMsgAgendar: clinic.botMsgAgendar ?? "",
-        }}
       />
     </div>
   )

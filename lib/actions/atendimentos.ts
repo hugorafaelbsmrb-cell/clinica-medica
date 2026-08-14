@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { queueThankYouMessage } from "@/lib/whatsapp/automations"
 
 const atendimentoSchema = z.object({
   patientId: z.string().min(1, "Selecione o paciente"),
@@ -127,6 +128,12 @@ export async function completeAttendance(id: string): Promise<ActionState> {
       entityId: id,
       patientId: attendance.patientId,
     },
+  })
+
+  // Automação: mensagem de agradecimento ao finalizar a consulta.
+  // Não bloqueia a ação se a automação falhar.
+  queueThankYouMessage(attendance.patientId).catch((error) => {
+    console.error("[Automação] Falha no agradecimento pós-consulta:", error)
   })
 
   revalidatePath("/atendimentos")
