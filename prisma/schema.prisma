@@ -111,6 +111,8 @@ model ClinicSettings {
   botMsgAtendente String? @db.Text // resposta personalizada ao pedir atendente (vazio = padrão)
   botMsgSaude     String? @db.Text // resposta personalizada de segurança/saúde (vazio = padrão)
   botMsgCpfNaoEncontrado String? @db.Text // resposta personalizada de CPF não encontrado (vazio = padrão)
+  botMsgBoasVindas String? @db.Text // saudação inicial da conversa, antes do menu (vazio = padrão)
+  botMsgAgendar   String? @db.Text // resposta ao pedido de novo agendamento (vazio = padrão com link de cadastro)
   updatedAt      DateTime @updatedAt
 }
 

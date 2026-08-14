@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Bot, MessageCircle, ShieldAlert, UserRound } from "lucide-react"
+import { Bot, CalendarPlus, MessageCircle, ShieldAlert, Sparkles, UserRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -23,6 +23,8 @@ export type BotInitialData = {
   botMsgAtendente: string
   botMsgSaude: string
   botMsgCpfNaoEncontrado: string
+  botMsgBoasVindas: string
+  botMsgAgendar: string
 }
 
 export function BotForm({ initial }: { initial: BotInitialData }) {
@@ -34,6 +36,8 @@ export function BotForm({ initial }: { initial: BotInitialData }) {
   const [msgCpfNaoEncontrado, setMsgCpfNaoEncontrado] = useState(
     initial.botMsgCpfNaoEncontrado
   )
+  const [msgBoasVindas, setMsgBoasVindas] = useState(initial.botMsgBoasVindas)
+  const [msgAgendar, setMsgAgendar] = useState(initial.botMsgAgendar)
 
   const [state, formAction, pending] = useActionState<ActionState | null, FormData>(
     saveBotSettings,
@@ -67,11 +71,12 @@ export function BotForm({ initial }: { initial: BotInitialData }) {
       <CardContent>
         <form action={formAction} className="flex flex-col gap-6">
           <p className="text-xs text-muted-foreground">
-            O bot responde sozinho no WhatsApp: mostra um menu (agendar, ver
-            consulta, remarcar, endereço, horário, contato e falar com
-            atendente), consulta agendamentos pelo CPF do próprio número e
-            avisa a equipe no painel quando alguém pede um atendente. Ele
-            nunca dá orientação médica.
+            O bot responde sozinho no WhatsApp com um fluxo de atendimento:
+            boas-vindas + menu (agendar, ver consulta, remarcar, endereço,
+            horário, contato e falar com atendente). Envia o link de cadastro
+            para novos agendamentos, consulta agendamentos pelo CPF do
+            próprio número e avisa a equipe no painel quando alguém pede um
+            atendente. Ele nunca dá orientação médica.
           </p>
 
           {/* Liga/desliga */}
@@ -98,6 +103,42 @@ export function BotForm({ initial }: { initial: BotInitialData }) {
 
           {/* Mensagens personalizadas */}
           <div className="flex flex-col gap-4">
+            <Field>
+              <FieldLabel className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-muted-foreground" />
+                Mensagem de boas-vindas
+              </FieldLabel>
+              <Textarea
+                name="botMsgBoasVindas"
+                value={msgBoasVindas}
+                onChange={(event) => setMsgBoasVindas(event.target.value)}
+                rows={3}
+                placeholder='Olá! Sou o assistente virtual da clínica. Como posso ajudar? (padrão)'
+              />
+              <p className="text-xs text-muted-foreground">
+                Saudação do início da conversa. O menu de opções aparece logo
+                em seguida. Vazio = usa o texto padrão.
+              </p>
+            </Field>
+
+            <Field>
+              <FieldLabel className="flex items-center gap-2">
+                <CalendarPlus className="h-4 w-4 text-muted-foreground" />
+                Mensagem de novo agendamento
+              </FieldLabel>
+              <Textarea
+                name="botMsgAgendar"
+                value={msgAgendar}
+                onChange={(event) => setMsgAgendar(event.target.value)}
+                rows={3}
+                placeholder='Para agendar sua consulta, é simples: 1. Acesse o link de cadastro... (padrão)'
+              />
+              <p className="text-xs text-muted-foreground">
+                Enviada quando o paciente pede para agendar/marcar consulta.
+                Vazio = usa o texto padrão com o link de cadastro.
+              </p>
+            </Field>
+
             <Field>
               <FieldLabel className="flex items-center gap-2">
                 <UserRound className="h-4 w-4 text-muted-foreground" />

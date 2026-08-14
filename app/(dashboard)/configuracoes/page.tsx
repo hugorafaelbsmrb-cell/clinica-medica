@@ -33,6 +33,8 @@ export default async function ConfiguracoesPage() {
           botMsgAtendente: clinic.botMsgAtendente ?? "",
           botMsgSaude: clinic.botMsgSaude ?? "",
           botMsgCpfNaoEncontrado: clinic.botMsgCpfNaoEncontrado ?? "",
+          botMsgBoasVindas: clinic.botMsgBoasVindas ?? "",
+          botMsgAgendar: clinic.botMsgAgendar ?? "",
         }}
       />
     </div>

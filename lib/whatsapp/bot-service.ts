@@ -49,6 +49,8 @@ export async function handleBotMessage(
     baseUrl,
     msgAtendente: clinic.botMsgAtendente,
     msgSaude: clinic.botMsgSaude,
+    msgBoasVindas: clinic.botMsgBoasVindas,
+    msgAgendar: clinic.botMsgAgendar,
   })
 
   let reply = result.reply

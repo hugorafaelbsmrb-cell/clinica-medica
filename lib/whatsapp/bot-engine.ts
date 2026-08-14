@@ -20,6 +20,8 @@ export type BotContext = {
   /** Mensagens personalizadas pela clínica (vazio = usa o padrão). */
   msgAtendente?: string | null
   msgSaude?: string | null
+  msgBoasVindas?: string | null
+  msgAgendar?: string | null
 }
 
 export type BotResult = {
@@ -59,8 +61,12 @@ const OPCOES_MENU = [
 ]
 
 function menuReply(ctx: BotContext): string {
+  const boasVindas = ctx.msgBoasVindas?.trim()
+  const saudacao = boasVindas
+    ? boasVindas
+    : `Olá! Sou o assistente virtual da ${ctx.clinicName}. Como posso ajudar?`
   return [
-    `Olá! Sou o assistente virtual da ${ctx.clinicName}. Como posso ajudar?`,
+    saudacao,
     "",
     ...OPCOES_MENU,
     "",
@@ -81,6 +87,13 @@ function pedirCpf(ctx: BotContext, intro: string): BotResult {
 }
 
 function respostaAgendar(ctx: BotContext): BotResult {
+  if (ctx.msgAgendar?.trim()) {
+    return {
+      reply: ctx.msgAgendar.trim(),
+      nextState: "MENU",
+      needsAttention: false,
+    }
+  }
   return {
     reply: [
       "Para agendar sua consulta, é simples:",

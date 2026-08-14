@@ -137,11 +137,15 @@ export async function saveBotSettings(
     botMsgAtendente: z.string().max(2000).optional(),
     botMsgSaude: z.string().max(2000).optional(),
     botMsgCpfNaoEncontrado: z.string().max(2000).optional(),
+    botMsgBoasVindas: z.string().max(2000).optional(),
+    botMsgAgendar: z.string().max(2000).optional(),
   })
   const parsed = botSchema.safeParse({
     botMsgAtendente: formData.get("botMsgAtendente"),
     botMsgSaude: formData.get("botMsgSaude"),
     botMsgCpfNaoEncontrado: formData.get("botMsgCpfNaoEncontrado"),
+    botMsgBoasVindas: formData.get("botMsgBoasVindas"),
+    botMsgAgendar: formData.get("botMsgAgendar"),
   })
   if (!parsed.success) {
     return {
@@ -158,6 +162,8 @@ export async function saveBotSettings(
       botMsgAtendente: data.botMsgAtendente?.trim() || null,
       botMsgSaude: data.botMsgSaude?.trim() || null,
       botMsgCpfNaoEncontrado: data.botMsgCpfNaoEncontrado?.trim() || null,
+      botMsgBoasVindas: data.botMsgBoasVindas?.trim() || null,
+      botMsgAgendar: data.botMsgAgendar?.trim() || null,
     },
     create: {
       id: 1,
@@ -165,6 +171,8 @@ export async function saveBotSettings(
       botMsgAtendente: data.botMsgAtendente?.trim() || null,
       botMsgSaude: data.botMsgSaude?.trim() || null,
       botMsgCpfNaoEncontrado: data.botMsgCpfNaoEncontrado?.trim() || null,
+      botMsgBoasVindas: data.botMsgBoasVindas?.trim() || null,
+      botMsgAgendar: data.botMsgAgendar?.trim() || null,
     },
   })
 

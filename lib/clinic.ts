@@ -16,6 +16,8 @@ export type ClinicInfo = {
   botMsgAtendente?: string | null
   botMsgSaude?: string | null
   botMsgCpfNaoEncontrado?: string | null
+  botMsgBoasVindas?: string | null
+  botMsgAgendar?: string | null
 }
 
 const DEFAULTS: ClinicInfo = {
@@ -39,6 +41,8 @@ export async function getClinicSettings(): Promise<ClinicInfo> {
         botMsgAtendente: settings.botMsgAtendente,
         botMsgSaude: settings.botMsgSaude,
         botMsgCpfNaoEncontrado: settings.botMsgCpfNaoEncontrado,
+        botMsgBoasVindas: settings.botMsgBoasVindas,
+        botMsgAgendar: settings.botMsgAgendar,
       }
     : DEFAULTS
 }
