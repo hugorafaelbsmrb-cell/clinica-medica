@@ -31,11 +31,14 @@ export type ClinicInfo = {
   autoReativacaoMsg?: string | null
   autoAgradecimentoEnabled?: boolean
   autoAgradecimentoMsg?: string | null
+  autoACaminhoEnabled?: boolean
+  autoACaminhoMsg?: string | null
 }
 
 const DEFAULTS: ClinicInfo = {
   name: "Clínica Médica",
   botEnabled: true,
+  autoACaminhoEnabled: true,
 }
 
 /** Carrega as configurações da clínica, com fallback para o padrão. */
@@ -69,6 +72,8 @@ export async function getClinicSettings(): Promise<ClinicInfo> {
         autoReativacaoMsg: settings.autoReativacaoMsg,
         autoAgradecimentoEnabled: settings.autoAgradecimentoEnabled,
         autoAgradecimentoMsg: settings.autoAgradecimentoMsg,
+        autoACaminhoEnabled: settings.autoACaminhoEnabled,
+        autoACaminhoMsg: settings.autoACaminhoMsg,
       }
     : DEFAULTS
 }

@@ -3,10 +3,11 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { ArrowLeft, Pencil, Phone, MapPin } from "lucide-react"
+import { ArrowLeft, Navigation, Pencil, Phone, MapPin } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
+import { mapsNavigationUrl, mapsSearchUrl } from "@/lib/geo"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -22,6 +23,7 @@ const TYPE_LABELS = {
 
 const STATUS_LABELS = {
   AGENDADO: "Agendado",
+  EM_ATENDIMENTO: "Em atendimento",
   REALIZADO: "Realizado",
   CANCELADO: "Cancelado",
 } as const
@@ -91,6 +93,23 @@ export default async function PacienteDetalhePage({
           </div>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            render={
+              <a
+                href={
+                  patient.latitude != null && patient.longitude != null
+                    ? mapsNavigationUrl(patient.latitude, patient.longitude)
+                    : mapsSearchUrl(address)
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+              />
+            }
+          >
+            <Navigation className="h-4 w-4" />
+            Navegar
+          </Button>
           <Button
             variant="outline"
             render={<Link href={`/pacientes/${patient.id}/editar`} />}

@@ -4,7 +4,15 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
-import { queueThankYouMessage } from "@/lib/whatsapp/automations"
+import { getClinicSettings } from "@/lib/clinic"
+import {
+  defaultAutomationMessage,
+  queueThankYouMessage,
+} from "@/lib/whatsapp/automations"
+import {
+  renderTemplate,
+  sendImmediateMessage,
+} from "@/lib/whatsapp/message-service"
 
 const atendimentoSchema = z.object({
   patientId: z.string().min(1, "Selecione o paciente"),
@@ -153,4 +161,91 @@ export async function cancelAttendance(id: string): Promise<ActionState> {
   revalidatePath("/atendimentos")
   revalidatePath(`/atendimentos/${id}`)
   return { success: true, message: "Atendimento cancelado" }
+}
+
+/**
+ * Inicia o atendimento (módulo "Atendimentos do dia"): muda o status para
+ * EM_ATENDIMENTO, grava a hora de início e avisa o paciente imediatamente
+ * pelo WhatsApp que o médico está a caminho (envio direto, sem o cron).
+ * Apenas ADMIN e MEDICO.
+ */
+export async function startAttendance(id: string): Promise<ActionState> {
+  const session = await auth()
+  if (!session?.user) return { success: false, message: "Sessão expirada" }
+  if (session.user.role !== "ADMIN" && session.user.role !== "MEDICO") {
+    return {
+      success: false,
+      message: "Apenas médicos podem iniciar o atendimento",
+    }
+  }
+
+  const attendance = await prisma.attendance.findUnique({
+    where: { id },
+    include: { patient: true },
+  })
+  if (!attendance) {
+    return { success: false, message: "Atendimento não encontrado" }
+  }
+  if (attendance.status !== "AGENDADO") {
+    return {
+      success: true,
+      message:
+        attendance.status === "EM_ATENDIMENTO"
+          ? "Atendimento já iniciado"
+          : "Este atendimento não está mais agendado",
+    }
+  }
+
+  const now = new Date()
+  await prisma.attendance.update({
+    where: { id },
+    data: { status: "EM_ATENDIMENTO", startedAt: now },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      action: "START",
+      entity: "Attendance",
+      entityId: id,
+      patientId: attendance.patientId,
+    },
+  })
+
+  // Aviso "médico a caminho": envio direto via provider (não espera o cron).
+  // Respeita WhatsApp habilitado + consentimento LGPD + telefone cadastrado.
+  let notifyError: string | null = null
+  if (
+    attendance.patient.phone &&
+    attendance.patient.whatsappEnabled &&
+    attendance.patient.lgpdConsent
+  ) {
+    const clinic = await getClinicSettings()
+    if (clinic.autoACaminhoEnabled) {
+      const msg =
+        clinic.autoACaminhoMsg?.trim() || defaultAutomationMessage("acaminho")
+      const content = renderTemplate(msg, {
+        nome: attendance.patient.name.split(" ")[0],
+        data: now.toLocaleDateString("pt-BR"),
+      })
+      const result = await sendImmediateMessage(
+        attendance.patientId,
+        "MEDICO_A_CAMINHO",
+        content,
+        attendance.id
+      )
+      if (!result.ok) notifyError = result.error ?? "Falha no envio"
+    }
+  }
+
+  revalidatePath("/atendimentos-do-dia")
+  revalidatePath("/atendimentos")
+  revalidatePath(`/atendimentos/${id}`)
+  return {
+    success: true,
+    message: notifyError
+      ? "Atendimento iniciado, mas o aviso ao paciente falhou"
+      : "Atendimento iniciado — paciente avisado",
+    attendanceId: id,
+  }
 }

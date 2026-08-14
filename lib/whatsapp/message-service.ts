@@ -35,7 +35,8 @@ export async function enqueueMessage(
     | "TRATAMENTO_PERIODICO"
     | "ANIVERSARIO"
     | "REATIVACAO"
-    | "AGRADECIMENTO",
+    | "AGRADECIMENTO"
+    | "MEDICO_A_CAMINHO",
   content: string,
   scheduledFor?: Date,
   attendanceId?: string
@@ -51,6 +52,44 @@ export async function enqueueMessage(
       scheduledFor: scheduledFor ?? new Date(),
     },
   })
+}
+
+/**
+ * Envio imediato (sem passar pelo cron): usado quando a mensagem não pode
+ * esperar, como o aviso "médico a caminho". Registra na tabela Message o
+ * resultado (ENVIADA/FALHA) para histórico no painel WhatsApp.
+ */
+export async function sendImmediateMessage(
+  patientId: string,
+  type: "MEDICO_A_CAMINHO" | "MANUAL",
+  content: string,
+  attendanceId?: string
+): Promise<{ ok: boolean; error?: string }> {
+  const patient = await prisma.patient.findUnique({ where: { id: patientId } })
+  if (!patient?.phone) {
+    return { ok: false, error: "Paciente sem telefone" }
+  }
+
+  const provider = await getWhatsAppProvider()
+  const result = await provider.sendText(normalizePhone(patient.phone), content)
+
+  await prisma.message.create({
+    data: {
+      patientId,
+      attendanceId: attendanceId ?? null,
+      type,
+      direction: "OUT",
+      content,
+      status: result.ok ? "ENVIADA" : "FALHA",
+      scheduledFor: new Date(),
+      sentAt: result.ok ? new Date() : null,
+      error: result.ok ? null : (result.error ?? "Erro desconhecido"),
+    },
+  })
+
+  return result.ok
+    ? { ok: true }
+    : { ok: false, error: result.error ?? "Erro desconhecido" }
 }
 
 /**

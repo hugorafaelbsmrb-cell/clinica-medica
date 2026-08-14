@@ -7,6 +7,7 @@ import {
   Cake,
   HeartPulse,
   History,
+  MapPinned,
   ThumbsUp,
   UserPlus,
   Zap,
@@ -43,6 +44,8 @@ export type MensagensInitialData = {
   autoReativacaoMsg: string
   autoAgradecimentoEnabled: boolean
   autoAgradecimentoMsg: string
+  autoACaminhoEnabled: boolean
+  autoACaminhoMsg: string
 }
 
 type SectionProps = {
@@ -137,6 +140,11 @@ export function MensagensForm({
     initial.autoAgradecimentoMsg
   )
 
+  const [acaminhoEnabled, setAcaminhoEnabled] = useState(
+    initial.autoACaminhoEnabled
+  )
+  const [acaminhoMsg, setAcaminhoMsg] = useState(initial.autoACaminhoMsg)
+
   const [state, formAction, pending] = useActionState<
     AutomationState | null,
     FormData
@@ -156,7 +164,8 @@ export function MensagensForm({
     tratamentoEnabled ||
     aniversarioEnabled ||
     reativacaoEnabled ||
-    agradecimentoEnabled
+    agradecimentoEnabled ||
+    acaminhoEnabled
 
   return (
     <Card>
@@ -320,6 +329,27 @@ export function MensagensForm({
                   onChange={(event) => setAgradecimentoMsg(event.target.value)}
                   rows={3}
                   placeholder="Olá {{nome}}! Obrigado pela sua visita... (padrão)"
+                />
+              </Field>
+            </Section>
+
+            {/* 6) Médico a caminho */}
+            <Section
+              icon={<MapPinned className="h-4 w-4 text-primary" />}
+              title="Médico a caminho"
+              description="Avisa o paciente no momento em que o médico inicia o atendimento pelo módulo 'Atendimentos do dia'. Envio imediato, sem aguardar o agendador."
+              enabled={acaminhoEnabled}
+              onToggle={setAcaminhoEnabled}
+              fieldName="autoACaminhoEnabled"
+            >
+              <Field>
+                <FieldLabel>Mensagem</FieldLabel>
+                <Textarea
+                  name="autoACaminhoMsg"
+                  value={acaminhoMsg}
+                  onChange={(event) => setAcaminhoMsg(event.target.value)}
+                  rows={3}
+                  placeholder="Olá {{nome}}! O médico já está a caminho da sua casa. (padrão)"
                 />
               </Field>
             </Section>

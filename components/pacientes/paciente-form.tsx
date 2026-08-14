@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Textarea } from "@/components/ui/textarea"
+import { LocationPicker } from "@/components/pacientes/location-picker"
 import {
   createPatient,
   updatePatient,
@@ -32,6 +33,9 @@ type PatientFormData = {
   insurance?: string | null
   notes?: string | null
   consultationReason?: string | null
+  latitude?: number | null
+  longitude?: number | null
+  locationSource?: string | null
   lgpdConsent: boolean
   whatsappEnabled: boolean
 }
@@ -160,6 +164,15 @@ export function PatientForm({
                 <Input name="zipCode" defaultValue={patient?.zipCode ?? ""} />
               </Field>
             </div>
+          </section>
+
+          <section className="flex flex-col gap-2">
+            <FieldLabel>Localização do paciente (home care)</FieldLabel>
+            <LocationPicker
+              initialLatitude={patient?.latitude}
+              initialLongitude={patient?.longitude}
+              initialSource={patient?.locationSource}
+            />
           </section>
 
           <Field>

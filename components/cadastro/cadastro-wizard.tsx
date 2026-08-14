@@ -15,6 +15,7 @@ import {
   Clock,
   History,
   Loader2,
+  LocateFixed,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -150,6 +151,10 @@ export function CadastroWizard() {
   const [number, setNumber] = useState("")
   const [neighborhood, setNeighborhood] = useState("")
   const [city, setCity] = useState("")
+  const [gps, setGps] = useState<{ lat: number; lng: number } | null>(null)
+  const [gpsStatus, setGpsStatus] = useState<
+    "idle" | "loading" | "done" | "error"
+  >("idle")
   const [whatsapp, setWhatsapp] = useState<"sim" | "nao">("nao")
   const [lgpd, setLgpd] = useState(false)
   const [error, setError] = useState("")
@@ -281,6 +286,34 @@ export function CadastroWizard() {
   function backCadastro() {
     setError("")
     setCadStep((current) => Math.max(current - 1, 0))
+  }
+
+  // GPS do navegador: o paciente está em casa ao se cadastrar,
+  // então esta é a forma mais precisa de capturar o endereço (home care).
+  function handleUseMyLocation() {
+    if (!("geolocation" in navigator)) {
+      setGpsStatus("error")
+      toast.error("Seu navegador não suporta localização.")
+      return
+    }
+    setGpsStatus("loading")
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setGps({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        })
+        setGpsStatus("done")
+        toast.success("Localização capturada!")
+      },
+      () => {
+        setGpsStatus("error")
+        toast.error(
+          "Não foi possível capturar sua localização. Você pode continuar sem ela."
+        )
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    )
   }
 
   // Verifica na W-API se o número informado está registrado no WhatsApp
@@ -616,6 +649,13 @@ export function CadastroWizard() {
             <input type="hidden" name="number" value={number} />
             <input type="hidden" name="neighborhood" value={neighborhood} />
             <input type="hidden" name="city" value={city} />
+            <input type="hidden" name="latitude" value={gps ? String(gps.lat) : ""} />
+            <input
+              type="hidden"
+              name="longitude"
+              value={gps ? String(gps.lng) : ""}
+            />
+            <input type="hidden" name="locationSource" value={gps ? "GPS" : ""} />
             <input type="hidden" name="whatsappEnabled" value={whatsapp} />
 
             {cadStep === 0 && (
@@ -836,6 +876,42 @@ export function CadastroWizard() {
                     placeholder="Ex.: São Paulo"
                     className="h-14 text-lg"
                   />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <p className="text-lg font-medium">
+                    Sua localização (opcional)
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleUseMyLocation}
+                    disabled={gpsStatus === "loading"}
+                    className="h-12 w-full text-base"
+                  >
+                    {gpsStatus === "loading" ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        Capturando...
+                      </>
+                    ) : (
+                      <>
+                        <LocateFixed className="h-5 w-5" />
+                        Usar minha localização
+                      </>
+                    )}
+                  </Button>
+                  {gpsStatus === "done" && (
+                    <p className="flex items-center gap-2 rounded-lg bg-emerald-500/10 px-4 py-3 text-base font-medium text-emerald-600">
+                      <CheckCircle2 className="h-5 w-5 shrink-0" />
+                      Localização salva — o médico poderá navegar até sua casa.
+                    </p>
+                  )}
+                  {gpsStatus === "error" && (
+                    <p className="rounded-lg bg-amber-500/10 px-4 py-3 text-base font-medium text-amber-600">
+                      Não foi possível capturar a localização. O endereço
+                      digitado já basta.
+                    </p>
+                  )}
                 </div>
               </div>
             )}

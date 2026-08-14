@@ -16,6 +16,7 @@ import {
   UserCog,
   Settings,
   CalendarDays,
+  MapPinned,
   Workflow,
   PanelLeftClose,
   PanelLeftOpen,
@@ -37,6 +38,12 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, area: "dashboard" },
+  {
+    href: "/atendimentos-do-dia",
+    label: "Atendimentos do dia",
+    icon: MapPinned,
+    area: "atendimentos-do-dia",
+  },
   { href: "/agenda", label: "Agenda", icon: CalendarDays, area: "agenda" },
   { href: "/pacientes", label: "Pacientes", icon: Users, area: "pacientes" },
   { href: "/atendimentos", label: "Atendimentos", icon: Stethoscope, area: "atendimentos" },

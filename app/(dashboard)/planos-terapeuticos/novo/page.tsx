@@ -6,14 +6,25 @@ import { PlanForm } from "@/components/planos/plano-form"
 
 export const metadata: Metadata = { title: "Novo plano terapêutico" }
 
-export default async function NovoPlanoPage() {
+export default async function NovoPlanoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ atendimento?: string }>
+}) {
   const session = await auth()
   requireRole(session, ["ADMIN", "MEDICO"])
 
-  const patients = await prisma.patient.findMany({
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
-  })
+  const { atendimento } = await searchParams
+
+  const [patients, attendance] = await Promise.all([
+    prisma.patient.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+    atendimento
+      ? prisma.attendance.findUnique({ where: { id: atendimento } })
+      : Promise.resolve(null),
+  ])
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -26,7 +37,10 @@ export default async function NovoPlanoPage() {
           gerado por IA aqui mesmo, antes de salvar.
         </p>
       </div>
-      <PlanForm patients={patients} />
+      <PlanForm
+        patients={patients}
+        preselectedPatientId={attendance?.patientId}
+      />
     </div>
   )
 }

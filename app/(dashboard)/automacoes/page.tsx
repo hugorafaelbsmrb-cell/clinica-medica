@@ -45,6 +45,8 @@ export default async function AutomacoesPage() {
           autoReativacaoMsg: clinic.autoReativacaoMsg ?? "",
           autoAgradecimentoEnabled: clinic.autoAgradecimentoEnabled ?? true,
           autoAgradecimentoMsg: clinic.autoAgradecimentoMsg ?? "",
+          autoACaminhoEnabled: clinic.autoACaminhoEnabled ?? true,
+          autoACaminhoMsg: clinic.autoACaminhoMsg ?? "",
         }}
       />
     </div>

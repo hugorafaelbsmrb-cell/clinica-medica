@@ -42,6 +42,7 @@ export async function saveMensagensAutomation(
     aniversario: z.string().max(2000).optional(),
     reativacao: z.string().max(2000).optional(),
     agradecimento: z.string().max(2000).optional(),
+    acaminho: z.string().max(2000).optional(),
   })
   const parsed = msgSchema.safeParse({
     cadastro: formData.get("autoCadastroMsg"),
@@ -49,6 +50,7 @@ export async function saveMensagensAutomation(
     aniversario: formData.get("autoAniversarioMsg"),
     reativacao: formData.get("autoReativacaoMsg"),
     agradecimento: formData.get("autoAgradecimentoMsg"),
+    acaminho: formData.get("autoACaminhoMsg"),
   })
   if (!parsed.success) {
     return {
@@ -76,6 +78,8 @@ export async function saveMensagensAutomation(
     autoReativacaoMsg: data.reativacao?.trim() || null,
     autoAgradecimentoEnabled: flag(formData, "autoAgradecimentoEnabled"),
     autoAgradecimentoMsg: data.agradecimento?.trim() || null,
+    autoACaminhoEnabled: flag(formData, "autoACaminhoEnabled"),
+    autoACaminhoMsg: data.acaminho?.trim() || null,
   }
 
   await prisma.clinicSettings.upsert({

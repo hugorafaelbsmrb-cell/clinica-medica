@@ -15,6 +15,7 @@ export const PERMISSIONS: Record<Role, string[]> = {
   ADMIN: [
     "dashboard",
     "agenda",
+    "atendimentos-do-dia",
     "pacientes",
     "atendimentos",
     "prescricoes",
@@ -26,7 +27,15 @@ export const PERMISSIONS: Record<Role, string[]> = {
     "usuarios",
     "configuracoes",
   ],
-  MEDICO: ["dashboard", "agenda", "pacientes", "atendimentos", "prescricoes", "planos"],
+  MEDICO: [
+    "dashboard",
+    "agenda",
+    "atendimentos-do-dia",
+    "pacientes",
+    "atendimentos",
+    "prescricoes",
+    "planos",
+  ],
   SECRETARIA: ["dashboard", "agenda", "pacientes", "atendimentos", "whatsapp"],
   FINANCEIRO: ["dashboard", "financeiro", "relatorios"],
 }

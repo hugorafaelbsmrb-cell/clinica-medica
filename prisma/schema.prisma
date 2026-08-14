@@ -22,6 +22,7 @@ enum AttendanceType {
 
 enum AttendanceStatus {
   AGENDADO
+  EM_ATENDIMENTO
   REALIZADO
   CANCELADO
 }
@@ -50,6 +51,7 @@ enum MessageType {
   ANIVERSARIO
   REATIVACAO
   AGRADECIMENTO
+  MEDICO_A_CAMINHO
 }
 
 enum MessageStatus {
@@ -133,6 +135,8 @@ model ClinicSettings {
   autoReativacaoMsg      String? @db.Text
   autoAgradecimentoEnabled Boolean @default(true) // agradecimento ao finalizar a consulta
   autoAgradecimentoMsg   String? @db.Text
+  autoACaminhoEnabled    Boolean @default(true) // aviso "médico a caminho" ao iniciar o atendimento
+  autoACaminhoMsg        String? @db.Text
   updatedAt      DateTime @updatedAt
 }
 
@@ -157,6 +161,10 @@ model Patient {
   lgpdConsentAt    DateTime?
   whatsappEnabled  Boolean        @default(false)
   registeredVia    String         @default("MANUAL") // MANUAL = equipe, ONLINE = autoatendimento público
+  latitude         Float?         // localização do domicílio (home care)
+  longitude        Float?
+  locationSource   String?        // GPS | GEOCODE | MANUAL
+  locationUpdatedAt DateTime?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   attendances      Attendance[]
@@ -182,6 +190,7 @@ model Attendance {
   slotNote         String?          // Motivo da consulta informado no agendamento online
   cancelToken      String?          @unique // token público de cancelamento (link na confirmação)
   scheduledAt      DateTime
+  startedAt        DateTime?        // médico iniciou o atendimento (módulo do dia)
   homeAddress      String?
   anamnesis        String?          @db.Text
   value            Decimal          @default(0) @db.Decimal(10, 2)

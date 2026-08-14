@@ -27,7 +27,15 @@ export type AutomationCounts = {
 }
 
 /** Template padrão de cada automação (quando o admin deixa vazio). */
-export function defaultAutomationMessage(kind: "cadastro" | "tratamento" | "aniversario" | "reativacao" | "agradecimento"): string {
+export function defaultAutomationMessage(
+  kind:
+    | "cadastro"
+    | "tratamento"
+    | "aniversario"
+    | "reativacao"
+    | "agradecimento"
+    | "acaminho"
+): string {
   switch (kind) {
     case "cadastro":
       return "Olá {{nome}}! Percebemos que você começou seu cadastro na clínica e não finalizou. Se precisar de ajuda ou preferir fazer pelo WhatsApp, é só responder esta mensagem."
@@ -39,6 +47,8 @@ export function defaultAutomationMessage(kind: "cadastro" | "tratamento" | "aniv
       return "Olá {{nome}}! Faz um tempo que não nos vemos. Que tal agendar uma consulta para cuidar da sua saúde? É só responder por aqui."
     case "agradecimento":
       return "Olá {{nome}}! Obrigado pela sua visita. Sua opinião é muito importante para nós — se precisar de algo, é só responder por aqui."
+    case "acaminho":
+      return "Olá {{nome}}! O médico já está a caminho da sua casa."
   }
 }
 

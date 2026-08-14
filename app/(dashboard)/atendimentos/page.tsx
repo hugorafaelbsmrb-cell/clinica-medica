@@ -24,12 +24,14 @@ const TYPE_LABELS = { PRESENCIAL: "Presencial", DOMICILIAR: "Domiciliar" } as co
 
 const STATUS_VARIANTS = {
   AGENDADO: "secondary",
-  REALIZADO: "default",
-  CANCELADO: "outline",
+  EM_ATENDIMENTO: "default",
+  REALIZADO: "outline",
+  CANCELADO: "ghost",
 } as const
 
 const STATUS_LABELS = {
   AGENDADO: "Agendado",
+  EM_ATENDIMENTO: "Em atendimento",
   REALIZADO: "Realizado",
   CANCELADO: "Cancelado",
 } as const
@@ -44,7 +46,11 @@ export default async function AtendimentosPage({
 
   const { status } = await searchParams
   const statusFilter = status
-    ? (status.toUpperCase() as "AGENDADO" | "REALIZADO" | "CANCELADO")
+    ? (status.toUpperCase() as
+        | "AGENDADO"
+        | "EM_ATENDIMENTO"
+        | "REALIZADO"
+        | "CANCELADO")
     : undefined
 
   const attendances = await prisma.attendance.findMany({
@@ -77,7 +83,12 @@ export default async function AtendimentosPage({
         >
           Todos
         </Button>
-        {(["AGENDADO", "REALIZADO", "CANCELADO"] as const).map((s) => (
+        {([
+          "AGENDADO",
+          "EM_ATENDIMENTO",
+          "REALIZADO",
+          "CANCELADO",
+        ] as const).map((s) => (
           <Button
             key={s}
             variant={statusFilter === s ? "default" : "outline"}

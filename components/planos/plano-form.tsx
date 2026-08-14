@@ -29,9 +29,11 @@ export type PlanInitialData = {
 export function PlanForm({
   patients,
   initial,
+  preselectedPatientId,
 }: {
   patients: PatientOption[]
   initial?: PlanInitialData
+  preselectedPatientId?: string
 }) {
   const router = useRouter()
   const isEditing = Boolean(initial?.id)
@@ -112,7 +114,7 @@ export function PlanForm({
             <select
               name="patientId"
               required
-              defaultValue={initial?.patientId ?? ""}
+              defaultValue={initial?.patientId ?? preselectedPatientId ?? ""}
               disabled={isEditing}
               className="h-9 rounded-md border bg-background px-3 text-sm disabled:opacity-60"
             >

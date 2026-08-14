@@ -37,6 +37,28 @@ const cadastroSchema = z.object({
   number: z.string().trim().min(1, "Informe o número"),
   neighborhood: z.string().trim().min(2, "Informe o bairro"),
   city: z.string().trim().min(2, "Informe a cidade"),
+  latitude: z
+    .string()
+    .optional()
+    .transform((value) => {
+      const trimmed = (value ?? "").trim()
+      const n = Number(trimmed)
+      return trimmed !== "" && Number.isFinite(n) ? n : null
+    })
+    .refine((value) => value === null || (value >= -90 && value <= 90), {
+      message: "Localização inválida",
+    }),
+  longitude: z
+    .string()
+    .optional()
+    .transform((value) => {
+      const trimmed = (value ?? "").trim()
+      const n = Number(trimmed)
+      return trimmed !== "" && Number.isFinite(n) ? n : null
+    })
+    .refine((value) => value === null || (value >= -180 && value <= 180), {
+      message: "Localização inválida",
+    }),
   consultationReason: z
     .string()
     .trim()
@@ -102,6 +124,8 @@ export async function cadastroPublico(
     number: formData.get("number"),
     neighborhood: formData.get("neighborhood"),
     city: formData.get("city"),
+    latitude: formData.get("latitude") ?? "",
+    longitude: formData.get("longitude") ?? "",
     consultationReason: formData.get("consultationReason") ?? "",
     whatsappEnabled: formData.get("whatsappEnabled"),
     lgpdConsent: formData.get("lgpdConsent") === "on",
@@ -159,6 +183,9 @@ export async function cadastroPublico(
 
     const whatsappEnabled = data.lgpdConsent && data.whatsappEnabled === "sim"
 
+    // GPS do paciente (capturado no pré-cadastro, em casa)
+    const hasGps = data.latitude !== null && data.longitude !== null
+
     const patient = await prisma.patient.create({
       data: {
         name: data.name,
@@ -169,6 +196,10 @@ export async function cadastroPublico(
         number: data.number,
         neighborhood: data.neighborhood,
         city: data.city,
+        latitude: data.latitude ?? null,
+        longitude: data.longitude ?? null,
+        locationSource: hasGps ? "GPS" : null,
+        locationUpdatedAt: hasGps ? new Date() : null,
         consultationReason: data.consultationReason || null,
         lgpdConsent: true,
         lgpdConsentAt: new Date(),

@@ -44,6 +44,9 @@ export default async function EditarPacientePage({
           insurance: patient.insurance,
           notes: patient.notes,
           consultationReason: patient.consultationReason,
+          latitude: patient.latitude,
+          longitude: patient.longitude,
+          locationSource: patient.locationSource,
           lgpdConsent: patient.lgpdConsent,
           whatsappEnabled: patient.whatsappEnabled,
         }}

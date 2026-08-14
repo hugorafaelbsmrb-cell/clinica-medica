@@ -19,6 +19,7 @@ const TYPE_LABELS = { PRESENCIAL: "Presencial", DOMICILIAR: "Domiciliar" } as co
 
 const STATUS_LABELS = {
   AGENDADO: "Agendado",
+  EM_ATENDIMENTO: "Em atendimento",
   REALIZADO: "Realizado",
   CANCELADO: "Cancelado",
 } as const
