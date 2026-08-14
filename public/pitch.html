@@ -219,6 +219,30 @@ h2.title{font-size:46px;line-height:1.08;font-weight:700;letter-spacing:-.02em;m
 .slide.active .paycard,.slide.active .auto{opacity:0;animation:up .6s cubic-bezier(.2,.7,.3,1) forwards}
 .slide.active .paycard.pix{animation-delay:.2s}.slide.active .paycard.cred{animation-delay:.32s}.slide.active .auto{animation-delay:.44s}
 
+/* automação do atendimento */
+.abagrid{display:flex;gap:22px;margin-top:28px;align-items:stretch}
+.abacard{flex:1;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:14px}
+.abacard.antes{background:#fff5f5;border:1px solid #fecaca;border-left:4px solid #f43f5e}
+.abacard.depois{background:#f0fdf4;border:1px solid #bbf7d0;border-left:4px solid var(--ok)}
+.hd2{display:flex;gap:12px;align-items:center}
+.ic2{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:none;color:#fff}
+.abacard.antes .ic2{background:#f43f5e}
+.abacard.depois .ic2{background:var(--ok)}
+.hd2 h3{font-size:18px;font-weight:800}
+.hd2 small{display:block;font-size:12.5px;color:var(--mut);margin-top:2px}
+.abacard ul{list-style:none;display:flex;flex-direction:column;gap:11px}
+.abacard li{display:flex;gap:9px;align-items:flex-start;font-size:14px;line-height:1.45;color:var(--ink)}
+.abacard li svg{flex:none;margin-top:2px}
+.abacard.antes li svg{color:#f43f5e}
+.abacard.depois li svg{color:var(--ok)}
+.stats{display:flex;gap:14px;margin-top:20px}
+.stat{flex:1;border:1px solid var(--line);background:#fff;border-radius:14px;padding:13px 16px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.04)}
+.stat .v{font-size:21px;font-weight:800;letter-spacing:-.02em}
+.stat small{display:block;font-size:12px;color:var(--mut);margin-top:3px;line-height:1.4}
+.slide.active .abacard,.slide.active .stat{opacity:0;animation:up .6s cubic-bezier(.2,.7,.3,1) forwards}
+.slide.active .abacard.antes{animation-delay:.2s}.slide.active .abacard.depois{animation-delay:.32s}
+.slide.active .stat:nth-child(1){animation-delay:.44s}.slide.active .stat:nth-child(2){animation-delay:.52s}.slide.active .stat:nth-child(3){animation-delay:.6s}.slide.active .stat:nth-child(4){animation-delay:.68s}
+
 /* encerramento */
 .end{align-items:center;text-align:center;gap:20px}
 .end h2{font-size:56px;font-weight:800;letter-spacing:-.02em;color:var(--ink)}
@@ -341,7 +365,7 @@ h2.title{font-size:46px;line-height:1.08;font-weight:700;letter-spacing:-.02em;m
     </div>
     <p class="sub up d2">Um sistema que acompanha o médico na rua — agenda, WhatsApp, GPS e prescrição no mesmo lugar — e cuida da clínica inteira.</p>
     <div class="chips up d3">
-      <span>Atendimentos do dia</span><span>WhatsApp automático</span><span>GPS</span>
+      <span>Atendimentos do dia</span><span>Atendimento automático 24/7</span><span>GPS</span>
       <span>Prescrições em PDF</span><span>Financeiro</span><span>App no iPhone (PWA)</span>
       <span>Pagamentos Asaas · em breve</span>
     </div>
@@ -360,7 +384,39 @@ h2.title{font-size:46px;line-height:1.08;font-weight:700;letter-spacing:-.02em;m
     <div class="bridge up d6"><span class="arr">→</span> A solução: um sistema que trabalha junto com o médico, no celular dele.</div>
   </section>
 
-  <!-- 3 SERVIÇOS -->
+  <!-- 3 AUTOMAÇÃO DO ATENDIMENTO -->
+  <section class="slide" data-title="Automação do atendimento">
+    <p class="kicker up d1">Automação do atendimento</p>
+    <h2 class="title up d2">O trabalho repetitivo fica com o sistema — a equipe cuida dos pacientes</h2>
+    <div class="abagrid">
+      <div class="abacard antes">
+        <div class="hd2"><span class="ic2"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span><div><h3>Antes — tudo manual</h3><small>custa tempo de secretária</small></div></div>
+        <ul>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg><span>Ligação por ligação para confirmar e remarcar cada consulta.</span></li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg><span>Ficha do paciente digitada do zero, atendimento por atendimento.</span></li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg><span>Receita impressa, digitalizada e enviada por foto de celular.</span></li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg><span>Fora do horário comercial, a clínica simplesmente não responde.</span></li>
+        </ul>
+      </div>
+      <div class="abacard depois">
+        <div class="hd2"><span class="ic2"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m6 12.5 4 4 8-9"/></svg></span><div><h3>Depois — automático</h3><small>o sistema faz sozinho, 24/7</small></div></div>
+        <ul>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m5 12 4.5 4.5L19 7"/></svg><span><b>Paciente agenda sozinho</b> — marca, consulta e remarca pelo link com CPF, sem ligar para a clínica.</span></li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m5 12 4.5 4.5L19 7"/></svg><span><b>Bot no WhatsApp</b> — confirma consultas, responde dúvidas e escala para uma pessoa só quando é preciso.</span></li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m5 12 4.5 4.5L19 7"/></svg><span><b>Lembretes e avisos automáticos</b> — consulta, “médico a caminho”, agradecimento, aniversário e reativação saem sozinhos.</span></li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m5 12 4.5 4.5L19 7"/></svg><span><b>Receita em PDF automática</b> — chega pronta no WhatsApp ao finalizar o atendimento.</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><p class="v">6h/mês</p><small>de ligações a menos — 120 consultas × 3 min cada</small></div>
+      <div class="stat"><p class="v">0 digitação</p><small>ficha, receita e avisos saem do próprio fluxo</small></div>
+      <div class="stat"><p class="v">24/7</p><small>o bot atende mesmo fora do horário comercial</small></div>
+      <div class="stat"><p class="v">↓ faltas</p><small>lembretes automáticos mantêm a agenda cheia</small></div>
+    </div>
+  </section>
+
+  <!-- 4 SERVIÇOS -->
   <section class="slide" data-title="Serviços">
     <p class="kicker up d1">O que o sistema faz</p>
     <h2 class="title up d2">Tudo o que a clínica precisa, em um só lugar</h2>
@@ -374,7 +430,7 @@ h2.title{font-size:46px;line-height:1.08;font-weight:700;letter-spacing:-.02em;m
     </div>
   </section>
 
-  <!-- 4 SIMULAÇÃO ATENDIMENTO DO DIA -->
+  <!-- 5 SIMULAÇÃO ATENDIMENTO DO DIA -->
   <section class="slide" data-title="Simulação — Atendimentos do dia">
     <p class="kicker up d1">Simulação real do sistema · dados fictícios</p>
     <div class="sim">
@@ -442,7 +498,7 @@ h2.title{font-size:46px;line-height:1.08;font-weight:700;letter-spacing:-.02em;m
     </div>
   </section>
 
-  <!-- 5 SIMULAÇÃO CADASTRO -->
+  <!-- 6 SIMULAÇÃO CADASTRO -->
   <section class="slide" data-title="Simulação — Cadastro de paciente">
     <p class="kicker up d1">Simulação real do sistema · dados fictícios</p>
     <div class="sim">
@@ -510,7 +566,7 @@ h2.title{font-size:46px;line-height:1.08;font-weight:700;letter-spacing:-.02em;m
     </div>
   </section>
 
-  <!-- 6 WHATSAPP / AUTOMAÇÕES -->
+  <!-- 7 WHATSAPP / AUTOMAÇÕES -->
   <section class="slide" data-title="WhatsApp e automações">
     <p class="kicker up d1">Comunicação automática</p>
     <h2 class="title up d2">O WhatsApp trabalha enquanto o médico atende</h2>
@@ -534,7 +590,7 @@ h2.title{font-size:46px;line-height:1.08;font-weight:700;letter-spacing:-.02em;m
     </div>
   </section>
 
-  <!-- 7 PWA -->
+  <!-- 8 PWA -->
   <section class="slide" data-title="Instalação no iPhone">
     <p class="kicker up d1">Vira aplicativo de verdade</p>
     <h2 class="title up d2">O sistema vira um app na tela inicial do iPhone</h2>
@@ -555,7 +611,7 @@ h2.title{font-size:46px;line-height:1.08;font-weight:700;letter-spacing:-.02em;m
     </div>
   </section>
 
-  <!-- 8 SEGURANÇA -->
+  <!-- 9 SEGURANÇA -->
   <section class="slide" data-title="Segurança e conformidade">
     <p class="kicker up d1">Segurança e conformidade</p>
     <h2 class="title up d2">Dados de saúde tratados com o cuidado que merecem</h2>
@@ -567,7 +623,7 @@ h2.title{font-size:46px;line-height:1.08;font-weight:700;letter-spacing:-.02em;m
     </div>
   </section>
 
-  <!-- 9 PAGAMENTOS (EM BREVE) -->
+  <!-- 10 PAGAMENTOS (EM BREVE) -->
   <section class="slide" data-title="Pagamentos Asaas (em breve)">
     <p class="kicker up d1">Implementação futura</p>
     <h2 class="title up d2">Pagamentos automáticos direto no sistema, com a API do Asaas</h2>
@@ -602,7 +658,7 @@ h2.title{font-size:46px;line-height:1.08;font-weight:700;letter-spacing:-.02em;m
     </div>
   </section>
 
-  <!-- 10 ENCERRAMENTO -->
+  <!-- 11 ENCERRAMENTO -->
   <section class="slide end" data-title="Encerramento">
     <div class="brand up d1" style="justify-content:center">
       <span class="logo-tile" style="width:76px;height:76px"><img src="/icon.png" alt="" style="width:54px;height:54px"></span>
