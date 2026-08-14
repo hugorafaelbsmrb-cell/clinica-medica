@@ -39,12 +39,12 @@ h2.title{font-size:46px;line-height:1.08;font-weight:700;letter-spacing:-.02em;m
 /* capa */
 .cover{justify-content:center;gap:26px}
 .brand{display:flex;align-items:center;gap:26px}
-.logo-tile{width:104px;height:104px;border-radius:24px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.logo-tile{width:104px;height:104px;border-radius:24px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 12px 34px rgba(0,0,0,.16),0 0 0 1px var(--line)}
 .logo-tile img{width:72px;height:72px;border-radius:14px}
-.brand h1{font-size:74px;font-weight:800;letter-spacing:-.03em;color:#fff}
-.brand .tag{font-size:24px;color:#d4d4d8;margin-top:6px}
+.brand h1{font-size:74px;font-weight:800;letter-spacing:-.03em;color:var(--ink)}
+.brand .tag{font-size:24px;color:var(--mut);margin-top:6px}
 .chips{display:flex;flex-wrap:wrap;gap:10px}
-.chips span{font-size:15px;font-weight:600;padding:8px 18px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);color:#fafafa}
+.chips span{font-size:15px;font-weight:600;padding:8px 18px;border-radius:999px;background:var(--z1);border:1px solid var(--line);color:var(--ink)}
 .hint{font-size:13px;color:#71717a;position:absolute;left:0;right:0;bottom:76px;text-align:center}
 
 /* grid de serviços */
@@ -192,12 +192,39 @@ h2.title{font-size:46px;line-height:1.08;font-weight:700;letter-spacing:-.02em;m
 .secc h3{font-size:17px;font-weight:700;margin-bottom:5px}
 .secc p{font-size:14px;color:var(--mut);line-height:1.5}
 
+/* asaas (em breve) */
+.asaas{display:flex;gap:22px;margin-top:30px;align-items:stretch}
+.paycard{flex:1;border:1px solid var(--line);border-radius:18px;background:#fff;padding:24px;display:flex;flex-direction:column;gap:14px;box-shadow:0 12px 34px rgba(0,0,0,.06)}
+.paycard .hd{display:flex;align-items:center;gap:12px}
+.paycard .ic{width:44px;height:44px;border-radius:12px;color:#fff;display:flex;align-items:center;justify-content:center;flex:none}
+.paycard.pix .ic{background:var(--ok)}
+.paycard.cred .ic{background:#2563eb}
+.paycard h3{font-size:19px;font-weight:800}
+.paycard .soon{margin-left:auto;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#b45309;background:#fef3c7;border:1px solid #fde68a;padding:4px 10px;border-radius:999px;white-space:nowrap}
+.paycard ul{list-style:none;display:flex;flex-direction:column;gap:9px}
+.paycard li{display:flex;gap:9px;align-items:flex-start;font-size:14px;color:var(--ink);line-height:1.45}
+.paycard li svg{flex:none;margin-top:2px;color:var(--ok)}
+.paycard.cred li svg{color:#2563eb}
+.paycard .fee{margin-top:auto;font-size:12.5px;font-weight:600;color:var(--mut);background:var(--z1);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+.auto{flex:1.15;border:1px solid var(--line);border-radius:18px;background:#fff;padding:24px;display:flex;flex-direction:column;gap:6px;box-shadow:0 12px 34px rgba(0,0,0,.06)}
+.auto h3{font-size:19px;font-weight:800;margin-bottom:4px}
+.auto .flow{display:flex;flex-direction:column;flex:1;justify-content:center}
+.fstep{display:flex;gap:14px;align-items:flex-start;position:relative;padding:11px 0}
+.fstep .n{width:30px;height:30px;border-radius:999px;background:var(--acc);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;margin-top:1px}
+.fstep p{font-size:15px;font-weight:700}
+.fstep small{display:block;font-size:12.8px;color:var(--mut);font-weight:400;margin-top:2px;line-height:1.4}
+.fstep:after{content:"";position:absolute;left:14px;top:50px;bottom:-8px;width:2px;background:var(--z2)}
+.fstep:last-child:after{display:none}
+.auto .note{margin-top:auto;font-size:12.5px;font-weight:600;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:9px 12px;line-height:1.45}
+.slide.active .paycard,.slide.active .auto{opacity:0;animation:up .6s cubic-bezier(.2,.7,.3,1) forwards}
+.slide.active .paycard.pix{animation-delay:.2s}.slide.active .paycard.cred{animation-delay:.32s}.slide.active .auto{animation-delay:.44s}
+
 /* encerramento */
 .end{align-items:center;text-align:center;gap:20px}
-.end h2{font-size:56px;font-weight:800;letter-spacing:-.02em;color:#fff}
-.end .dom{font-size:17px;font-weight:600;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#e4e4e7;padding:12px 24px;border-radius:999px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.end h2{font-size:56px;font-weight:800;letter-spacing:-.02em;color:var(--ink)}
+.end .dom{font-size:17px;font-weight:600;background:var(--z1);border:1px solid var(--line);color:var(--ink);padding:12px 24px;border-radius:999px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .end .mini{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
-.end .mini span{font-size:13.5px;color:#d4d4d8;border:1px solid rgba(255,255,255,.14);padding:7px 16px;border-radius:999px}
+.end .mini span{font-size:13.5px;color:var(--mut);border:1px solid var(--line);background:#fff;padding:7px 16px;border-radius:999px}
 
 /* barra inferior */
 #bar{position:absolute;left:0;right:0;bottom:0;height:64px;display:flex;align-items:center;padding:0 40px;z-index:60}
@@ -304,7 +331,7 @@ h2.title{font-size:46px;line-height:1.08;font-weight:700;letter-spacing:-.02em;m
 <div id="stage" class="">
 
   <!-- 1 CAPA -->
-  <section class="slide dark cover active" data-title="Capa">
+  <section class="slide cover active" data-title="Capa">
     <div class="brand up d1">
       <span class="logo-tile"><img src="/icon.png" alt="logo"></span>
       <div>
@@ -316,6 +343,7 @@ h2.title{font-size:46px;line-height:1.08;font-weight:700;letter-spacing:-.02em;m
     <div class="chips up d3">
       <span>Atendimentos do dia</span><span>WhatsApp automático</span><span>GPS</span>
       <span>Prescrições em PDF</span><span>Financeiro</span><span>App no iPhone (PWA)</span>
+      <span>Pagamentos Asaas · em breve</span>
     </div>
     <p class="hint up d4">Use as setas ← → do teclado ou deslize para navegar</p>
   </section>
@@ -539,16 +567,51 @@ h2.title{font-size:46px;line-height:1.08;font-weight:700;letter-spacing:-.02em;m
     </div>
   </section>
 
-  <!-- 9 ENCERRAMENTO -->
-  <section class="slide dark end" data-title="Encerramento">
+  <!-- 9 PAGAMENTOS (EM BREVE) -->
+  <section class="slide" data-title="Pagamentos Asaas (em breve)">
+    <p class="kicker up d1">Implementação futura</p>
+    <h2 class="title up d2">Pagamentos automáticos direto no sistema, com a API do Asaas</h2>
+    <div class="asaas">
+      <div class="paycard pix">
+        <div class="hd"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 9-7 9-7-9z"/><path d="M12 3v18M5 12h14"/></svg></span><h3>PIX</h3><span class="soon">Em breve</span></div>
+        <ul>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m5 12 4.5 4.5L19 7"/></svg><span>Confirmação na hora — caiu, está pago.</span></li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m5 12 4.5 4.5L19 7"/></svg><span>Disponível 24/7, inclusive fins de semana e feriados.</span></li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m5 12 4.5 4.5L19 7"/></svg><span>Cobrança por QR Code ou link enviado pelo WhatsApp.</span></li>
+        </ul>
+        <p class="fee">Taxa a partir de 0,99% por cobrança</p>
+      </div>
+      <div class="paycard cred">
+        <div class="hd"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg></span><h3>Cartão de crédito</h3><span class="soon">Em breve</span></div>
+        <ul>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m5 12 4.5 4.5L19 7"/></svg><span>Parcelamento em até 12x — flexível para o paciente.</span></li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m5 12 4.5 4.5L19 7"/></svg><span>Aprovação na hora, direto do celular do médico.</span></li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m5 12 4.5 4.5L19 7"/></svg><span>O sistema gera a cobrança e o link de pagamento sozinho.</span></li>
+        </ul>
+        <p class="fee">Taxa a partir de 3,99% por transação · recebimento em até 30 dias</p>
+      </div>
+      <div class="auto">
+        <h3>Baixa automática dos recebimentos</h3>
+        <div class="flow">
+          <div class="fstep"><span class="n">1</span><div><p>O sistema emite a cobrança</p><small>Link ou QR Code gerado na hora do atendimento.</small></div></div>
+          <div class="fstep"><span class="n">2</span><div><p>O Asaas confirma o pagamento</p><small>Webhook avisa o sistema no mesmo instante.</small></div></div>
+          <div class="fstep"><span class="n">3</span><div><p>O recebimento é baixado sozinho</p><small>Financeiro, contas a receber e relatórios sempre em dia.</small></div></div>
+        </div>
+        <p class="note">Sem conciliação manual, sem planilha: a receita aparece pronta no Financeiro.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 ENCERRAMENTO -->
+  <section class="slide end" data-title="Encerramento">
     <div class="brand up d1" style="justify-content:center">
       <span class="logo-tile" style="width:76px;height:76px"><img src="/icon.png" alt="" style="width:54px;height:54px"></span>
     </div>
     <h2 class="up d2">Pronto para transformar<br>seus atendimentos?</h2>
-    <p class="sub up d3" style="color:#d4d4d8;text-align:center">O sistema já está no ar e funcionando em produção — pronto para usar hoje.</p>
+    <p class="sub up d3" style="text-align:center">O sistema já está no ar e funcionando em produção — pronto para usar hoje.</p>
     <div class="dom up d4">clinica.vps10746.panel.icontainer.run</div>
     <div class="mini up d5">
-      <span>Agenda & Atendimentos do dia</span><span>WhatsApp automático</span><span>GPS e navegação</span><span>Prescrições em PDF</span><span>Financeiro & Relatórios</span>
+      <span>Agenda & Atendimentos do dia</span><span>WhatsApp automático</span><span>GPS e navegação</span><span>Prescrições em PDF</span><span>Financeiro & Relatórios</span><span>Pagamentos Asaas (em breve)</span>
     </div>
     <p class="caption up d6" style="color:#71717a">Apresentação demonstrativa · dados dos exemplos são fictícios</p>
   </section>
