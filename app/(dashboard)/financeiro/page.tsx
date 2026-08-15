@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/table"
 import { ToggleStatusButton } from "./toggle-status-button"
 import { DeleteEntryButton } from "./delete-entry-button"
+import { CobrarButton } from "./cobrar-button"
 
 export const metadata: Metadata = { title: "Financeiro" }
 
@@ -63,6 +64,7 @@ export default async function FinanceiroPage({
   const entries = await prisma.financialEntry.findMany({
     where,
     orderBy: { dueDate: "desc" },
+    include: { payment: true },
   })
 
   // Resumo calculado sobre o conjunto filtrado
@@ -251,6 +253,13 @@ export default async function FinanceiroPage({
                             {entry.paymentMethod}
                           </span>
                         )}
+                        {entry.payment && entry.payment.status === "PENDENTE" && (
+                          <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">
+                            {entry.payment.method === "PIX"
+                              ? "cobrança PIX aguardando"
+                              : "link de pagamento enviado"}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="hidden text-muted-foreground lg:table-cell">
                         {CATEGORY_LABELS[entry.category] ?? entry.category}
@@ -283,6 +292,12 @@ export default async function FinanceiroPage({
                         </Badge>
                       </TableCell>
                       <TableCell className="flex justify-end gap-2">
+                        <CobrarButton
+                          entryId={entry.id}
+                          description={entry.description}
+                          value={Number(entry.value)}
+                          existingPayment={entry.payment}
+                        />
                         <ToggleStatusButton
                           entryId={entry.id}
                           isPaid={entry.status === "PAGO"}

@@ -81,6 +81,25 @@ enum EntryStatus {
   PENDENTE
 }
 
+enum PaymentProvider {
+  ASAAS
+  STRIPE
+}
+
+enum PaymentMethod {
+  PIX
+  CARTAO
+  APPLE_PAY
+}
+
+enum PaymentStatus {
+  PENDENTE
+  PAGO
+  EXPIRADO
+  CANCELADO
+  FALHOU
+}
+
 model User {
   id           String       @id @default(cuid())
   name         String
@@ -137,6 +156,12 @@ model ClinicSettings {
   autoAgradecimentoMsg   String? @db.Text
   autoACaminhoEnabled    Boolean @default(true) // aviso "médico a caminho" ao iniciar o atendimento
   autoACaminhoMsg        String? @db.Text
+
+  // Gateways de pagamento (tela Configurações → Pagamentos)
+  // PIX → Asaas | Cartão e Apple Pay → Stripe. Chaves vazias = gateway desativado.
+  asaasApiKey         String? // chave da API do Asaas (menu Integrações → Chaves de API)
+  stripeSecretKey     String? // chave secreta do Stripe (Dashboard → Developers → API keys)
+  stripeWebhookSecret String? // segredo do webhook do Stripe (para validar a assinatura)
   updatedAt      DateTime @updatedAt
 }
 
@@ -171,6 +196,7 @@ model Patient {
   prescriptions    Prescription[]
   plans            TherapeuticPlan[]
   messages         Message[]
+  payments         Payment[]
   followUp         FollowUpConfig?
   auditLogs        AuditLog[]     @relation("AuditLogPatient")
 
@@ -202,6 +228,7 @@ model Attendance {
   prescriptions    Prescription[]
   financialEntries FinancialEntry[]
   messages         Message[]
+  payments         Payment[]
 
   @@index([patientId])
   @@index([scheduledAt])
@@ -331,12 +358,57 @@ model FinancialEntry {
   status        EntryStatus   @default(PENDENTE)
   attendanceId  String?
   attendance    Attendance?   @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  payment       Payment?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
   @@index([dueDate])
   @@index([status])
   @@index([category])
+}
+
+/**
+ * Cobrança gerada por um gateway de pagamento (Asaas ou Stripe).
+ * Vincula um lançamento financeiro ao status do pagamento no provedor:
+ * quando o webhook confirma o pagamento, o lançamento é baixado sozinho.
+ */
+model Payment {
+  id                String          @id @default(cuid())
+  provider          PaymentProvider
+  method            PaymentMethod
+  amount            Decimal         @db.Decimal(10, 2)
+  status            PaymentStatus   @default(PENDENTE)
+  providerPaymentId String? // id da cobrança no gateway (Asaas: payment id; Stripe: checkout session id)
+  checkoutUrl       String?         @db.Text // link de pagamento para o paciente
+  pixCopiaCola      String?         @db.Text // código copia-e-cola do PIX (Asaas)
+  pixQrCodeUrl      String?         @db.Text // URL da imagem do QR code do PIX (Asaas)
+  expiresAt         DateTime?
+  paidAt            DateTime?
+  externalStatus    String? // status bruto reportado pelo gateway
+  fee               Decimal?        @db.Decimal(10, 2) // taxa cobrada pelo gateway
+  financialEntryId  String?         @unique
+  financialEntry    FinancialEntry? @relation(fields: [financialEntryId], references: [id], onDelete: SetNull)
+  attendanceId      String?
+  attendance        Attendance?     @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  patientId         String?
+  patient           Patient?        @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([status])
+  @@index([providerPaymentId])
+  @@index([financialEntryId])
+}
+
+// Evento de webhook já processado — garante idempotência (provedores reenviam eventos).
+model PaymentWebhookEvent {
+  id          String          @id @default(cuid())
+  provider    PaymentProvider
+  eventId     String
+  processedAt DateTime        @default(now())
+  raw         Json?
+
+  @@unique([provider, eventId])
 }
 
 // Disponibilidade da agenda: grade semanal recorrente configurada pelo admin
