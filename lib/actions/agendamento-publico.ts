@@ -15,7 +15,11 @@ import { prisma } from "@/lib/prisma"
 import { groupSlotsByDay } from "@/lib/agenda/slots"
 import { getAvailableSlots, isSlotFree } from "@/lib/agenda/service"
 import { queueAppointmentConfirmation } from "@/lib/whatsapp/message-service"
+import { queuePaymentLinkMessage } from "@/lib/whatsapp/automations"
 import { getAppointmentSettings } from "@/lib/agenda/service"
+import { createCharge } from "@/lib/payments/router"
+import { getPaymentSettings } from "@/lib/payments/settings"
+import type { PaymentMethodType } from "@/lib/payments/types"
 
 const WEEKDAY_LABELS = [
   "domingo",
@@ -96,11 +100,14 @@ export type PublicAgendaResult = {
   available: boolean
   message: string
   days: PublicAgendaDay[]
+  /** Valor da consulta presencial (0 = agendamento sem cobrança). */
+  consultaPreco: number
 }
 
 /** Lista os dias com vagas livres dentro do horizonte de agendamento. */
 export async function getPublicAgenda(): Promise<PublicAgendaResult> {
   const settings = await getAppointmentSettings()
+  const paymentSettings = await getPaymentSettings()
   const now = new Date()
   const from = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const to = new Date(from)
@@ -114,6 +121,7 @@ export async function getPublicAgenda(): Promise<PublicAgendaResult> {
       message:
         "A clínica ainda não liberou horários. Fique tranquilo: sua equipe entrará em contato para agendar.",
       days: [],
+      consultaPreco: paymentSettings.consultaPrecoPresencial,
     }
   }
 
@@ -133,7 +141,12 @@ export async function getPublicAgenda(): Promise<PublicAgendaResult> {
     })),
   }))
 
-  return { available: true, message: "", days }
+  return {
+    available: true,
+    message: "",
+    days,
+    consultaPreco: paymentSettings.consultaPrecoPresencial,
+  }
 }
 
 const agendarSchema = z.object({
@@ -144,17 +157,31 @@ const agendarSchema = z.object({
     .trim()
     .min(5, "Conte brevemente o motivo da sua consulta"),
   lgpdConsent: z.boolean().optional(),
+  method: z.enum(["PIX", "CARTAO"]).optional().default("PIX"),
 })
 
 export type AgendarState = {
   success: boolean
   message: string
   scheduledAt?: string
+  /** Dados do pagamento, quando o horário exige confirmação antes. */
+  payment?: {
+    attendanceId: string
+    token: string
+    method: "PIX" | "CARTAO"
+    amount: number
+    checkoutUrl: string | null
+    pixCopiaCola: string | null
+    pixQrCodeUrl: string | null
+  }
 }
 
 /**
  * Confirma o agendamento público: re-checa o horário e cria o Attendance
- * com origin ONLINE. Enfileira a confirmação por WhatsApp quando permitido.
+ * com origin ONLINE. Quando a clínica cobra a consulta no agendamento
+ * online (preço configurado), o horário é reservado com status
+ * AGUARDANDO_PAGAMENTO e a cobrança é gerada no gateway escolhido;
+ * a confirmação final acontece quando o pagamento cai (webhook).
  */
 export async function agendarPublico(
   input: z.infer<typeof agendarSchema>
@@ -167,7 +194,13 @@ export async function agendarPublico(
     }
   }
 
-  const { patientId, scheduledAt: scheduledAtIso, reason } = parsed.data
+  const {
+    patientId,
+    scheduledAt: scheduledAtIso,
+    reason,
+    method: methodInput,
+  } = parsed.data
+  const method: PaymentMethodType = methodInput ?? "PIX"
   const scheduledAt = new Date(scheduledAtIso)
   if (Number.isNaN(scheduledAt.getTime())) {
     return { success: false, message: "Data e horário inválidos." }
@@ -179,6 +212,22 @@ export async function agendarPublico(
       success: false,
       message:
         "Cadastro não encontrado. Refaça o cadastro ou fale com a clínica.",
+    }
+  }
+
+  // Preço configurado = agendamento exige pagamento antes de confirmar.
+  const paymentSettings = await getPaymentSettings()
+  const price = paymentSettings.consultaPrecoPresencial
+  const cobrar = price > 0
+  if (cobrar) {
+    const missing =
+      method === "PIX" ? !paymentSettings.asaasApiKey : !paymentSettings.stripeSecretKey
+    if (missing) {
+      return {
+        success: false,
+        message:
+          "O pagamento online está indisponível no momento. Fale com a clínica pelo WhatsApp para confirmar seu horário.",
+      }
     }
   }
 
@@ -204,7 +253,8 @@ export async function agendarPublico(
         data: {
           patientId,
           scheduledAt,
-          status: "AGENDADO",
+          // Sem cobrança → confirma na hora; com cobrança → aguarda pagar
+          status: cobrar ? "AGUARDANDO_PAGAMENTO" : "AGENDADO",
           type: "PRESENCIAL",
           origin: "ONLINE",
           slotNote: reason,
@@ -237,6 +287,7 @@ export async function agendarPublico(
           details: {
             origem: "agendamento online",
             data: scheduledAt.toISOString(),
+            cobranca: cobrar ? "pagamento antecipado" : "sem cobrança",
           },
         },
       })
@@ -249,6 +300,58 @@ export async function agendarPublico(
         success: false,
         message:
           "Este horário acabou de ser preenchido. Escolha outro horário, por favor.",
+      }
+    }
+
+    // Com cobrança: gera o pagamento no gateway e devolve o link/QR para
+    // o wizard exibir. A confirmação da consulta sai só quando pagar.
+    if (cobrar) {
+      const charge = await createCharge({
+        method,
+        amountCents: Math.round(price * 100),
+        description: `Consulta — ${patient.name}`,
+        customerName: patient.name,
+        customerCpf: patient.cpf ?? undefined,
+        attendanceId: attendance.id,
+        patientId,
+      })
+
+      if (!charge.ok) {
+        // Não conseguiu gerar a cobrança: libera o horário reservado
+        await prisma.attendance.update({
+          where: { id: attendance.id },
+          data: { status: "CANCELADO" },
+        })
+        console.error("[AgendamentoOnline] Falha ao gerar cobrança:", charge.error)
+        return {
+          success: false,
+          message:
+            "Não foi possível gerar o pagamento agora. Tente novamente ou fale com a clínica.",
+        }
+      }
+
+      // Link de pagamento via WhatsApp (o próprio serviço checa consentimento)
+      if (patient.lgpdConsent || parsed.data.lgpdConsent) {
+        await queuePaymentLinkMessage(patientId, {
+          checkoutUrl: charge.checkoutUrl ?? null,
+          pixCopiaCola: charge.pixCopiaCola ?? null,
+          amount: price,
+        })
+      }
+
+      return {
+        success: true,
+        message: "Horário reservado! Confirme o pagamento para concluir.",
+        scheduledAt: scheduledAt.toISOString(),
+        payment: {
+          attendanceId: attendance.id,
+          token: attendance.cancelToken ?? "",
+          method,
+          amount: price,
+          checkoutUrl: charge.checkoutUrl ?? null,
+          pixCopiaCola: charge.pixCopiaCola ?? null,
+          pixQrCodeUrl: charge.pixQrCodeUrl ?? null,
+        },
       }
     }
 
@@ -274,6 +377,41 @@ export async function agendarPublico(
         "Não foi possível confirmar o agendamento agora. Tente novamente ou fale com a clínica.",
     }
   }
+}
+
+/**
+ * Verificação pública do pagamento da reserva (sem sessão, validada pelo
+ * token de cancelamento da própria consulta). O wizard consulta em loop até
+ * o webhook confirmar e a consulta virar AGENDADO.
+ */
+export async function verificarPagamentoAgendamento(input: {
+  attendanceId: string
+  token: string
+}): Promise<{
+  pago: boolean
+  expirado?: boolean
+  scheduledAt?: string
+}> {
+  const attendance = await prisma.attendance.findFirst({
+    where: { id: input.attendanceId, cancelToken: input.token },
+    include: { payments: true },
+  })
+  if (!attendance) return { pago: false }
+
+  if (attendance.status === "AGENDADO") {
+    return { pago: true, scheduledAt: attendance.scheduledAt.toISOString() }
+  }
+
+  const payment = attendance.payments[0]
+  if (!payment) return { pago: false }
+  if (
+    payment.status === "EXPIRADO" ||
+    payment.status === "CANCELADO" ||
+    payment.status === "FALHOU"
+  ) {
+    return { pago: false, expirado: true }
+  }
+  return { pago: false }
 }
 
 export type CancelState = {
@@ -322,7 +460,11 @@ async function consultasDoPaciente(patientId: string): Promise<{
   const now = new Date()
   const [next, last] = await Promise.all([
     prisma.attendance.findFirst({
-      where: { patientId, status: "AGENDADO", scheduledAt: { gt: now } },
+      where: {
+        patientId,
+        status: { in: ["AGENDADO", "AGUARDANDO_PAGAMENTO"] },
+        scheduledAt: { gt: now },
+      },
       orderBy: { scheduledAt: "asc" },
     }),
     prisma.attendance.findFirst({
@@ -556,10 +698,18 @@ export async function cancelarConsultaPublica(
     }
   }
 
-  await prisma.attendance.update({
-    where: { id: attendance.id },
-    data: { status: "CANCELADO" },
-  })
+  // Cancela também a cobrança pendente vinculada, se houver, para que o
+  // lembrete automático não cobre por um horário já liberado.
+  await prisma.$transaction([
+    prisma.attendance.update({
+      where: { id: attendance.id },
+      data: { status: "CANCELADO" },
+    }),
+    prisma.payment.updateMany({
+      where: { attendanceId: attendance.id, status: "PENDENTE" },
+      data: { status: "CANCELADO" },
+    }),
+  ])
 
   await prisma.auditLog.create({
     data: {

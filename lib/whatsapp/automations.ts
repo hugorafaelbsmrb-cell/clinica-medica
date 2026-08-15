@@ -9,6 +9,8 @@
  *  3. Aniversário — mensagem no dia do aniversário do paciente.
  *  4. Reativação — mensagem para clientes com a última consulta
  *     há mais de X dias.
+ *  5. Pagamento pendente — lembrete para quem reservou/cobrou e ainda
+ *     não pagou depois do tempo definido pelo admin.
  *
  * As mensagens usam a fila (tabela Message) sempre que há paciente
  * cadastrado; para tentativas de cadastro o envio é direto, pois ainda
@@ -24,6 +26,7 @@ export type AutomationCounts = {
   tratamento: number
   aniversario: number
   reativacao: number
+  pagamentos: number
 }
 
 /** Template padrão de cada automação (quando o admin deixa vazio). */
@@ -35,6 +38,9 @@ export function defaultAutomationMessage(
     | "reativacao"
     | "agradecimento"
     | "acaminho"
+    | "linkpagamento"
+    | "lembretepagamento"
+    | "pagamentoconfirmado"
 ): string {
   switch (kind) {
     case "cadastro":
@@ -49,6 +55,12 @@ export function defaultAutomationMessage(
       return "Olá {{nome}}! Obrigado pela sua visita. Sua opinião é muito importante para nós — se precisar de algo, é só responder por aqui."
     case "acaminho":
       return "Olá {{nome}}! O médico já está a caminho da sua casa."
+    case "linkpagamento":
+      return "Olá {{nome}}! Reservamos seu horário. Para confirmar a consulta, faça o pagamento de R$ {{valor}} por aqui: {{link}}"
+    case "lembretepagamento":
+      return "Olá {{nome}}! Seu horário ainda está reservado, mas falta o pagamento de R$ {{valor}} para confirmar a consulta. Pague por aqui: {{link}}"
+    case "pagamentoconfirmado":
+      return "Olá {{nome}}! Recebemos seu pagamento de R$ {{valor}}. Tudo certo!"
   }
 }
 
@@ -276,6 +288,79 @@ async function processReativacao(
 }
 
 /**
+ * 5) Pagamentos pendentes: lembrete (uma única vez por cobrança) para quem
+ *    reservou ou recebeu cobrança e não pagou dentro do tempo definido.
+ *    Também varre cobranças vencidas e libera horários reservados.
+ */
+async function processPagamentosPendentes(
+  clinic: Awaited<ReturnType<typeof getClinicSettings>>,
+  now: Date
+): Promise<number> {
+  if (!clinic.autoPagamentoLembreteEnabled) return 0
+  const delayMinutes = clinic.autoPagamentoLembreteDelayMinutes ?? 60
+  const cutoff = new Date(now.getTime() - delayMinutes * 60 * 1000)
+
+  const payments = await prisma.payment.findMany({
+    where: {
+      status: "PENDENTE",
+      remindedAt: null,
+      createdAt: { lte: cutoff },
+    },
+    include: {
+      attendance: { select: { patientId: true, status: true } },
+    },
+    orderBy: { createdAt: "asc" },
+    take: 20,
+  })
+  if (payments.length === 0) return 0
+
+  const msg =
+    clinic.autoPagamentoLembreteMsg?.trim() ||
+    defaultAutomationMessage("lembretepagamento")
+
+  let queued = 0
+  for (const payment of payments) {
+    // Horário já foi cancelado/liberado: encerra a cobrança e não lembra
+    if (payment.attendance && payment.attendance.status !== "AGUARDANDO_PAGAMENTO") {
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: "CANCELADO" },
+      })
+      continue
+    }
+
+    const patientId = payment.patientId ?? payment.attendance?.patientId
+    if (!patientId) continue
+
+    const patient = await prisma.patient.findUnique({ where: { id: patientId } })
+    if (!patient?.phone || !patient.whatsappEnabled || !patient.lgpdConsent) {
+      continue
+    }
+
+    const link = payment.checkoutUrl ?? payment.pixCopiaCola ?? ""
+    await enqueueMessage(
+      patientId,
+      "LEMBRETE_PAGAMENTO",
+      renderTemplate(msg, {
+        nome: patient.name.split(" ")[0],
+        valor: Number(payment.amount).toLocaleString("pt-BR", {
+          minimumFractionDigits: 2,
+        }),
+        link,
+      }),
+      now
+    )
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: { remindedAt: now },
+    })
+    queued++
+  }
+
+  return queued
+}
+
+/**
  * Roda todas as automações periódicas. Chamado pelo cron junto com a fila.
  */
 export async function queueAutomationMessages(
@@ -287,8 +372,45 @@ export async function queueAutomationMessages(
   const tratamento = await processTratamentoPeriodico(clinic, now)
   const aniversario = await processAniversario(clinic, now)
   const reativacao = await processReativacao(clinic, now)
+  const pagamentos = await processPagamentosPendentes(clinic, now)
 
-  return { cadastro, tratamento, aniversario, reativacao }
+  return { cadastro, tratamento, aniversario, reativacao, pagamentos }
+}
+
+/**
+ * Envia o link de pagamento por WhatsApp assim que o horário é reservado
+ * no agendamento online (o próprio serviço checa consentimento LGPD).
+ */
+export async function queuePaymentLinkMessage(
+  patientId: string,
+  payment: {
+    checkoutUrl: string | null
+    pixCopiaCola: string | null
+    amount: number
+  }
+): Promise<void> {
+  const clinic = await getClinicSettings()
+  if (!clinic.autoPagamentoLinkEnabled) return
+
+  const patient = await prisma.patient.findUnique({ where: { id: patientId } })
+  if (!patient?.phone || !patient.whatsappEnabled || !patient.lgpdConsent) return
+
+  const msg =
+    clinic.autoPagamentoLinkMsg?.trim() || defaultAutomationMessage("linkpagamento")
+  const link = payment.checkoutUrl ?? payment.pixCopiaCola ?? ""
+
+  await enqueueMessage(
+    patientId,
+    "LINK_PAGAMENTO",
+    renderTemplate(msg, {
+      nome: patient.name.split(" ")[0],
+      valor: payment.amount.toLocaleString("pt-BR", {
+        minimumFractionDigits: 2,
+      }),
+      link,
+    }),
+    new Date()
+  )
 }
 
 /**

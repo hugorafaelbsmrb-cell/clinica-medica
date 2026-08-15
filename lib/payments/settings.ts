@@ -11,6 +11,10 @@ export type PaymentSettings = {
   asaasApiKey: string
   stripeSecretKey: string
   stripeWebhookSecret: string
+  /** Preço da consulta presencial (0 = agendamento online sem cobrança). */
+  consultaPrecoPresencial: number
+  /** Preço da consulta domiciliar. */
+  consultaPrecoDomiciliar: number
 }
 
 let cache: PaymentSettings | null = null
@@ -26,6 +30,8 @@ export async function getPaymentSettings(): Promise<PaymentSettings> {
       settings?.stripeSecretKey || process.env.STRIPE_SECRET_KEY || "",
     stripeWebhookSecret:
       settings?.stripeWebhookSecret || process.env.STRIPE_WEBHOOK_SECRET || "",
+    consultaPrecoPresencial: Number(settings?.consultaPrecoPresencial ?? 0),
+    consultaPrecoDomiciliar: Number(settings?.consultaPrecoDomiciliar ?? 0),
   }
   return cache
 }

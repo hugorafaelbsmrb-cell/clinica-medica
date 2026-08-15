@@ -43,6 +43,9 @@ export async function saveMensagensAutomation(
     reativacao: z.string().max(2000).optional(),
     agradecimento: z.string().max(2000).optional(),
     acaminho: z.string().max(2000).optional(),
+    pagamentolink: z.string().max(2000).optional(),
+    pagamentolembrete: z.string().max(2000).optional(),
+    pagamentoconfirmado: z.string().max(2000).optional(),
   })
   const parsed = msgSchema.safeParse({
     cadastro: formData.get("autoCadastroMsg"),
@@ -51,6 +54,9 @@ export async function saveMensagensAutomation(
     reativacao: formData.get("autoReativacaoMsg"),
     agradecimento: formData.get("autoAgradecimentoMsg"),
     acaminho: formData.get("autoACaminhoMsg"),
+    pagamentolink: formData.get("autoPagamentoLinkMsg"),
+    pagamentolembrete: formData.get("autoPagamentoLembreteMsg"),
+    pagamentoconfirmado: formData.get("autoPagamentoConfirmadoMsg"),
   })
   if (!parsed.success) {
     return {
@@ -80,6 +86,23 @@ export async function saveMensagensAutomation(
     autoAgradecimentoMsg: data.agradecimento?.trim() || null,
     autoACaminhoEnabled: flag(formData, "autoACaminhoEnabled"),
     autoACaminhoMsg: data.acaminho?.trim() || null,
+    autoPagamentoLinkEnabled: flag(formData, "autoPagamentoLinkEnabled"),
+    autoPagamentoLinkMsg: data.pagamentolink?.trim() || null,
+    autoPagamentoLembreteEnabled: flag(
+      formData,
+      "autoPagamentoLembreteEnabled"
+    ),
+    autoPagamentoLembreteDelayMinutes: intField(
+      formData,
+      "autoPagamentoLembreteDelayMinutes",
+      60
+    ),
+    autoPagamentoLembreteMsg: data.pagamentolembrete?.trim() || null,
+    autoPagamentoConfirmadoEnabled: flag(
+      formData,
+      "autoPagamentoConfirmadoEnabled"
+    ),
+    autoPagamentoConfirmadoMsg: data.pagamentoconfirmado?.trim() || null,
   }
 
   await prisma.clinicSettings.upsert({

@@ -37,6 +37,8 @@ export type PaymentInitialData = {
   stripeWebhookSecret: string
   asaasWebhookUrl: string
   stripeWebhookUrl: string
+  consultaPrecoPresencial: number | null
+  consultaPrecoDomiciliar: number | null
 }
 
 type TestResult = { success: boolean; message: string } | null
@@ -72,6 +74,17 @@ export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
   const [asaasKey, setAsaasKey] = useState(initial.asaasApiKey)
   const [stripeKey, setStripeKey] = useState(initial.stripeSecretKey)
   const [stripeWebhook, setStripeWebhook] = useState(initial.stripeWebhookSecret)
+
+  const [precoPresencial, setPrecoPresencial] = useState(
+    initial.consultaPrecoPresencial != null
+      ? String(initial.consultaPrecoPresencial).replace(".", ",")
+      : ""
+  )
+  const [precoDomiciliar, setPrecoDomiciliar] = useState(
+    initial.consultaPrecoDomiciliar != null
+      ? String(initial.consultaPrecoDomiciliar).replace(".", ",")
+      : ""
+  )
 
   const [showAsaas, setShowAsaas] = useState(false)
   const [showStripe, setShowStripe] = useState(false)
@@ -135,6 +148,44 @@ export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
       </CardHeader>
       <CardContent>
         <form action={formAction} className="flex flex-col gap-6">
+          {/* Preços das consultas */}
+          <div className="flex flex-col gap-4 rounded-lg border p-4">
+            <div className="flex items-center gap-2 font-medium">
+              <CreditCard className="h-4 w-4 text-primary" />
+              Preços das consultas
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Com preço preenchido, o agendamento online passa a exigir o
+              pagamento antes de confirmar o horário (o horário fica reservado
+              até o pagamento). Deixe em branco para confirmar na hora, sem
+              cobrança.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel>Consulta presencial (R$)</FieldLabel>
+                <Input
+                  name="consultaPrecoPresencial"
+                  type="text"
+                  inputMode="decimal"
+                  value={precoPresencial}
+                  onChange={(event) => setPrecoPresencial(event.target.value)}
+                  placeholder="Ex.: 200,00"
+                />
+              </Field>
+              <Field>
+                <FieldLabel>Consulta domiciliar (R$)</FieldLabel>
+                <Input
+                  name="consultaPrecoDomiciliar"
+                  type="text"
+                  inputMode="decimal"
+                  value={precoDomiciliar}
+                  onChange={(event) => setPrecoDomiciliar(event.target.value)}
+                  placeholder="Ex.: 300,00"
+                />
+              </Field>
+            </div>
+          </div>
+
           {/* Roteamento por meio de pagamento */}
           <div className="flex flex-col gap-3 rounded-lg border p-4">
             <p className="text-sm font-medium">Como o sistema roteia cada cobrança</p>

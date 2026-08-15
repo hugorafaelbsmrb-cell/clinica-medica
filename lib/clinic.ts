@@ -33,6 +33,15 @@ export type ClinicInfo = {
   autoAgradecimentoMsg?: string | null
   autoACaminhoEnabled?: boolean
   autoACaminhoMsg?: string | null
+  consultaPrecoPresencial?: number | null
+  consultaPrecoDomiciliar?: number | null
+  autoPagamentoLinkEnabled?: boolean
+  autoPagamentoLinkMsg?: string | null
+  autoPagamentoLembreteEnabled?: boolean
+  autoPagamentoLembreteDelayMinutes?: number
+  autoPagamentoLembreteMsg?: string | null
+  autoPagamentoConfirmadoEnabled?: boolean
+  autoPagamentoConfirmadoMsg?: string | null
 }
 
 const DEFAULTS: ClinicInfo = {
@@ -74,6 +83,21 @@ export async function getClinicSettings(): Promise<ClinicInfo> {
         autoAgradecimentoMsg: settings.autoAgradecimentoMsg,
         autoACaminhoEnabled: settings.autoACaminhoEnabled,
         autoACaminhoMsg: settings.autoACaminhoMsg,
+        consultaPrecoPresencial: settings.consultaPrecoPresencial
+          ? Number(settings.consultaPrecoPresencial)
+          : null,
+        consultaPrecoDomiciliar: settings.consultaPrecoDomiciliar
+          ? Number(settings.consultaPrecoDomiciliar)
+          : null,
+        autoPagamentoLinkEnabled: settings.autoPagamentoLinkEnabled,
+        autoPagamentoLinkMsg: settings.autoPagamentoLinkMsg,
+        autoPagamentoLembreteEnabled: settings.autoPagamentoLembreteEnabled,
+        autoPagamentoLembreteDelayMinutes:
+          settings.autoPagamentoLembreteDelayMinutes,
+        autoPagamentoLembreteMsg: settings.autoPagamentoLembreteMsg,
+        autoPagamentoConfirmadoEnabled:
+          settings.autoPagamentoConfirmadoEnabled,
+        autoPagamentoConfirmadoMsg: settings.autoPagamentoConfirmadoMsg,
       }
     : DEFAULTS
 }

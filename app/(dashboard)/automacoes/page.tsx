@@ -47,6 +47,17 @@ export default async function AutomacoesPage() {
           autoAgradecimentoMsg: clinic.autoAgradecimentoMsg ?? "",
           autoACaminhoEnabled: clinic.autoACaminhoEnabled ?? true,
           autoACaminhoMsg: clinic.autoACaminhoMsg ?? "",
+          autoPagamentoLinkEnabled: clinic.autoPagamentoLinkEnabled ?? true,
+          autoPagamentoLinkMsg: clinic.autoPagamentoLinkMsg ?? "",
+          autoPagamentoLembreteEnabled:
+            clinic.autoPagamentoLembreteEnabled ?? true,
+          autoPagamentoLembreteDelayMinutes:
+            clinic.autoPagamentoLembreteDelayMinutes ?? 60,
+          autoPagamentoLembreteMsg: clinic.autoPagamentoLembreteMsg ?? "",
+          autoPagamentoConfirmadoEnabled:
+            clinic.autoPagamentoConfirmadoEnabled ?? true,
+          autoPagamentoConfirmadoMsg:
+            clinic.autoPagamentoConfirmadoMsg ?? "",
         }}
       />
     </div>

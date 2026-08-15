@@ -21,6 +21,7 @@ import { CancelarConsultaButton } from "@/components/agenda/cancelar-consulta-bu
 export const metadata: Metadata = { title: "Minhas consultas" }
 
 const STATUS_LABEL: Record<string, string> = {
+  AGUARDANDO_PAGAMENTO: "Aguardando pagamento",
   AGENDADO: "Agendada",
   REALIZADO: "Realizada",
   CANCELADO: "Cancelada",

@@ -15,7 +15,12 @@ export function AttendanceActions({
   status,
 }: {
   attendanceId: string
-  status: "AGENDADO" | "EM_ATENDIMENTO" | "REALIZADO" | "CANCELADO"
+  status:
+    | "AGUARDANDO_PAGAMENTO"
+    | "AGENDADO"
+    | "EM_ATENDIMENTO"
+    | "REALIZADO"
+    | "CANCELADO"
 }) {
   const router = useRouter()
   const [loading, setLoading] = useState<"complete" | "cancel" | null>(null)

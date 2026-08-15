@@ -36,7 +36,10 @@ export async function enqueueMessage(
     | "ANIVERSARIO"
     | "REATIVACAO"
     | "AGRADECIMENTO"
-    | "MEDICO_A_CAMINHO",
+    | "MEDICO_A_CAMINHO"
+    | "LINK_PAGAMENTO"
+    | "LEMBRETE_PAGAMENTO"
+    | "PAGAMENTO_CONFIRMADO",
   content: string,
   scheduledFor?: Date,
   attendanceId?: string

@@ -23,6 +23,7 @@ export const metadata: Metadata = { title: "Atendimentos" }
 const TYPE_LABELS = { PRESENCIAL: "Presencial", DOMICILIAR: "Domiciliar" } as const
 
 const STATUS_VARIANTS = {
+  AGUARDANDO_PAGAMENTO: "secondary",
   AGENDADO: "secondary",
   EM_ATENDIMENTO: "default",
   REALIZADO: "outline",
@@ -30,6 +31,7 @@ const STATUS_VARIANTS = {
 } as const
 
 const STATUS_LABELS = {
+  AGUARDANDO_PAGAMENTO: "Aguardando pagamento",
   AGENDADO: "Agendado",
   EM_ATENDIMENTO: "Em atendimento",
   REALIZADO: "Realizado",

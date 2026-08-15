@@ -21,6 +21,7 @@ enum AttendanceType {
 }
 
 enum AttendanceStatus {
+  AGUARDANDO_PAGAMENTO
   AGENDADO
   EM_ATENDIMENTO
   REALIZADO
@@ -52,6 +53,9 @@ enum MessageType {
   REATIVACAO
   AGRADECIMENTO
   MEDICO_A_CAMINHO
+  LINK_PAGAMENTO
+  LEMBRETE_PAGAMENTO
+  PAGAMENTO_CONFIRMADO
 }
 
 enum MessageStatus {
@@ -162,6 +166,20 @@ model ClinicSettings {
   asaasApiKey         String? // chave da API do Asaas (menu Integrações → Chaves de API)
   stripeSecretKey     String? // chave secreta do Stripe (Dashboard → Developers → API keys)
   stripeWebhookSecret String? // segredo do webhook do Stripe (para validar a assinatura)
+
+  // Preços das consultas (usados no agendamento online com pagamento antecipado)
+  // Vazio = agendamento online sem cobrança (confirmado na hora).
+  consultaPrecoPresencial Decimal? @db.Decimal(10, 2) // valor da consulta presencial
+  consultaPrecoDomiciliar Decimal? @db.Decimal(10, 2) // valor da consulta domiciliar
+
+  // Automações de pagamento (painel Automações)
+  autoPagamentoLinkEnabled      Boolean @default(true) // envia o link de pagamento ao reservar o horário
+  autoPagamentoLinkMsg          String? @db.Text
+  autoPagamentoLembreteEnabled Boolean @default(true) // lembrete para quem reservou e não pagou
+  autoPagamentoLembreteDelayMinutes Int @default(60) // espera antes do primeiro lembrete
+  autoPagamentoLembreteMsg      String? @db.Text
+  autoPagamentoConfirmadoEnabled Boolean @default(true) // aviso de pagamento confirmado
+  autoPagamentoConfirmadoMsg    String? @db.Text
   updatedAt      DateTime @updatedAt
 }
 
@@ -386,6 +404,7 @@ model Payment {
   paidAt            DateTime?
   externalStatus    String? // status bruto reportado pelo gateway
   fee               Decimal?        @db.Decimal(10, 2) // taxa cobrada pelo gateway
+  remindedAt        DateTime? // quando o lembrete automático de pagamento foi enviado
   financialEntryId  String?         @unique
   financialEntry    FinancialEntry? @relation(fields: [financialEntryId], references: [id], onDelete: SetNull)
   attendanceId      String?

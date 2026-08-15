@@ -47,6 +47,8 @@ export default async function ConfiguracoesPage() {
           stripeWebhookSecret: payments.stripeWebhookSecret,
           asaasWebhookUrl,
           stripeWebhookUrl,
+          consultaPrecoPresencial: clinic.consultaPrecoPresencial ?? null,
+          consultaPrecoDomiciliar: clinic.consultaPrecoDomiciliar ?? null,
         }}
       />
     </div>

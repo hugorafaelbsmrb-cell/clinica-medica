@@ -38,11 +38,22 @@ const paymentKeysSchema = z.object({
   asaasApiKey: z.string().optional(),
   stripeSecretKey: z.string().optional(),
   stripeWebhookSecret: z.string().optional(),
+  consultaPrecoPresencial: z.string().optional(),
+  consultaPrecoDomiciliar: z.string().optional(),
 })
 
+/** Converte o campo de preço do formulário (aceita vírgula) para número. */
+function parsePrice(value: FormDataEntryValue | null): number | null {
+  const text = String(value ?? "").trim().replace(".", "").replace(",", ".")
+  if (!text) return null
+  const parsed = Number(text)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+}
+
 /**
- * Salva as chaves dos gateways no registro da clínica (id = 1).
- * Campo vazio remove a credencial salva e desativa o gateway.
+ * Salva as chaves dos gateways e os preços das consultas no registro da
+ * clínica (id = 1). Campo vazio remove a credencial salva e desativa o
+ * gateway; preço vazio desativa a cobrança no agendamento online.
  */
 export async function savePaymentSettings(
   _prev: ActionState | null,
@@ -60,6 +71,8 @@ export async function savePaymentSettings(
     asaasApiKey: formData.get("asaasApiKey"),
     stripeSecretKey: formData.get("stripeSecretKey"),
     stripeWebhookSecret: formData.get("stripeWebhookSecret"),
+    consultaPrecoPresencial: formData.get("consultaPrecoPresencial"),
+    consultaPrecoDomiciliar: formData.get("consultaPrecoDomiciliar"),
   })
   if (!parsed.success) {
     return {
@@ -75,12 +88,24 @@ export async function savePaymentSettings(
       asaasApiKey: data.asaasApiKey?.trim() || null,
       stripeSecretKey: data.stripeSecretKey?.trim() || null,
       stripeWebhookSecret: data.stripeWebhookSecret?.trim() || null,
+      consultaPrecoPresencial: parsePrice(
+        formData.get("consultaPrecoPresencial")
+      ),
+      consultaPrecoDomiciliar: parsePrice(
+        formData.get("consultaPrecoDomiciliar")
+      ),
     },
     create: {
       id: 1,
       asaasApiKey: data.asaasApiKey?.trim() || null,
       stripeSecretKey: data.stripeSecretKey?.trim() || null,
       stripeWebhookSecret: data.stripeWebhookSecret?.trim() || null,
+      consultaPrecoPresencial: parsePrice(
+        formData.get("consultaPrecoPresencial")
+      ),
+      consultaPrecoDomiciliar: parsePrice(
+        formData.get("consultaPrecoDomiciliar")
+      ),
     },
   })
 
@@ -238,4 +263,113 @@ export async function refreshPayment(
   const result = await refreshPaymentStatus(paymentId)
   revalidatePath("/financeiro")
   return { success: result.success, message: result.message }
+}
+
+const standaloneChargeSchema = z.object({
+  patientId: z.string().min(1),
+  amount: z.number().positive("Informe um valor válido"),
+  method: z.enum(["PIX", "CARTAO"]),
+  description: z.string().trim().min(3, "Descreva a cobrança").max(500),
+})
+
+/**
+ * Cobrança avulsa: admin, médico e secretária geram uma cobrança direta
+ * para o paciente (sem lançamento prévio no financeiro). Um lançamento de
+ * receita pendente é criado junto e baixado automaticamente pelo webhook.
+ */
+export async function createStandaloneCharge(input: {
+  patientId: string
+  amount: number
+  method: PaymentMethodType
+  description: string
+}): Promise<CreatePaymentResult> {
+  const session = await auth()
+  if (!session?.user) return { success: false, message: "Sessão expirada" }
+  requireRole(session, ["ADMIN", "MEDICO", "SECRETARIA"])
+
+  const parsed = standaloneChargeSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: parsed.error.issues[0]?.message ?? "Dados inválidos",
+    }
+  }
+
+  const patient = await prisma.patient.findUnique({
+    where: { id: parsed.data.patientId },
+  })
+  if (!patient) return { success: false, message: "Paciente não encontrado" }
+
+  const settings = await getPaymentSettings()
+  const provider = providerForMethod(parsed.data.method)
+  const keyConfigured =
+    provider === "ASAAS" ? !!settings.asaasApiKey : !!settings.stripeSecretKey
+  if (!keyConfigured) {
+    return {
+      success: false,
+      message: `Gateway ${provider === "ASAAS" ? "Asaas" : "Stripe"} não configurado — configure em Configurações → Pagamentos`,
+    }
+  }
+
+  // Lançamento vinculado → a baixa automática do webhook vale para ambos
+  const entry = await prisma.financialEntry.create({
+    data: {
+      type: "RECEITA",
+      category: "OUTRO",
+      description: parsed.data.description,
+      value: parsed.data.amount,
+      dueDate: new Date(),
+      status: "PENDENTE",
+    },
+  })
+
+  const result = await createCharge({
+    method: parsed.data.method,
+    amountCents: Math.round(parsed.data.amount * 100),
+    description: parsed.data.description,
+    customerName: patient.name,
+    customerCpf: patient.cpf ?? undefined,
+    financialEntryId: entry.id,
+    patientId: patient.id,
+  })
+
+  if (!result.ok) {
+    await prisma.financialEntry.delete({ where: { id: entry.id } })
+    return {
+      success: false,
+      message: result.error ?? "Falha ao gerar a cobrança",
+    }
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      action: "CREATE",
+      entity: "Payment",
+      entityId: result.paymentId ?? "",
+      patientId: patient.id,
+      details: {
+        cobrancaAvulsa: true,
+        amount: parsed.data.amount,
+        method: parsed.data.method,
+        description: parsed.data.description,
+      },
+    },
+  })
+
+  revalidatePath("/", "layout")
+
+  return {
+    success: true,
+    message:
+      parsed.data.method === "PIX"
+        ? "Cobrança PIX gerada"
+        : "Link de pagamento gerado",
+    paymentId: result.paymentId,
+    checkoutUrl: result.checkoutUrl,
+    pixCopiaCola: result.pixCopiaCola,
+    pixQrCodeUrl: result.pixQrCodeUrl,
+    method: parsed.data.method,
+    provider: result.provider,
+  }
 }

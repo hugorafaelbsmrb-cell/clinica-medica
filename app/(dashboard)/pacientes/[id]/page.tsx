@@ -7,12 +7,14 @@ import { ArrowLeft, Navigation, Pencil, Phone, MapPin } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
+import { getPaymentSettings } from "@/lib/payments/settings"
 import { mapsNavigationUrl, mapsSearchUrl } from "@/lib/geo"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
+import { CobrarPacienteButton } from "@/components/pacientes/cobrar-paciente-button"
 
 export const metadata: Metadata = { title: "Detalhes do paciente" }
 
@@ -22,6 +24,7 @@ const TYPE_LABELS = {
 } as const
 
 const STATUS_LABELS = {
+  AGUARDANDO_PAGAMENTO: "Aguardando pagamento",
   AGENDADO: "Agendado",
   EM_ATENDIMENTO: "Em atendimento",
   REALIZADO: "Realizado",
@@ -37,19 +40,22 @@ export default async function PacienteDetalhePage({
   requireRole(session, ["ADMIN", "MEDICO", "SECRETARIA"])
 
   const { id } = await params
-  const patient = await prisma.patient.findUnique({
-    where: { id },
-    include: {
-      followUp: true,
-      attendances: { orderBy: { scheduledAt: "desc" }, take: 10 },
-      messages: { orderBy: { createdAt: "desc" }, take: 10 },
-      prescriptions: {
-        orderBy: { createdAt: "desc" },
-        take: 10,
-        include: { items: true },
+  const [patient, paymentSettings] = await Promise.all([
+    prisma.patient.findUnique({
+      where: { id },
+      include: {
+        followUp: true,
+        attendances: { orderBy: { scheduledAt: "desc" }, take: 10 },
+        messages: { orderBy: { createdAt: "desc" }, take: 10 },
+        prescriptions: {
+          orderBy: { createdAt: "desc" },
+          take: 10,
+          include: { items: true },
+        },
       },
-    },
-  })
+    }),
+    getPaymentSettings(),
+  ])
 
   if (!patient) notFound()
 
@@ -93,6 +99,17 @@ export default async function PacienteDetalhePage({
           </div>
         </div>
         <div className="flex gap-2">
+          <CobrarPacienteButton
+            patientId={patient.id}
+            patientName={patient.name}
+            sugestaoValor={
+              paymentSettings.consultaPrecoPresencial > 0
+                ? paymentSettings.consultaPrecoPresencial
+                : paymentSettings.consultaPrecoDomiciliar > 0
+                  ? paymentSettings.consultaPrecoDomiciliar
+                  : null
+            }
+          />
           <Button
             variant="outline"
             render={

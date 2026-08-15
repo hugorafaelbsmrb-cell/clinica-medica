@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useEffect, useState, useTransition } from "react"
+import { useActionState, useEffect, useRef, useState, useTransition } from "react"
 import { toast } from "sonner"
 import {
   AlertTriangle,
@@ -13,9 +13,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Copy,
+  CreditCard,
   History,
   Loader2,
   LocateFixed,
+  QrCode,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -37,6 +40,8 @@ import {
   getConsultasByCpf,
   getPublicAgenda,
   lookupPatientByCpf,
+  verificarPagamentoAgendamento,
+  type AgendarState,
   type ConsultasPublicasResult,
   type PublicAgendaResult,
 } from "@/lib/actions/agendamento-publico"
@@ -45,6 +50,7 @@ const CAD_STEPS = ["Seus dados", "Seu contato", "Seu endereço", "Confirmação"
 const AG_STEPS = ["Motivo", "Escolha o dia", "Escolha o horário", "Confirmação"]
 
 const STATUS_LABEL: Record<string, string> = {
+  AGUARDANDO_PAGAMENTO: "Aguardando pagamento",
   AGENDADO: "Agendada",
   REALIZADO: "Realizada",
   CANCELADO: "Cancelada",
@@ -134,7 +140,12 @@ type ExistingPatient = {
  */
 export function CadastroWizard() {
   const [phase, setPhase] = useState<
-    "cadastro" | "consultas" | "agendamento" | "sem-vagas" | "sucesso"
+    | "cadastro"
+    | "consultas"
+    | "agendamento"
+    | "sem-vagas"
+    | "pagamento"
+    | "sucesso"
   >("cadastro")
 
   // Fase de cadastro
@@ -186,6 +197,38 @@ export function CadastroWizard() {
   const [agendarError, setAgendarError] = useState("")
   const [agendarPending, startAgendar] = useTransition()
   const [successDate, setSuccessDate] = useState("")
+
+  // Pagamento antecipado do agendamento online
+  const [metodoPagamento, setMetodoPagamento] = useState<"PIX" | "CARTAO">("PIX")
+  const [paymentData, setPaymentData] = useState<
+    AgendarState["payment"] | null
+  >(null)
+  const [paymentDate, setPaymentDate] = useState("")
+  const paymentPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Consulta em loop se o pagamento da reserva já caiu (webhook)
+  useEffect(() => {
+    if (phase !== "pagamento" || !paymentData) return
+    paymentPollRef.current = setInterval(() => {
+      verificarPagamentoAgendamento({
+        attendanceId: paymentData.attendanceId,
+        token: paymentData.token,
+      }).then((result) => {
+        if (result.pago && result.scheduledAt) {
+          setSuccessDate(result.scheduledAt)
+          setPhase("sucesso")
+        } else if (result.expirado) {
+          toast.error("O pagamento expirou. Escolha outro horário, por favor.")
+          setAgenda(null)
+          setAgStep(0)
+          setPhase(existingPatient ? "consultas" : "agendamento")
+        }
+      })
+    }, 10000)
+    return () => {
+      if (paymentPollRef.current) clearInterval(paymentPollRef.current)
+    }
+  }, [phase, paymentData, existingPatient])
 
   const [state, cadastroFormAction, pending] = useActionState<
     CadastroState | null,
@@ -403,6 +446,7 @@ export function CadastroWizard() {
         patientId,
         scheduledAt: selectedSlot,
         reason: motivo,
+        method: metodoPagamento,
         lgpdConsent:
           existingPatient && !existingPatient.lgpdConsent ? lgpdAgend : true,
       })
@@ -412,8 +456,54 @@ export function CadastroWizard() {
         return
       }
       setSuccessDate(result.scheduledAt ?? selectedSlot)
+      if (result.payment) {
+        // Horário reservado: segue para o pagamento antes de confirmar
+        setPaymentData(result.payment)
+        setPaymentDate(result.scheduledAt ?? selectedSlot)
+        setPhase("pagamento")
+        return
+      }
       setPhase("sucesso")
     })
+  }
+
+  // Verificação manual do pagamento da reserva
+  function verificarPagamentoAgora() {
+    if (!paymentData) return
+    startAgendar(async () => {
+      const result = await verificarPagamentoAgendamento({
+        attendanceId: paymentData.attendanceId,
+        token: paymentData.token,
+      })
+      if (result.pago && result.scheduledAt) {
+        setSuccessDate(result.scheduledAt)
+        setPhase("sucesso")
+      } else if (result.expirado) {
+        toast.error("O pagamento expirou. Escolha outro horário, por favor.")
+        setAgenda(null)
+        setAgStep(0)
+        setPhase(existingPatient ? "consultas" : "agendamento")
+      } else {
+        toast.info("Ainda não confirmamos o pagamento. Tente de novo em instantes.")
+      }
+    })
+  }
+
+  // Copia para a área de transferência (com fallback para navegadores antigos)
+  async function copiarPagamento(text: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      const textarea = document.createElement("textarea")
+      textarea.value = text
+      textarea.style.position = "fixed"
+      textarea.style.opacity = "0"
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand("copy")
+      document.body.removeChild(textarea)
+    }
+    toast.success("Copiado!")
   }
 
   const currentSteps = phase === "agendamento" ? AG_STEPS : CAD_STEPS
@@ -445,6 +535,99 @@ export function CadastroWizard() {
             <ChevronLeft className="h-5 w-5" />
             Voltar
           </Button>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // ── Tela: pagamento pendente da reserva ──────────────────────────────
+  if (phase === "pagamento" && paymentData) {
+    const formatted = formatDateTime(paymentDate)
+    const valor = paymentData.amount.toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+    })
+    return (
+      <Card className="w-full max-w-md">
+        <CardContent className="flex flex-col gap-5 py-10">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-amber-500/10">
+              <Clock className="h-12 w-12 text-amber-600" />
+            </div>
+            <h2 className="text-2xl font-semibold">Horário reservado!</h2>
+            <p className="text-lg text-muted-foreground">
+              Falta o pagamento para confirmar a consulta.
+            </p>
+          </div>
+
+          <div className="w-full rounded-xl border-2 border-amber-500 bg-amber-500/10 p-4 text-center">
+            <p className="text-lg font-semibold capitalize">{formatted.date}</p>
+            <p className="text-2xl font-bold text-amber-700">{formatted.time}</p>
+            <p className="mt-1 text-base font-medium">Valor: R$ {valor}</p>
+          </div>
+
+          {paymentData.method === "PIX" && paymentData.pixQrCodeUrl && (
+            <div className="flex flex-col items-center gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={paymentData.pixQrCodeUrl}
+                alt="QR Code PIX"
+                className="h-56 w-56 rounded-xl border-2 border-border bg-white p-2"
+              />
+              {paymentData.pixCopiaCola && (
+                <div className="flex w-full flex-col gap-2">
+                  <p className="break-all rounded-lg border bg-muted/40 p-2 text-xs text-muted-foreground">
+                    {paymentData.pixCopiaCola}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => copiarPagamento(paymentData.pixCopiaCola ?? "")}
+                    className="h-12 text-base"
+                  >
+                    <Copy className="h-5 w-5" />
+                    Copiar código PIX
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {paymentData.checkoutUrl && (
+            <Button
+              type="button"
+              className="h-14 w-full text-lg"
+              render={
+                <a
+                  href={paymentData.checkoutUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                />
+              }
+            >
+              <CreditCard className="h-5 w-5" />
+              Pagar agora{paymentData.method === "CARTAO" ? " com cartão" : ""}
+            </Button>
+          )}
+
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={verificarPagamentoAgora}
+            disabled={agendarPending}
+            className="h-12 text-base"
+          >
+            {agendarPending ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <BadgeCheck className="h-5 w-5" />
+            )}
+            Já paguei — verificar
+          </Button>
+
+          <p className="text-center text-sm text-muted-foreground">
+            Assim que o pagamento for confirmado, sua consulta é confirmada
+            automaticamente e você recebe a confirmação pelo WhatsApp.
+          </p>
         </CardContent>
       </Card>
     )
@@ -1147,7 +1330,56 @@ export function CadastroWizard() {
                       {motivo}
                     </span>
                   </div>
+                  {(agenda?.consultaPreco ?? 0) > 0 && (
+                    <div className="flex justify-between gap-4 border-t border-border pt-3 text-base">
+                      <span className="text-muted-foreground">Valor</span>
+                      <span className="font-medium">
+                        R${(agenda?.consultaPreco ?? 0).toLocaleString("pt-BR", {
+                          minimumFractionDigits: 2,
+                        })}
+                      </span>
+                    </div>
+                  )}
                 </div>
+
+                {(agenda?.consultaPreco ?? 0) > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-base font-medium">Como prefere pagar?</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setMetodoPagamento("PIX")}
+                        className={cn(
+                          "flex h-16 items-center justify-center gap-2 rounded-xl border-2 text-lg font-semibold transition-colors",
+                          metodoPagamento === "PIX"
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-border hover:bg-muted"
+                        )}
+                      >
+                        <QrCode className="h-5 w-5" />
+                        PIX
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMetodoPagamento("CARTAO")}
+                        className={cn(
+                          "flex h-16 items-center justify-center gap-2 rounded-xl border-2 text-lg font-semibold transition-colors",
+                          metodoPagamento === "CARTAO"
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-border hover:bg-muted"
+                        )}
+                      >
+                        <CreditCard className="h-5 w-5" />
+                        Cartão
+                      </button>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {metodoPagamento === "PIX"
+                        ? "Você verá o QR code na próxima tela."
+                        : "No cartão, Apple Pay e Google Pay aparecem na tela de pagamento."}
+                    </p>
+                  </div>
+                )}
 
                 {existingPatient && !existingPatient.lgpdConsent && (
                   <label
@@ -1209,6 +1441,8 @@ export function CadastroWizard() {
                       <Loader2 className="h-5 w-5 animate-spin" />
                       Confirmando...
                     </>
+                  ) : (agenda?.consultaPreco ?? 0) > 0 ? (
+                    "Reservar horário e pagar"
                   ) : (
                     "Confirmar consulta"
                   )}

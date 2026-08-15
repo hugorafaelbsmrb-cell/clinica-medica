@@ -10,6 +10,7 @@ import {
   MapPinned,
   ThumbsUp,
   UserPlus,
+  Wallet,
   Zap,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -46,6 +47,13 @@ export type MensagensInitialData = {
   autoAgradecimentoMsg: string
   autoACaminhoEnabled: boolean
   autoACaminhoMsg: string
+  autoPagamentoLinkEnabled: boolean
+  autoPagamentoLinkMsg: string
+  autoPagamentoLembreteEnabled: boolean
+  autoPagamentoLembreteDelayMinutes: number
+  autoPagamentoLembreteMsg: string
+  autoPagamentoConfirmadoEnabled: boolean
+  autoPagamentoConfirmadoMsg: string
 }
 
 type SectionProps = {
@@ -145,6 +153,30 @@ export function MensagensForm({
   )
   const [acaminhoMsg, setAcaminhoMsg] = useState(initial.autoACaminhoMsg)
 
+  const [pagamentoLinkEnabled, setPagamentoLinkEnabled] = useState(
+    initial.autoPagamentoLinkEnabled
+  )
+  const [pagamentoLinkMsg, setPagamentoLinkMsg] = useState(
+    initial.autoPagamentoLinkMsg
+  )
+
+  const [pagamentoLembreteEnabled, setPagamentoLembreteEnabled] = useState(
+    initial.autoPagamentoLembreteEnabled
+  )
+  const [pagamentoLembreteDelay, setPagamentoLembreteDelay] = useState(
+    String(initial.autoPagamentoLembreteDelayMinutes)
+  )
+  const [pagamentoLembreteMsg, setPagamentoLembreteMsg] = useState(
+    initial.autoPagamentoLembreteMsg
+  )
+
+  const [pagamentoConfirmadoEnabled, setPagamentoConfirmadoEnabled] = useState(
+    initial.autoPagamentoConfirmadoEnabled
+  )
+  const [pagamentoConfirmadoMsg, setPagamentoConfirmadoMsg] = useState(
+    initial.autoPagamentoConfirmadoMsg
+  )
+
   const [state, formAction, pending] = useActionState<
     AutomationState | null,
     FormData
@@ -165,7 +197,10 @@ export function MensagensForm({
     aniversarioEnabled ||
     reativacaoEnabled ||
     agradecimentoEnabled ||
-    acaminhoEnabled
+    acaminhoEnabled ||
+    pagamentoLinkEnabled ||
+    pagamentoLembreteEnabled ||
+    pagamentoConfirmadoEnabled
 
   return (
     <Card>
@@ -350,6 +385,87 @@ export function MensagensForm({
                   onChange={(event) => setAcaminhoMsg(event.target.value)}
                   rows={3}
                   placeholder="Olá {{nome}}! O médico já está a caminho da sua casa. (padrão)"
+                />
+              </Field>
+            </Section>
+
+            {/* 7) Link de pagamento ao reservar */}
+            <Section
+              icon={<Wallet className="h-4 w-4 text-primary" />}
+              title="Link de pagamento (agendamento online)"
+              description="Enviada assim que o paciente reserva um horário com cobrança. Use {{valor}} e {{link}}."
+              enabled={pagamentoLinkEnabled}
+              onToggle={setPagamentoLinkEnabled}
+              fieldName="autoPagamentoLinkEnabled"
+            >
+              <Field>
+                <FieldLabel>Mensagem</FieldLabel>
+                <Textarea
+                  name="autoPagamentoLinkMsg"
+                  value={pagamentoLinkMsg}
+                  onChange={(event) => setPagamentoLinkMsg(event.target.value)}
+                  rows={3}
+                  placeholder="Olá {{nome}}! Reservamos seu horário. Pague R$ {{valor}} por aqui: {{link}} (padrão)"
+                />
+              </Field>
+            </Section>
+
+            {/* 8) Lembrete de pagamento pendente */}
+            <Section
+              icon={<Wallet className="h-4 w-4 text-amber-600" />}
+              title="Lembrete de pagamento pendente"
+              description="Aviso para quem reservou/cobrou e ainda não pagou. Sai depois do tempo definido abaixo (uma única vez por cobrança)."
+              enabled={pagamentoLembreteEnabled}
+              onToggle={setPagamentoLembreteEnabled}
+              fieldName="autoPagamentoLembreteEnabled"
+            >
+              <Field>
+                <FieldLabel>Esperar (minutos)</FieldLabel>
+                <Input
+                  name="autoPagamentoLembreteDelayMinutes"
+                  type="number"
+                  min={5}
+                  value={pagamentoLembreteDelay}
+                  onChange={(event) =>
+                    setPagamentoLembreteDelay(event.target.value)
+                  }
+                  className="w-32"
+                  inputMode="numeric"
+                />
+              </Field>
+              <Field>
+                <FieldLabel>Mensagem</FieldLabel>
+                <Textarea
+                  name="autoPagamentoLembreteMsg"
+                  value={pagamentoLembreteMsg}
+                  onChange={(event) =>
+                    setPagamentoLembreteMsg(event.target.value)
+                  }
+                  rows={3}
+                  placeholder="Olá {{nome}}! Falta o pagamento de R$ {{valor}} para confirmar. Pague por aqui: {{link}} (padrão)"
+                />
+              </Field>
+            </Section>
+
+            {/* 9) Pagamento confirmado */}
+            <Section
+              icon={<Wallet className="h-4 w-4 text-emerald-600" />}
+              title="Pagamento confirmado"
+              description="Enviada na hora em que o gateway confirma o pagamento (PIX, cartão ou Apple Pay)."
+              enabled={pagamentoConfirmadoEnabled}
+              onToggle={setPagamentoConfirmadoEnabled}
+              fieldName="autoPagamentoConfirmadoEnabled"
+            >
+              <Field>
+                <FieldLabel>Mensagem</FieldLabel>
+                <Textarea
+                  name="autoPagamentoConfirmadoMsg"
+                  value={pagamentoConfirmadoMsg}
+                  onChange={(event) =>
+                    setPagamentoConfirmadoMsg(event.target.value)
+                  }
+                  rows={3}
+                  placeholder="Olá {{nome}}! Recebemos seu pagamento de R$ {{valor}}. Tudo certo! (padrão)"
                 />
               </Field>
             </Section>

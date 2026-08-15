@@ -10,12 +10,19 @@
  * gateways é normalizado aqui e baixa o lançamento do Financeiro sozinho.
  */
 import { prisma } from "@/lib/prisma"
+import { getClinicSettings } from "@/lib/clinic"
 import { getPaymentSettings } from "@/lib/payments/settings"
 import { createAsaasCharge, getAsaasPaymentStatus } from "@/lib/payments/asaas"
 import {
   createStripeCheckout,
   getStripeCheckoutStatus,
 } from "@/lib/payments/stripe"
+import {
+  enqueueMessage,
+  renderTemplate,
+  queueAppointmentConfirmation,
+} from "@/lib/whatsapp/message-service"
+import { defaultAutomationMessage } from "@/lib/whatsapp/automations"
 import type {
   CreateChargeInput,
   CreateChargeResult,
@@ -35,6 +42,8 @@ export async function createCharge(
   input: Omit<CreateChargeInput, "provider"> & {
     method: PaymentMethodType
     financialEntryId?: string
+    attendanceId?: string
+    patientId?: string
   }
 ): Promise<
   CreateChargeResult & { paymentId?: string; provider?: PaymentProviderType }
@@ -55,6 +64,13 @@ export async function createCharge(
     }
   }
 
+  // Prazo da cobrança: PIX (Asaas) vence no fim do dia do vencimento;
+  // checkout do Stripe expira em 24h. Usado pelo cron para liberar horários.
+  const endOfToday = new Date()
+  endOfToday.setHours(23, 59, 59, 999)
+  const expiresAt =
+    provider === "ASAAS" ? endOfToday : new Date(Date.now() + 24 * 60 * 60 * 1000)
+
   const payment = await prisma.payment.create({
     data: {
       provider,
@@ -62,6 +78,9 @@ export async function createCharge(
       amount: Number((input.amountCents / 100).toFixed(2)),
       status: "PENDENTE",
       financialEntryId: input.financialEntryId ?? null,
+      attendanceId: input.attendanceId ?? null,
+      patientId: input.patientId ?? null,
+      expiresAt,
     },
   })
 
@@ -141,6 +160,7 @@ export async function refreshPaymentStatus(
       where: { id: payment.id },
       data: { status: "EXPIRADO" },
     })
+    if (payment.attendanceId) await releasePendingAttendance(payment.attendanceId)
     return { success: true, message: "Cobrança expirada — gere um novo link", status: "EXPIRADO" }
   }
   return {
@@ -190,6 +210,8 @@ export async function processPaymentWebhook(
           where: { id: payment.id },
           data: { status: "EXPIRADO" },
         })
+        // Libera o horário reservado no agendamento online
+        if (payment.attendanceId) await releasePendingAttendance(payment.attendanceId)
       }
       break
     case "CANCELLED":
@@ -198,17 +220,33 @@ export async function processPaymentWebhook(
           where: { id: payment.id },
           data: { status: "CANCELADO" },
         })
+        if (payment.attendanceId) await releasePendingAttendance(payment.attendanceId)
       }
       break
   }
 }
 
 /**
- * Baixa automática: marca a cobrança como paga e, se houver lançamento
- * financeiro vinculado, o lançamento vira PAGO sozinho (sem conciliação manual).
+ * Baixa automática: marca a cobrança como paga, baixa o lançamento financeiro
+ * vinculado e, quando a cobrança é de um agendamento online, confirma o
+ * horário (AGUARDANDO_PAGAMENTO → AGENDADO) e dispara as mensagens de
+ * WhatsApp: confirmação da consulta + aviso de pagamento confirmado.
  */
 async function applyPaymentPaid(paymentId: string, paidAt: Date): Promise<void> {
-  const payment = await prisma.payment.findUnique({ where: { id: paymentId } })
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    include: {
+      attendance: {
+        select: {
+          id: true,
+          status: true,
+          patientId: true,
+          scheduledAt: true,
+          cancelToken: true,
+        },
+      },
+    },
+  })
   if (!payment) return
 
   const methodLabel: Record<PaymentMethodType, string> = {
@@ -216,6 +254,10 @@ async function applyPaymentPaid(paymentId: string, paidAt: Date): Promise<void> 
     CARTAO: "CARTAO",
     APPLE_PAY: "APPLE_PAY",
   }
+
+  const confirmAttendance =
+    !!payment.attendanceId &&
+    payment.attendance?.status === "AGUARDANDO_PAGAMENTO"
 
   await prisma.$transaction([
     prisma.payment.update({
@@ -233,6 +275,14 @@ async function applyPaymentPaid(paymentId: string, paidAt: Date): Promise<void> 
           }),
         ]
       : []),
+    ...(confirmAttendance && payment.attendanceId
+      ? [
+          prisma.attendance.update({
+            where: { id: payment.attendanceId },
+            data: { status: "AGENDADO" },
+          }),
+        ]
+      : []),
   ])
 
   await prisma.auditLog.create({
@@ -240,12 +290,107 @@ async function applyPaymentPaid(paymentId: string, paidAt: Date): Promise<void> 
       action: "PAYMENT_RECEIVED",
       entity: "Payment",
       entityId: payment.id,
+      patientId: payment.patientId ?? payment.attendance?.patientId ?? undefined,
       details: {
         provider: payment.provider,
         method: payment.method,
         amount: Number(payment.amount),
         financialEntryId: payment.financialEntryId,
+        attendanceId: payment.attendanceId,
       },
     },
   })
+
+  // Mensagens de WhatsApp (consentimento checado pelo próprio serviço)
+  const patientId = payment.patientId ?? payment.attendance?.patientId
+  if (patientId) {
+    if (confirmAttendance && payment.attendance) {
+      await queueAppointmentConfirmation(patientId, {
+        id: payment.attendance.id,
+        scheduledAt: payment.attendance.scheduledAt,
+        cancelToken: payment.attendance.cancelToken,
+      })
+    }
+    await queuePaymentConfirmedMessage(patientId, Number(payment.amount))
+  }
+}
+
+/**
+ * Aviso "pagamento confirmado" via WhatsApp, configurável no painel de
+ * Automações (desligado = não envia nada).
+ */
+async function queuePaymentConfirmedMessage(
+  patientId: string,
+  amount: number
+): Promise<void> {
+  const clinic = await getClinicSettings()
+  if (!clinic.autoPagamentoConfirmadoEnabled) return
+
+  const patient = await prisma.patient.findUnique({ where: { id: patientId } })
+  if (!patient?.phone || !patient.whatsappEnabled || !patient.lgpdConsent) return
+
+  const msg =
+    clinic.autoPagamentoConfirmadoMsg?.trim() ||
+    defaultAutomationMessage("pagamentoconfirmado")
+
+  await enqueueMessage(
+    patientId,
+    "PAGAMENTO_CONFIRMADO",
+    renderTemplate(msg, {
+      nome: patient.name.split(" ")[0],
+      valor: amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 }),
+    }),
+    new Date()
+  )
+}
+
+/**
+ * Libera o horário reservado por um agendamento online cujo pagamento
+ * expirou ou foi cancelado (consulta vira CANCELADO).
+ */
+async function releasePendingAttendance(attendanceId: string): Promise<void> {
+  const attendance = await prisma.attendance.findUnique({
+    where: { id: attendanceId },
+    select: { id: true, status: true },
+  })
+  if (!attendance || attendance.status !== "AGUARDANDO_PAGAMENTO") return
+
+  await prisma.attendance.update({
+    where: { id: attendance.id },
+    data: { status: "CANCELADO" },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      action: "UPDATE",
+      entity: "Attendance",
+      entityId: attendance.id,
+      details: { motivo: "Pagamento não confirmado — horário liberado" },
+    },
+  })
+}
+
+/**
+ * Varre cobranças pendentes vencidas (segurança além dos webhooks): marca
+ * como EXPIRADO e libera o horário reservado no agendamento online.
+ * Chamado pelo cron a cada 10 minutos.
+ */
+export async function sweepExpiredPayments(now = new Date()): Promise<number> {
+  const expired = await prisma.payment.findMany({
+    where: { status: "PENDENTE", expiresAt: { lt: now } },
+    select: { id: true, attendanceId: true },
+  })
+
+  let released = 0
+  for (const payment of expired) {
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: { status: "EXPIRADO" },
+    })
+    if (payment.attendanceId) {
+      await releasePendingAttendance(payment.attendanceId)
+      released++
+    }
+  }
+  return released
 }
