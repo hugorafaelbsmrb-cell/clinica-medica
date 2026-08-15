@@ -298,18 +298,35 @@ export async function agendarPublico(
     // Com cobrança: gera o pagamento no gateway e devolve o link/QR para
     // o wizard exibir. A confirmação da consulta sai só quando pagar.
     if (cobrar) {
+      // Lançamento financeiro vinculado → a baixa automática do webhook
+      // vale para ambos (mesmo padrão da cobrança avulsa do painel).
+      const entry = await prisma.financialEntry.create({
+        data: {
+          type: "RECEITA",
+          category: "CONSULTA_PRESENCIAL",
+          description: `Consulta — ${patient.name}`,
+          value: price,
+          dueDate: new Date(),
+          status: "PENDENTE",
+          attendanceId: attendance.id,
+        },
+      })
+
       const charge = await createCharge({
         method,
         amountCents: Math.round(price * 100),
         description: `Consulta — ${patient.name}`,
         customerName: patient.name,
         customerCpf: patient.cpf ?? undefined,
+        financialEntryId: entry.id,
         attendanceId: attendance.id,
         patientId,
       })
 
       if (!charge.ok) {
         // Não conseguiu gerar a cobrança: libera o horário reservado
+        // e remove o lançamento criado.
+        await prisma.financialEntry.delete({ where: { id: entry.id } })
         await prisma.attendance.update({
           where: { id: attendance.id },
           data: { status: "CANCELADO" },
