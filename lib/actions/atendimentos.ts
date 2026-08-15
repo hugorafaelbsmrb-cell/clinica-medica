@@ -182,10 +182,17 @@ export async function cancelAttendance(id: string): Promise<ActionState> {
   const session = await auth()
   if (!session?.user) return { success: false, message: "Sessão expirada" }
 
-  await prisma.attendance.update({
-    where: { id },
-    data: { status: "CANCELADO" },
-  })
+  // Cancela também a cobrança pendente vinculada, se houver
+  await prisma.$transaction([
+    prisma.attendance.update({
+      where: { id },
+      data: { status: "CANCELADO" },
+    }),
+    prisma.payment.updateMany({
+      where: { attendanceId: id, status: "PENDENTE" },
+      data: { status: "CANCELADO" },
+    }),
+  ])
 
   revalidatePath("/atendimentos")
   revalidatePath(`/atendimentos/${id}`)
