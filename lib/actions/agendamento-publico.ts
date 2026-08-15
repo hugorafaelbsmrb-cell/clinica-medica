@@ -102,6 +102,11 @@ export type PublicAgendaResult = {
   days: PublicAgendaDay[]
   /** Valor da consulta presencial (0 = agendamento sem cobrança). */
   consultaPreco: number
+  /**
+   * true = Stripe configurado → o wizard pode oferecer Apple Pay.
+   * Sem chave do Stripe (modo teste/MOCK) o Apple Pay fica oculto.
+   */
+  applePayEnabled: boolean
 }
 
 /** Lista os dias com vagas livres dentro do horizonte de agendamento. */
@@ -122,6 +127,7 @@ export async function getPublicAgenda(): Promise<PublicAgendaResult> {
         "A clínica ainda não liberou horários. Fique tranquilo: sua equipe entrará em contato para agendar.",
       days: [],
       consultaPreco: paymentSettings.consultaPrecoPresencial,
+      applePayEnabled: Boolean(paymentSettings.stripeSecretKey),
     }
   }
 
@@ -146,6 +152,7 @@ export async function getPublicAgenda(): Promise<PublicAgendaResult> {
     message: "",
     days,
     consultaPreco: paymentSettings.consultaPrecoPresencial,
+    applePayEnabled: Boolean(paymentSettings.stripeSecretKey),
   }
 }
 
@@ -157,7 +164,7 @@ const agendarSchema = z.object({
     .trim()
     .min(5, "Conte brevemente o motivo da sua consulta"),
   lgpdConsent: z.boolean().optional(),
-  method: z.enum(["PIX", "CARTAO"]).optional().default("PIX"),
+  method: z.enum(["PIX", "CARTAO", "APPLE_PAY"]).optional().default("PIX"),
 })
 
 export type AgendarState = {
@@ -168,7 +175,7 @@ export type AgendarState = {
   payment?: {
     attendanceId: string
     token: string
-    method: "PIX" | "CARTAO"
+    method: "PIX" | "CARTAO" | "APPLE_PAY"
     amount: number
     checkoutUrl: string | null
     pixCopiaCola: string | null

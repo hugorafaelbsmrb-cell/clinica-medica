@@ -12,6 +12,7 @@ import {
   KeyRound,
   Loader2,
   QrCode,
+  Wallet,
   Webhook,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -141,9 +142,9 @@ export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
       <CardHeader>
         <CardTitle>Pagamentos</CardTitle>
         <CardDescription>
-          Gateways de recebimento do paciente: PIX no Asaas e cartão de
-          crédito/Apple Pay no Stripe. As chaves ficam guardadas no banco da
-          clínica. Chave vazia = gateway desativado.
+          Gateways de recebimento do paciente: PIX e cartão de crédito no
+          Asaas; Apple Pay no Stripe. As chaves ficam guardadas no banco da
+          clínica. Chave vazia = gateway desativado (fluxo cai em modo teste).
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -202,10 +203,20 @@ export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
               <div className="flex items-center gap-3 rounded-md border p-3">
                 <CreditCard className="h-8 w-8 shrink-0 text-blue-600" />
                 <div className="text-xs">
-                  <p className="font-medium">Cartão · Apple Pay · Google Pay</p>
+                  <p className="font-medium">Cartão de crédito</p>
                   <p className="text-muted-foreground">
-                    Checkout do <strong>Stripe</strong> — carteiras digitais
-                    aparecem sozinhas
+                    Link de pagamento do <strong>Asaas</strong> com checkout
+                    do cartão
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-md border p-3">
+                <Wallet className="h-8 w-8 shrink-0 text-indigo-600" />
+                <div className="text-xs">
+                  <p className="font-medium">Apple Pay</p>
+                  <p className="text-muted-foreground">
+                    Checkout do <strong>Stripe</strong> — aparece sozinho em
+                    aparelhos Apple
                   </p>
                 </div>
               </div>
@@ -221,7 +232,7 @@ export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 font-medium">
                 <QrCode className="h-4 w-4 text-primary" />
-                Asaas (PIX)
+                Asaas (PIX e cartão)
               </div>
               <Badge variant={asaasConfigured ? "secondary" : "outline"}>
                 {asaasConfigured ? "Configurado" : "Não configurado"}
@@ -230,7 +241,8 @@ export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
 
             <p className="text-xs text-muted-foreground">
               Crie a chave no painel do Asaas em <strong>Integrações → Chaves de API</strong>.
-              Cobranças PIX têm taxa a partir de 0,99%.
+              Cobranças PIX têm taxa a partir de 0,99%; o cartão é cobrado pelo
+              link de pagamento do próprio Asaas.
             </p>
 
             <Field>
@@ -314,7 +326,7 @@ export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 font-medium">
                 <CreditCard className="h-4 w-4 text-primary" />
-                Stripe (Cartão e Apple Pay)
+                Stripe (Apple Pay)
               </div>
               <Badge variant={stripeConfigured ? "secondary" : "outline"}>
                 {stripeConfigured ? "Configurado" : "Não configurado"}
@@ -323,9 +335,9 @@ export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
 
             <p className="text-xs text-muted-foreground">
               Crie as chaves no Dashboard do Stripe em{" "}
-              <strong>Developers → API keys</strong>. Cartão tem taxa de 3,99% +
-              R$0,39; o Apple Pay e o Google Pay aparecem automaticamente no
-              checkout em aparelhos compatíveis.
+              <strong>Developers → API keys</strong>. Por enquanto só o Apple
+              Pay passa por aqui (taxa de 3,99% + R$0,39); PIX e cartão ficam
+              no Asaas.
             </p>
 
             <div className="grid gap-4 md:grid-cols-2">

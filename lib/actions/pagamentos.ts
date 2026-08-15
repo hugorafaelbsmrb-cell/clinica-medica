@@ -150,7 +150,7 @@ export async function testPaymentGateway(input: {
 
 /**
  * Gera uma cobrança vinculada a um lançamento de receita pendente.
- * O gateway é escolhido pelo meio de pagamento (PIX → Asaas, cartão e
+ * O gateway é escolhido pelo meio de pagamento (PIX e cartão → Asaas;
  * Apple Pay → Stripe). Se já existir cobrança aberta do mesmo meio,
  * retorna o link existente em vez de duplicar.
  */

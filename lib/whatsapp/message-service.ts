@@ -59,12 +59,19 @@ export async function enqueueMessage(
 
 /**
  * Envio imediato (sem passar pelo cron): usado quando a mensagem não pode
- * esperar, como o aviso "médico a caminho". Registra na tabela Message o
- * resultado (ENVIADA/FALHA) para histórico no painel WhatsApp.
+ * esperar, como o aviso "médico a caminho" e as mensagens do fluxo de
+ * pagamento (link de pagamento, confirmação da consulta e aviso de pagamento
+ * recebido). Registra na tabela Message o resultado (ENVIADA/FALHA) para
+ * histórico no painel WhatsApp.
  */
 export async function sendImmediateMessage(
   patientId: string,
-  type: "MEDICO_A_CAMINHO" | "MANUAL",
+  type:
+    | "MEDICO_A_CAMINHO"
+    | "MANUAL"
+    | "LINK_PAGAMENTO"
+    | "CONFIRMACAO_AGENDAMENTO"
+    | "PAGAMENTO_CONFIRMADO",
   content: string,
   attendanceId?: string
 ): Promise<{ ok: boolean; error?: string }> {
@@ -236,8 +243,8 @@ export async function queueDueFollowUps(now = new Date()): Promise<number> {
 }
 
 /**
- * Confirmação de agendamento: enfileira a mensagem com os dados da consulta
- * e o link público para remarcação.
+ * Confirmação de agendamento: envia imediatamente a mensagem com os dados
+ * da consulta e o link público para remarcação.
  */
 export async function queueAppointmentConfirmation(
   patientId: string,
@@ -266,7 +273,12 @@ export async function queueAppointmentConfirmation(
         { locale: ptBR }
       )} às ${format(attendance.scheduledAt, "HH:mm", { locale: ptBR })}. Se precisar remarcar, acesse: ${manageLink}`
 
-  await enqueueMessage(patientId, "CONFIRMACAO_AGENDAMENTO", content, new Date(), attendance.id)
+  await sendImmediateMessage(
+    patientId,
+    "CONFIRMACAO_AGENDAMENTO",
+    content,
+    attendance.id
+  )
 }
 
 /**
@@ -339,6 +351,7 @@ export async function processPendingMessages(
       direction: "OUT",
     },
     include: { patient: true },
+    orderBy: { createdAt: "asc" },
     take: 100,
   })
 

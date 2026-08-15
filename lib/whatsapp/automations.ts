@@ -19,7 +19,7 @@
 import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
 import { getWhatsAppProvider, normalizePhone } from "./provider"
-import { renderTemplate, enqueueMessage } from "./message-service"
+import { renderTemplate, enqueueMessage, sendImmediateMessage } from "./message-service"
 
 export type AutomationCounts = {
   cadastro: number
@@ -380,6 +380,7 @@ export async function queueAutomationMessages(
 /**
  * Envia o link de pagamento por WhatsApp assim que o horário é reservado
  * no agendamento online (o próprio serviço checa consentimento LGPD).
+ * Envio imediato para o paciente não esperar o ciclo do cron.
  */
 export async function queuePaymentLinkMessage(
   patientId: string,
@@ -399,7 +400,7 @@ export async function queuePaymentLinkMessage(
     clinic.autoPagamentoLinkMsg?.trim() || defaultAutomationMessage("linkpagamento")
   const link = payment.checkoutUrl ?? payment.pixCopiaCola ?? ""
 
-  await enqueueMessage(
+  await sendImmediateMessage(
     patientId,
     "LINK_PAGAMENTO",
     renderTemplate(msg, {
@@ -408,8 +409,7 @@ export async function queuePaymentLinkMessage(
         minimumFractionDigits: 2,
       }),
       link,
-    }),
-    new Date()
+    })
   )
 }
 

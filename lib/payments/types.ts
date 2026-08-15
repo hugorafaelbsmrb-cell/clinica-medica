@@ -3,8 +3,8 @@
  *
  * Rotas por meio de pagamento (transparente para o usuário):
  *   PIX        → Asaas (liberado na hora, 0,99% por cobrança)
- *   CARTAO     → Stripe (3,99% + R$0,39, com Apple Pay/Google Pay no checkout)
- *   APPLE_PAY  → Stripe
+ *   CARTAO     → Asaas (link de pagamento com checkout do cartão)
+ *   APPLE_PAY  → Stripe (checkout hospedado; só a carteira Apple por enquanto)
  */
 export type PaymentProviderType = "ASAAS" | "STRIPE" | "MOCK"
 export type PaymentMethodType = "PIX" | "CARTAO" | "APPLE_PAY"

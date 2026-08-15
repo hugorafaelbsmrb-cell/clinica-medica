@@ -20,6 +20,7 @@ import {
   Loader2,
   LocateFixed,
   QrCode,
+  Wallet,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -201,7 +202,9 @@ export function CadastroWizard() {
   const [successDate, setSuccessDate] = useState("")
 
   // Pagamento antecipado do agendamento online
-  const [metodoPagamento, setMetodoPagamento] = useState<"PIX" | "CARTAO">("PIX")
+  const [metodoPagamento, setMetodoPagamento] = useState<
+    "PIX" | "CARTAO" | "APPLE_PAY"
+  >("PIX")
   const [paymentData, setPaymentData] = useState<
     AgendarState["payment"] | null
   >(null)
@@ -655,7 +658,12 @@ export function CadastroWizard() {
                   }
                 >
                   <CreditCard className="h-5 w-5" />
-                  Pagar agora{paymentData.method === "CARTAO" ? " com cartão" : ""}
+                  Pagar agora
+                  {paymentData.method === "CARTAO"
+                    ? " com cartão"
+                    : paymentData.method === "APPLE_PAY"
+                      ? " com Apple Pay"
+                      : ""}
                 </Button>
               )}
 
@@ -1424,11 +1432,30 @@ export function CadastroWizard() {
                         <CreditCard className="h-5 w-5" />
                         Cartão
                       </button>
+                      {/* Apple Pay só com o Stripe configurado — no modo teste
+                          (sem chave) a opção fica oculta. */}
+                      {agenda?.applePayEnabled && (
+                        <button
+                          type="button"
+                          onClick={() => setMetodoPagamento("APPLE_PAY")}
+                          className={cn(
+                            "col-span-2 flex h-16 items-center justify-center gap-2 rounded-xl border-2 text-lg font-semibold transition-colors",
+                            metodoPagamento === "APPLE_PAY"
+                              ? "border-primary bg-primary/5 text-primary"
+                              : "border-border hover:bg-muted"
+                          )}
+                        >
+                          <Wallet className="h-5 w-5" />
+                          Apple Pay
+                        </button>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground">
                       {metodoPagamento === "PIX"
                         ? "Você verá o QR code na próxima tela."
-                        : "No cartão, Apple Pay e Google Pay aparecem na tela de pagamento."}
+                        : metodoPagamento === "APPLE_PAY"
+                          ? "Disponível em aparelhos Apple com cartão na carteira."
+                          : "Você será direcionado para pagar com seu cartão."}
                     </p>
                   </div>
                 )}

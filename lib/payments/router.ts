@@ -3,8 +3,8 @@
  *
  * Decide o gateway pelo meio de pagamento (transparente para o usuário):
  *   PIX       → Asaas   (copia-e-cola + QR code)
- *   CARTAO    → Stripe  (checkout hospedado; Apple Pay/Google Pay aparecem)
- *   APPLE_PAY → Stripe
+ *   CARTAO    → Asaas   (link de pagamento com checkout do cartão)
+ *   APPLE_PAY → Stripe  (checkout hospedado)
  *
  * Também concentra a baixa automática: qualquer webhook confirmado dos dois
  * gateways é normalizado aqui e baixa o lançamento do Financeiro sozinho.
@@ -18,8 +18,8 @@ import {
   getStripeCheckoutStatus,
 } from "@/lib/payments/stripe"
 import {
-  enqueueMessage,
   renderTemplate,
+  sendImmediateMessage,
   queueAppointmentConfirmation,
 } from "@/lib/whatsapp/message-service"
 import { defaultAutomationMessage } from "@/lib/whatsapp/automations"
@@ -34,7 +34,9 @@ import type {
 
 /** Qual gateway atende cada meio de pagamento. */
 export function providerForMethod(method: PaymentMethodType): PaymentProviderType {
-  return method === "PIX" ? "ASAAS" : "STRIPE"
+  // PIX e cartão ficam no Asaas; só o Apple Pay passa pelo Stripe por
+  // enquanto (o Stripe exige registro de domínio para as carteiras digitais).
+  return method === "APPLE_PAY" ? "STRIPE" : "ASAAS"
 }
 
 /** Cria a cobrança no gateway certo e registra no banco. */
@@ -57,8 +59,9 @@ export async function createCharge(
     provider === "ASAAS" ? !settings.asaasApiKey : !settings.stripeSecretKey
   const effectiveProvider: PaymentProviderType = missing ? "MOCK" : provider
 
-  // Prazo da cobrança: PIX (Asaas) vence no fim do dia do vencimento;
-  // checkout do Stripe expira em 24h. MOCK fica 48h para dar tempo de testar.
+  // Prazo da cobrança: Asaas (PIX/cartão) vence no fim do dia do
+  // vencimento; checkout do Stripe expira em 24h. MOCK fica 48h para dar
+  // tempo de testar.
   const endOfToday = new Date()
   endOfToday.setHours(23, 59, 59, 999)
   const expiresAt = missing
@@ -275,6 +278,7 @@ async function applyPaymentPaid(paymentId: string, paidAt: Date): Promise<void> 
     },
   })
   if (!payment) return
+  if (payment.status === "PAGO") return // já baixada — evita mensagens duplicadas
 
   const methodLabel: Record<PaymentMethodType, string> = {
     PIX: "PIX",
@@ -344,7 +348,8 @@ async function applyPaymentPaid(paymentId: string, paidAt: Date): Promise<void> 
 
 /**
  * Aviso "pagamento confirmado" via WhatsApp, configurável no painel de
- * Automações (desligado = não envia nada).
+ * Automações (desligado = não envia nada). Envio imediato, na sequência
+ * da confirmação da consulta.
  */
 async function queuePaymentConfirmedMessage(
   patientId: string,
@@ -360,14 +365,13 @@ async function queuePaymentConfirmedMessage(
     clinic.autoPagamentoConfirmadoMsg?.trim() ||
     defaultAutomationMessage("pagamentoconfirmado")
 
-  await enqueueMessage(
+  await sendImmediateMessage(
     patientId,
     "PAGAMENTO_CONFIRMADO",
     renderTemplate(msg, {
       nome: patient.name.split(" ")[0],
       valor: amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 }),
-    }),
-    new Date()
+    })
   )
 }
 

@@ -1,8 +1,13 @@
 /**
- * Provedor Asaas — cobranças PIX.
+ * Provedor Asaas — cobranças PIX e cartão de crédito.
  *
  * API REST simples (https://api.asaas.com/v3) com autenticação pelo header
  * `access_token`. Não precisa de SDK: usamos fetch direto.
+ *
+ * Meios de pagamento:
+ *  - PIX: QR code + copia-e-cola já vêm na resposta;
+ *  - cartão: o Asaas devolve o link de pagamento (invoiceUrl) com o
+ *    checkout do cartão hospedado por ele.
  * Documentação: https://docs.asaas.com/reference/api-de-pagamentos
  */
 import type {
@@ -31,17 +36,24 @@ function headers(apiKey: string): Record<string, string> {
   }
 }
 
-/** Cria uma cobrança PIX (QR code + copia-e-cola já vêm na resposta). */
+/**
+ * Cria uma cobrança no Asaas.
+ * PIX → QR code + copia-e-cola na resposta; cartão → link de pagamento.
+ */
 export async function createAsaasCharge(
   input: CreateChargeInput,
   apiKey: string
 ): Promise<CreateChargeResult> {
+  if (input.method === "APPLE_PAY") {
+    return { ok: false, error: "Apple Pay não é cobrado pelo Asaas" }
+  }
+
   try {
     const today = new Date()
     const dueDate = today.toISOString().slice(0, 10) // vence hoje (23:59)
 
     const body: Record<string, unknown> = {
-      billingType: "PIX",
+      billingType: input.method === "CARTAO" ? "CREDIT_CARD" : "PIX",
       value: Number((input.amountCents / 100).toFixed(2)),
       dueDate,
       description: input.description.slice(0, 500),

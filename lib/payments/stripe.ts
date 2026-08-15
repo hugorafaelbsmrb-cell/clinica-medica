@@ -1,9 +1,10 @@
 /**
- * Provedor Stripe — cobranças com cartão de crédito e Apple Pay.
+ * Provedor Stripe — cobranças Apple Pay.
  *
- * Usa o Checkout hospedado do Stripe: com cartão habilitado, o Apple Pay e o
- * Google Pay aparecem automaticamente nos aparelhos compatíveis — o Stripe
- * gerencia os certificados do Apple, sem trabalho extra para o lojista.
+ * Usa o Checkout hospedado do Stripe: com o meio "card" habilitado, o
+ * Apple Pay aparece automaticamente nos aparelhos compatíveis — o Stripe
+ * gerencia os certificados da Apple, sem trabalho extra para o lojista.
+ * Por enquanto só o Apple Pay passa por aqui (PIX e cartão ficam no Asaas).
  * Documentação: https://docs.stripe.com/payments/checkout
  */
 import Stripe from "stripe"
@@ -22,11 +23,15 @@ function client(secretKey: string): Stripe {
   return new Stripe(secretKey)
 }
 
-/** Cria um Checkout Session (cartão + Apple Pay/Google Pay). */
+/** Cria um Checkout Session para Apple Pay (carteira aparece sozinha). */
 export async function createStripeCheckout(
   input: CreateChargeInput,
   secretKey: string
 ): Promise<CreateChargeResult> {
+  if (input.method !== "APPLE_PAY") {
+    return { ok: false, error: "Só o Apple Pay é cobrado pelo Stripe por enquanto" }
+  }
+
   try {
     const stripe = client(secretKey)
     const session = await stripe.checkout.sessions.create({
@@ -41,8 +46,8 @@ export async function createStripeCheckout(
           },
         },
       ],
-      // Com "card" habilitado, Apple Pay e Google Pay aparecem sozinhos
-      // no checkout em aparelhos compatíveis.
+      // Com "card" habilitado, o Apple Pay aparece sozinho no checkout
+      // em aparelhos compatíveis.
       payment_method_types: ["card"],
       success_url: `${APP_URL}/pagamento/status?r=ok`,
       cancel_url: `${APP_URL}/pagamento/status?r=cancel`,
