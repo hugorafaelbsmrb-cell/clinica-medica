@@ -7,6 +7,9 @@ services:
     container_name: clinica-medica
     restart: unless-stopped
     env_file: .env
+    environment:
+      # Agenda, lembretes e mensagens no fuso da clínica (Brasília).
+      TZ: America/Sao_Paulo
     ports:
       - "8080:3000"
     healthcheck:
@@ -24,6 +27,8 @@ services:
     depends_on:
       - app
     env_file: .env
+    environment:
+      TZ: America/Sao_Paulo
     entrypoint:
       - /bin/sh
       - -c

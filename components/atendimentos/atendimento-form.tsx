@@ -290,7 +290,16 @@ export function AttendanceForm({
               <Input
                 type="datetime-local"
                 name="scheduledAt"
-                defaultValue={new Date().toISOString().slice(0, 16)}
+                defaultValue={(() => {
+                  // Fuso local (Brasília): evita o -3h do toISOString (UTC).
+                  const d = new Date()
+                  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+                    2,
+                    "0"
+                  )}-${String(d.getDate()).padStart(2, "0")}T${String(
+                    d.getHours()
+                  ).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+                })()}
                 required
               />
             </Field>

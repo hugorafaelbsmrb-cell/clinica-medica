@@ -3,7 +3,8 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 # libc6-compat/openssl: exigidos pelos engines nativos do Prisma no alpine.
-RUN apk add --no-cache libc6-compat openssl
+# tzdata: resolução do TZ=America/Sao_Paulo (agenda/lembretes no fuso da clínica).
+RUN apk add --no-cache libc6-compat openssl tzdata
 COPY package.json package-lock.json ./
 # O schema do Prisma precisa estar presente antes do npm ci,
 # pois o postinstall roda `prisma generate`.
@@ -23,7 +24,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
-RUN apk add --no-cache libc6-compat openssl
+RUN apk add --no-cache libc6-compat openssl tzdata
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
