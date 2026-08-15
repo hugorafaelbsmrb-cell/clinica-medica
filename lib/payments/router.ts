@@ -51,29 +51,25 @@ export async function createCharge(
   const provider = providerForMethod(input.method)
   const settings = await getPaymentSettings()
 
-  // Gateway sem chave configurada → não deixa criar cobrança "fantasma".
+  // Gateway sem chave configurada → cobrança em modo teste (MOCK) para não
+  // travar o fluxo enquanto a clínica não libera o cadastro junto ao gateway.
   const missing =
     provider === "ASAAS" ? !settings.asaasApiKey : !settings.stripeSecretKey
-  if (missing) {
-    return {
-      ok: false,
-      error:
-        provider === "ASAAS"
-          ? "Chave do Asaas não configurada — configure em Configurações → Pagamentos"
-          : "Chave do Stripe não configurada — configure em Configurações → Pagamentos",
-    }
-  }
+  const effectiveProvider: PaymentProviderType = missing ? "MOCK" : provider
 
   // Prazo da cobrança: PIX (Asaas) vence no fim do dia do vencimento;
-  // checkout do Stripe expira em 24h. Usado pelo cron para liberar horários.
+  // checkout do Stripe expira em 24h. MOCK fica 48h para dar tempo de testar.
   const endOfToday = new Date()
   endOfToday.setHours(23, 59, 59, 999)
-  const expiresAt =
-    provider === "ASAAS" ? endOfToday : new Date(Date.now() + 24 * 60 * 60 * 1000)
+  const expiresAt = missing
+    ? new Date(Date.now() + 48 * 60 * 60 * 1000)
+    : provider === "ASAAS"
+      ? endOfToday
+      : new Date(Date.now() + 24 * 60 * 60 * 1000)
 
   const payment = await prisma.payment.create({
     data: {
-      provider,
+      provider: effectiveProvider,
       method: input.method,
       amount: Number((input.amountCents / 100).toFixed(2)),
       status: "PENDENTE",
@@ -83,6 +79,31 @@ export async function createCharge(
       expiresAt,
     },
   })
+
+  // Modo teste: não chama gateway nenhum — cria a cobrança simulada e
+  // devolve um payload PIX fictício para o fluxo seguir normalmente.
+  if (missing) {
+    const fakePix = `PIX-MOCK-${payment.id}`
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        providerPaymentId: `mock-${payment.id}`,
+        pixCopiaCola: fakePix,
+        externalStatus: "MOCK",
+      },
+    })
+    return {
+      ok: true,
+      mock: true,
+      paymentId: payment.id,
+      provider: "MOCK",
+      providerPaymentId: `mock-${payment.id}`,
+      pixCopiaCola: fakePix,
+      checkoutUrl: undefined,
+      pixQrCodeUrl: undefined,
+      externalStatus: "MOCK",
+    }
+  }
 
   const fullInput: CreateChargeInput = {
     provider,
@@ -126,6 +147,12 @@ export async function refreshPaymentStatus(
 ): Promise<{ success: boolean; message: string; status?: string }> {
   const payment = await prisma.payment.findUnique({ where: { id: paymentId } })
   if (!payment) return { success: false, message: "Cobrança não encontrada" }
+  if (payment.provider === "MOCK") {
+    return {
+      success: false,
+      message: "Cobrança em modo teste — use a simulação de pagamento",
+    }
+  }
   if (!payment.providerPaymentId) {
     return {
       success: false,
@@ -393,4 +420,50 @@ export async function sweepExpiredPayments(now = new Date()): Promise<number> {
     }
   }
   return released
+}
+
+/**
+ * Simula a confirmação de uma cobrança em modo teste (provider MOCK), sem
+ * tocar em gateway nenhum. Roda exatamente o mesmo caminho de baixa de um
+ * webhook real (applyPaymentPaid): confirma o horário reservado, baixa o
+ * lançamento financeiro e dispara as mensagens de WhatsApp.
+ * Para cobranças ligadas a horário, exige o token público do horário.
+ */
+export async function simulatePaymentPaid(
+  paymentId: string,
+  input?: { attendanceId?: string; token?: string }
+): Promise<{ success: boolean; message: string; scheduledAt?: string }> {
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    include: {
+      attendance: {
+        select: { id: true, cancelToken: true, scheduledAt: true },
+      },
+    },
+  })
+  if (!payment) return { success: false, message: "Cobrança não encontrada" }
+  if (payment.provider !== "MOCK") {
+    return { success: false, message: "Esta cobrança não é de teste" }
+  }
+  if (payment.status !== "PENDENTE") {
+    return { success: false, message: "Esta cobrança já foi finalizada" }
+  }
+  // Cobrança ligada a horário reservado: exige o token público do horário
+  if (payment.attendanceId) {
+    const valid =
+      input?.attendanceId === payment.attendanceId &&
+      !!input?.token &&
+      input.token === payment.attendance?.cancelToken
+    if (!valid) {
+      return { success: false, message: "Dados de confirmação inválidos" }
+    }
+  }
+
+  await applyPaymentPaid(payment.id, new Date())
+
+  return {
+    success: true,
+    message: "Pagamento de teste confirmado!",
+    scheduledAt: payment.attendance?.scheduledAt.toISOString(),
+  }
 }

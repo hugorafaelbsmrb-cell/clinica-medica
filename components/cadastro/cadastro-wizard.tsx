@@ -15,6 +15,7 @@ import {
   Clock,
   Copy,
   CreditCard,
+  FlaskConical,
   History,
   Loader2,
   LocateFixed,
@@ -40,6 +41,7 @@ import {
   getConsultasByCpf,
   getPublicAgenda,
   lookupPatientByCpf,
+  simularPagamentoAgendamento,
   verificarPagamentoAgendamento,
   type AgendarState,
   type ConsultasPublicasResult,
@@ -489,6 +491,23 @@ export function CadastroWizard() {
     })
   }
 
+  // Simula a aprovação de uma cobrança em modo teste (gateway sem chave)
+  function simularPagamento() {
+    if (!paymentData) return
+    startAgendar(async () => {
+      const result = await simularPagamentoAgendamento({
+        attendanceId: paymentData.attendanceId,
+        token: paymentData.token,
+      })
+      if (result.success) {
+        setSuccessDate(result.scheduledAt ?? paymentDate)
+        setPhase("sucesso")
+      } else {
+        toast.error(result.message)
+      }
+    })
+  }
+
   // Copia para a área de transferência (com fallback para navegadores antigos)
   async function copiarPagamento(text: string) {
     try {
@@ -565,69 +584,102 @@ export function CadastroWizard() {
             <p className="mt-1 text-base font-medium">Valor: R$ {valor}</p>
           </div>
 
-          {paymentData.method === "PIX" && paymentData.pixQrCodeUrl && (
-            <div className="flex flex-col items-center gap-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={paymentData.pixQrCodeUrl}
-                alt="QR Code PIX"
-                className="h-56 w-56 rounded-xl border-2 border-border bg-white p-2"
-              />
-              {paymentData.pixCopiaCola && (
-                <div className="flex w-full flex-col gap-2">
-                  <p className="break-all rounded-lg border bg-muted/40 p-2 text-xs text-muted-foreground">
-                    {paymentData.pixCopiaCola}
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => copiarPagamento(paymentData.pixCopiaCola ?? "")}
-                    className="h-12 text-base"
-                  >
-                    <Copy className="h-5 w-5" />
-                    Copiar código PIX
-                  </Button>
+          {paymentData.mock ? (
+            <div className="flex flex-col gap-3">
+              <div className="rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 p-4 text-center">
+                <p className="text-sm font-medium text-primary">
+                  Modo teste: o pagamento está simulado até a clínica ativar o
+                  gateway (Asaas/Stripe).
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Nenhum valor real é cobrado nesta etapa.
+                </p>
+              </div>
+              <Button
+                type="button"
+                className="h-14 w-full text-lg"
+                onClick={simularPagamento}
+                disabled={agendarPending}
+              >
+                {agendarPending ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <FlaskConical className="h-5 w-5" />
+                )}
+                Simular pagamento aprovado
+              </Button>
+              <p className="text-center text-sm text-muted-foreground">
+                Ao simular, a consulta é confirmada e você recebe a confirmação
+                pelo WhatsApp.
+              </p>
+            </div>
+          ) : (
+            <>
+              {paymentData.method === "PIX" && paymentData.pixQrCodeUrl && (
+                <div className="flex flex-col items-center gap-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={paymentData.pixQrCodeUrl}
+                    alt="QR Code PIX"
+                    className="h-56 w-56 rounded-xl border-2 border-border bg-white p-2"
+                  />
+                  {paymentData.pixCopiaCola && (
+                    <div className="flex w-full flex-col gap-2">
+                      <p className="break-all rounded-lg border bg-muted/40 p-2 text-xs text-muted-foreground">
+                        {paymentData.pixCopiaCola}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => copiarPagamento(paymentData.pixCopiaCola ?? "")}
+                        className="h-12 text-base"
+                      >
+                        <Copy className="h-5 w-5" />
+                        Copiar código PIX
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
+
+              {paymentData.checkoutUrl && (
+                <Button
+                  type="button"
+                  className="h-14 w-full text-lg"
+                  render={
+                    <a
+                      href={paymentData.checkoutUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    />
+                  }
+                >
+                  <CreditCard className="h-5 w-5" />
+                  Pagar agora{paymentData.method === "CARTAO" ? " com cartão" : ""}
+                </Button>
+              )}
+
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={verificarPagamentoAgora}
+                disabled={agendarPending}
+                className="h-12 text-base"
+              >
+                {agendarPending ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <BadgeCheck className="h-5 w-5" />
+                )}
+                Já paguei — verificar
+              </Button>
+
+              <p className="text-center text-sm text-muted-foreground">
+                Assim que o pagamento for confirmado, sua consulta é confirmada
+                automaticamente e você recebe a confirmação pelo WhatsApp.
+              </p>
+            </>
           )}
-
-          {paymentData.checkoutUrl && (
-            <Button
-              type="button"
-              className="h-14 w-full text-lg"
-              render={
-                <a
-                  href={paymentData.checkoutUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                />
-              }
-            >
-              <CreditCard className="h-5 w-5" />
-              Pagar agora{paymentData.method === "CARTAO" ? " com cartão" : ""}
-            </Button>
-          )}
-
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={verificarPagamentoAgora}
-            disabled={agendarPending}
-            className="h-12 text-base"
-          >
-            {agendarPending ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <BadgeCheck className="h-5 w-5" />
-            )}
-            Já paguei — verificar
-          </Button>
-
-          <p className="text-center text-sm text-muted-foreground">
-            Assim que o pagamento for confirmado, sua consulta é confirmada
-            automaticamente e você recebe a confirmação pelo WhatsApp.
-          </p>
         </CardContent>
       </Card>
     )

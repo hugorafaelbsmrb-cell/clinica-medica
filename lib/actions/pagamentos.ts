@@ -7,13 +7,10 @@ import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import {
   createCharge,
-  providerForMethod,
   refreshPaymentStatus,
+  simulatePaymentPaid,
 } from "@/lib/payments/router"
-import {
-  getPaymentSettings,
-  invalidatePaymentSettingsCache,
-} from "@/lib/payments/settings"
+import { invalidatePaymentSettingsCache } from "@/lib/payments/settings"
 import { testAsaasConnection } from "@/lib/payments/asaas"
 import { testStripeConnection } from "@/lib/payments/stripe"
 import type { PaymentMethodType } from "@/lib/payments/types"
@@ -32,6 +29,8 @@ export type CreatePaymentResult = {
   pixQrCodeUrl?: string
   method?: PaymentMethodType
   provider?: string
+  /** true = cobrança em modo teste (gateway sem chave configurada). */
+  mock?: boolean
 }
 
 const paymentKeysSchema = z.object({
@@ -175,8 +174,6 @@ export async function createPaymentForEntry(input: {
     return { success: false, message: "Este lançamento já está pago" }
   }
 
-  const provider = providerForMethod(input.method)
-
   // Reaproveita cobrança aberta do mesmo meio (evita links duplicados).
   if (entry.payment && entry.payment.status === "PENDENTE") {
     if (entry.payment.method === input.method && entry.payment.checkoutUrl) {
@@ -190,16 +187,6 @@ export async function createPaymentForEntry(input: {
         method: entry.payment.method,
         provider: entry.payment.provider,
       }
-    }
-  }
-
-  const settings = await getPaymentSettings()
-  const keyConfigured =
-    provider === "ASAAS" ? !!settings.asaasApiKey : !!settings.stripeSecretKey
-  if (!keyConfigured) {
-    return {
-      success: false,
-      message: `Gateway ${provider === "ASAAS" ? "Asaas" : "Stripe"} não configurado — configure em Configurações → Pagamentos`,
     }
   }
 
@@ -240,6 +227,7 @@ export async function createPaymentForEntry(input: {
       pixQrCodeUrl: result.pixQrCodeUrl,
       method: input.method,
       provider: result.provider,
+      mock: result.mock === true,
     }
   }
   return {
@@ -249,6 +237,7 @@ export async function createPaymentForEntry(input: {
     checkoutUrl: result.checkoutUrl,
     method: input.method,
     provider: result.provider,
+    mock: result.mock === true,
   }
 }
 
@@ -258,7 +247,18 @@ export async function refreshPayment(
 ): Promise<ActionState> {
   const session = await auth()
   if (!session?.user) return { success: false, message: "Sessão expirada" }
-  requireRole(session, ["ADMIN", "FINANCEIRO"])
+  requireRole(session, ["ADMIN", "FINANCEIRO", "MEDICO", "SECRETARIA"])
+
+  // Cobrança em modo teste (gateway sem chave): simula a aprovação no
+  // lugar da consulta ao gateway.
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId } })
+  if (!payment) return { success: false, message: "Cobrança não encontrada" }
+  if (payment.provider === "MOCK") {
+    const result = await simulatePaymentPaid(paymentId)
+    revalidatePath("/financeiro")
+    revalidatePath(`/pacientes/${payment.patientId ?? ""}`)
+    return { success: result.success, message: result.message }
+  }
 
   const result = await refreshPaymentStatus(paymentId)
   revalidatePath("/financeiro")
@@ -299,17 +299,6 @@ export async function createStandaloneCharge(input: {
     where: { id: parsed.data.patientId },
   })
   if (!patient) return { success: false, message: "Paciente não encontrado" }
-
-  const settings = await getPaymentSettings()
-  const provider = providerForMethod(parsed.data.method)
-  const keyConfigured =
-    provider === "ASAAS" ? !!settings.asaasApiKey : !!settings.stripeSecretKey
-  if (!keyConfigured) {
-    return {
-      success: false,
-      message: `Gateway ${provider === "ASAAS" ? "Asaas" : "Stripe"} não configurado — configure em Configurações → Pagamentos`,
-    }
-  }
 
   // Lançamento vinculado → a baixa automática do webhook vale para ambos
   const entry = await prisma.financialEntry.create({
@@ -371,5 +360,6 @@ export async function createStandaloneCharge(input: {
     pixQrCodeUrl: result.pixQrCodeUrl,
     method: parsed.data.method,
     provider: result.provider,
+    mock: result.mock === true,
   }
 }

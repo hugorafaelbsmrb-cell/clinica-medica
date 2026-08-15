@@ -17,7 +17,7 @@ import { getAvailableSlots, isSlotFree } from "@/lib/agenda/service"
 import { queueAppointmentConfirmation } from "@/lib/whatsapp/message-service"
 import { queuePaymentLinkMessage } from "@/lib/whatsapp/automations"
 import { getAppointmentSettings } from "@/lib/agenda/service"
-import { createCharge } from "@/lib/payments/router"
+import { createCharge, simulatePaymentPaid } from "@/lib/payments/router"
 import { getPaymentSettings } from "@/lib/payments/settings"
 import type { PaymentMethodType } from "@/lib/payments/types"
 
@@ -173,6 +173,8 @@ export type AgendarState = {
     checkoutUrl: string | null
     pixCopiaCola: string | null
     pixQrCodeUrl: string | null
+    /** true = cobrança em modo teste (gateway sem chave configurada). */
+    mock: boolean
   }
 }
 
@@ -216,20 +218,10 @@ export async function agendarPublico(
   }
 
   // Preço configurado = agendamento exige pagamento antes de confirmar.
+  // Sem chave no gateway, a cobrança sai em modo teste (MOCK) — ver router.
   const paymentSettings = await getPaymentSettings()
   const price = paymentSettings.consultaPrecoPresencial
   const cobrar = price > 0
-  if (cobrar) {
-    const missing =
-      method === "PIX" ? !paymentSettings.asaasApiKey : !paymentSettings.stripeSecretKey
-    if (missing) {
-      return {
-        success: false,
-        message:
-          "O pagamento online está indisponível no momento. Fale com a clínica pelo WhatsApp para confirmar seu horário.",
-      }
-    }
-  }
 
   try {
     // Re-checa se o horário continua livre antes de confirmar
@@ -351,6 +343,7 @@ export async function agendarPublico(
           checkoutUrl: charge.checkoutUrl ?? null,
           pixCopiaCola: charge.pixCopiaCola ?? null,
           pixQrCodeUrl: charge.pixQrCodeUrl ?? null,
+          mock: charge.mock === true,
         },
       }
     }
@@ -412,6 +405,24 @@ export async function verificarPagamentoAgendamento(input: {
     return { pago: false, expirado: true }
   }
   return { pago: false }
+}
+
+/**
+ * Simula a aprovação de uma cobrança em modo teste (MOCK) para o horário
+ * reservado. Roda o mesmo caminho do webhook real: confirma a consulta e
+ * dispara as mensagens de WhatsApp. Exige o token público do horário.
+ */
+export async function simularPagamentoAgendamento(input: {
+  attendanceId: string
+  token: string
+}): Promise<{ success: boolean; message: string; scheduledAt?: string }> {
+  const payment = await prisma.payment.findFirst({
+    where: { attendanceId: input.attendanceId, status: "PENDENTE" },
+    orderBy: { createdAt: "desc" },
+  })
+  if (!payment) return { success: false, message: "Cobrança não encontrada" }
+
+  return simulatePaymentPaid(payment.id, input)
 }
 
 export type CancelState = {

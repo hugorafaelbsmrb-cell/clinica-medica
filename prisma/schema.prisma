@@ -88,6 +88,7 @@ enum EntryStatus {
 enum PaymentProvider {
   ASAAS
   STRIPE
+  MOCK // modo teste: cobrança simulada enquanto o gateway não tem chave configurada
 }
 
 enum PaymentMethod {

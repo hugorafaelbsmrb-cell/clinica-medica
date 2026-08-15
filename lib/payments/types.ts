@@ -6,7 +6,7 @@
  *   CARTAO     → Stripe (3,99% + R$0,39, com Apple Pay/Google Pay no checkout)
  *   APPLE_PAY  → Stripe
  */
-export type PaymentProviderType = "ASAAS" | "STRIPE"
+export type PaymentProviderType = "ASAAS" | "STRIPE" | "MOCK"
 export type PaymentMethodType = "PIX" | "CARTAO" | "APPLE_PAY"
 
 export type CreateChargeInput = {
@@ -27,6 +27,8 @@ export type CreateChargeResult = {
   pixQrCodeUrl?: string
   externalStatus?: string
   error?: string
+  /** true quando a cobrança foi criada em modo teste (gateway sem chave). */
+  mock?: boolean
 }
 
 /** Evento normalizado de webhook — os dois gateways viram o mesmo formato. */

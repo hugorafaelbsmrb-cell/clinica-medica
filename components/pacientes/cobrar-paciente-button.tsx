@@ -7,6 +7,7 @@ import {
   Copy,
   CreditCard,
   ExternalLink,
+  FlaskConical,
   Loader2,
   MessageCircle,
   QrCode,
@@ -26,6 +27,7 @@ import {
 import { Field, FieldLabel } from "@/components/ui/field"
 import {
   createStandaloneCharge,
+  refreshPayment,
   type CreatePaymentResult,
 } from "@/lib/actions/pagamentos"
 import { cn } from "@/lib/utils"
@@ -94,6 +96,7 @@ export function CobrarPacienteButton({
   const [result, setResult] = useState<CreatePaymentResult | null>(null)
   const [error, setError] = useState("")
   const [pending, startCharge] = useTransition()
+  const [pendingCheck, startCheck] = useTransition()
 
   function reset() {
     setResult(null)
@@ -136,6 +139,21 @@ export function CobrarPacienteButton({
     const ok = await copyText(text)
     if (ok) toast.success(`${label} copiado`)
     else toast.error("Não foi possível copiar — selecione manualmente")
+  }
+
+  // Simula a aprovação de uma cobrança em modo teste (gateway sem chave)
+  function handleSimulate() {
+    if (!result?.paymentId) return
+    startCheck(async () => {
+      const res = await refreshPayment(result.paymentId ?? "")
+      if (res.success) {
+        toast.success("Pagamento de teste confirmado — lançamento baixado")
+        setOpen(false)
+        router.refresh()
+      } else {
+        toast.error(res.message)
+      }
+    })
   }
 
   const shareText = (url: string) =>
@@ -276,6 +294,28 @@ export function CobrarPacienteButton({
                 >
                   <MessageCircle className="h-4 w-4" />
                   Enviar pelo WhatsApp
+                </Button>
+              </div>
+            )}
+
+            {result.mock && (
+              <div className="flex flex-col gap-2">
+                <p className="rounded-md border-2 border-dashed border-primary/40 bg-primary/5 p-3 text-xs text-muted-foreground">
+                  Modo teste: o gateway ainda não tem chave configurada. A
+                  simulação confirma o pagamento e baixa o lançamento no
+                  Financeiro — o caminho é o mesmo do webhook real.
+                </p>
+                <Button
+                  type="button"
+                  onClick={handleSimulate}
+                  disabled={pendingCheck}
+                >
+                  {pendingCheck ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FlaskConical className="h-4 w-4" />
+                  )}
+                  Simular pagamento aprovado
                 </Button>
               </div>
             )}
