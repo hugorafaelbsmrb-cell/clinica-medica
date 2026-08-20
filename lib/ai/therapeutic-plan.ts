@@ -1,7 +1,8 @@
 /**
  * Geração do resumo do plano terapêutico com IA.
  * Reúne diagnóstico, objetivos, orientações e prescrições e pede
- * um resumo objetivo, em linguagem acessível ao paciente.
+ * um resumo didático para a terceira idade: linguagem simples,
+ * frases curtas e emojis para guiar a leitura.
  */
 import { getAIProvider, type AIResult } from "./provider"
 
@@ -13,11 +14,13 @@ export type PlanInput = {
   prescriptions: string[]
 }
 
-const SYSTEM_PROMPT = `Você é um assistente médico que escreve resumos de planos terapêuticos para pacientes.
+const SYSTEM_PROMPT = `Você é um assistente médico que escreve resumos de planos terapêuticos para pacientes idosos (terceira idade).
 Regras:
-- Use linguagem simples e acessível, sem jargões técnicos.
-- O resumo deve ter no máximo 250 palavras.
+- Linguagem bem simples e acolhedora, frases curtas, palavras do dia a dia — como uma conversa com uma pessoa idosa.
+- Evite jargões médicos; quando precisar citar um termo técnico, explique em palavras simples.
+- Use um emoji no início de cada item para facilitar a leitura (ex.: 💊 para remédios, 🥗 para alimentação, 🚶 para exercícios, ⚠️ para cuidados).
 - Estruture em: 1) Entendendo sua condição, 2) Tratamento recomendado, 3) Orientações do dia a dia.
+- O resumo deve ter no máximo 250 palavras.
 - NÃO invente informações que não estejam nos dados fornecidos.
 - NÃO dê conselhos que substituam a orientação do médico.`
 
@@ -41,7 +44,7 @@ ${
     : "Medicamentos: nenhum."
 }
 
-Escreva o resumo do plano terapêutico deste paciente.`
+Escreva o resumo do plano terapêutico deste paciente, com emojis e linguagem simples para a terceira idade.`
 
   return provider.complete(SYSTEM_PROMPT, userPrompt)
 }

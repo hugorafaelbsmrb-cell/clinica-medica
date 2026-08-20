@@ -168,7 +168,7 @@ export async function approvePlan(planId: string): Promise<ActionState> {
       })
       const sent = await sendDocumentMessage(
         plan.patientId,
-        `Olá ${plan.patient.name.split(" ")[0]}! Seu plano terapêutico foi finalizado — segue o resumo em PDF. Qualquer dúvida, fale com a clínica.`,
+        `Olá ${plan.patient.name.split(" ")[0]}! 💙 Seu plano terapêutico foi finalizado. Aqui está o seu resumo:\n\n${plan.summary}\n\n📄 O plano completo segue no PDF anexo. Qualquer dúvida, fale com a clínica. 😊`,
         pdf,
         `plano-terapeutico-${format(new Date(), "dd-MM-yyyy")}.pdf`
       )

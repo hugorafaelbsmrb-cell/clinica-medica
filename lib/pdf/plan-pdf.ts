@@ -20,6 +20,23 @@ export type PlanPdfData = {
   summary?: string | null
 }
 
+/**
+ * Remove emojis do texto do PDF.
+ *
+ * O PDFKit usa as fontes padrão (Helvetica), que não têm glifos para
+ * emojis — o caractere quebraria o documento. No app e no WhatsApp o
+ * emoji aparece normalmente; só o PDF fica limpo.
+ */
+function stripEmojis(text: string): string {
+  return text
+    .replace(
+      /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{1F1E6}-\u{1F1FF}\u{FE0F}\u{200D}]/gu,
+      ""
+    )
+    .replace(/ {2,}/g, " ")
+    .trim()
+}
+
 function addSection(
   doc: PDFKit.PDFDocument,
   title: string,
@@ -28,7 +45,7 @@ function addSection(
   doc.fontSize(11).font("Helvetica-Bold").text(title)
   doc.moveDown(0.4)
   doc.fontSize(10).font("Helvetica").fillColor("#333333")
-  doc.text(content?.trim() || "—")
+  doc.text(stripEmojis(content ?? "") || "—")
   doc.fillColor("#000000")
   doc.moveDown(1)
 }
@@ -68,7 +85,7 @@ export async function generatePlanPdf(data: PlanPdfData): Promise<Buffer> {
     doc.fontSize(11).font("Helvetica-Bold").text("Resumo do plano")
     doc.moveDown(0.4)
     doc.fontSize(10).font("Helvetica").fillColor("#333333")
-    doc.text(data.summary)
+    doc.text(stripEmojis(data.summary))
     doc.fillColor("#000000")
   }
 

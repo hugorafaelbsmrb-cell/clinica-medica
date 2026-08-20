@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Loader2, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
+import { VoiceTextarea } from "@/components/ui/voice-textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldLabel } from "@/components/ui/field"
 import {
@@ -129,7 +129,7 @@ export function PlanForm({
 
           <Field>
             <FieldLabel>Diagnóstico *</FieldLabel>
-            <Textarea
+            <VoiceTextarea
               name="diagnosis"
               required
               minLength={3}
@@ -141,7 +141,7 @@ export function PlanForm({
 
           <Field>
             <FieldLabel>Metas do tratamento</FieldLabel>
-            <Textarea
+            <VoiceTextarea
               name="goals"
               defaultValue={initial?.goals ?? ""}
               placeholder="Ex.: Controlar a pressão arterial abaixo de 130x85 mmHg e perder 5 kg em 3 meses"
@@ -151,7 +151,7 @@ export function PlanForm({
 
           <Field>
             <FieldLabel>Orientações e condutas</FieldLabel>
-            <Textarea
+            <VoiceTextarea
               name="guidelines"
               defaultValue={initial?.guidelines ?? ""}
               placeholder="Ex.: Dieta com restrição de sódio, caminhada 3x por semana, retorno em 30 dias"
@@ -161,11 +161,11 @@ export function PlanForm({
 
           <Field>
             <FieldLabel>Resumo do plano (opcional — pode ser gerado por IA)</FieldLabel>
-            <Textarea
+            <VoiceTextarea
               name="summary"
               value={summary}
-              onChange={(event) => {
-                setSummary(event.target.value)
+              onValueChange={(next) => {
+                setSummary(next)
                 setAiGenerated(false)
               }}
               placeholder="Resumo em linguagem simples para o paciente, ou clique em gerar com IA abaixo."
