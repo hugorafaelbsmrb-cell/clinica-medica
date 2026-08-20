@@ -80,7 +80,12 @@ export function VoiceTextarea({
     if (value !== undefined) setText(value)
   }, [value])
 
-  const supported = typeof window !== "undefined" && Boolean(getRecognitionCtor())
+  // Detecta o suporte só depois da hidratação: no servidor e no primeiro
+  // render do cliente o valor é false, evitando erro de hidratação do React.
+  const [supported, setSupported] = useState(false)
+  useEffect(() => {
+    setSupported(Boolean(getRecognitionCtor()))
+  }, [])
 
   function handleChange(event: React.ChangeEvent<HTMLTextAreaElement>) {
     setText(event.target.value)
