@@ -39,9 +39,24 @@ export class DeepSeekProvider implements AIProvider {
       })
 
       if (!response.ok) {
+        const body = await response.text()
+        if (response.status === 401 || response.status === 403) {
+          return {
+            ok: false,
+            error:
+              "A chave da IA é inválida. Confira em Configurações → Integrações e use o botão Testar chave.",
+          }
+        }
+        if (response.status === 429) {
+          return {
+            ok: false,
+            error:
+              "A IA está temporariamente sem créditos ou atingiu o limite. Verifique o saldo na DeepSeek.",
+          }
+        }
         return {
           ok: false,
-          error: `DeepSeek respondeu ${response.status}: ${await response.text()}`,
+          error: `DeepSeek respondeu ${response.status}: ${body}`,
         }
       }
 
