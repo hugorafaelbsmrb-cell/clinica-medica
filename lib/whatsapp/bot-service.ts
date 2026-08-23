@@ -7,6 +7,7 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
+import { notifyAttendantNeeded } from "@/lib/notifications"
 import { getWhatsAppProvider, normalizePhone } from "./provider"
 import { normalizeText, runBot, type BotState } from "./bot-engine"
 
@@ -65,12 +66,23 @@ export async function handleBotMessage(
     create: { phone, state: result.nextState },
   })
 
-  // Marca a mensagem no painel para a equipe dar atenção
+  // Marca a mensagem no painel para a equipe dar atenção e avisa a
+  // equipe pelo sino de notificações
   if (result.needsAttention && incomingMessageId) {
-    await prisma.message.update({
+    const flagged = await prisma.message.update({
       where: { id: incomingMessageId },
       data: { needsAttention: true },
+      select: {
+        patientId: true,
+        content: true,
+        patient: { select: { name: true } },
+      },
     })
+    await notifyAttendantNeeded(
+      flagged.patientId,
+      flagged.patient.name,
+      flagged.content
+    )
   }
 
   if (reply) {

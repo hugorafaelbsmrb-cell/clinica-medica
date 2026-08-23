@@ -247,6 +247,7 @@ model Patient {
   prescriptions      Prescription[]
   plans              TherapeuticPlan[]
   messages           Message[]
+  notifications      Notification[]  @relation("NotificationPatient")
   payments           Payment[]
   followUp           FollowUpConfig?
   followUpPrograms   FollowUpProgram[]
@@ -281,6 +282,7 @@ model Attendance {
   financialEntries FinancialEntry[]
   messages         Message[]
   payments         Payment[]
+  notifications    Notification[]
 
   @@index([patientId])
   @@index([scheduledAt])
@@ -353,6 +355,33 @@ model Message {
   @@index([patientId])
   @@index([status])
   @@index([scheduledFor])
+}
+
+enum NotificationType {
+  NOVA_CONSULTA
+  CONSULTA_CONFIRMADA
+  ATENDENTE
+}
+
+/**
+ * Notificações internas da clínica (sino no topo do painel).
+ * São globais: valem para toda a equipe logada.
+ */
+model Notification {
+  id           String           @id @default(cuid())
+  type         NotificationType
+  title        String
+  body         String?
+  link         String? // rota do painel para abrir ao clicar
+  attendanceId String?
+  attendance   Attendance?      @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  patientId    String?
+  patient      Patient?         @relation("NotificationPatient", fields: [patientId], references: [id], onDelete: SetNull)
+  readAt       DateTime?
+  createdAt    DateTime         @default(now())
+
+  @@index([createdAt])
+  @@index([readAt])
 }
 
 // Sessão do bot de atendimento: lembra em qual etapa o paciente está

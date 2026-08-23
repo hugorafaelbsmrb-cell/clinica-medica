@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { getClinicSettings } from "@/lib/clinic"
 import { Sidebar, MobileSidebar } from "@/components/layout/sidebar"
 import { UserMenu } from "@/components/layout/user-menu"
+import { NotificationBell } from "@/components/layout/notification-bell"
 
 export default async function DashboardLayout({
   children,
@@ -28,11 +29,14 @@ export default async function DashboardLayout({
             clinicName={clinic.name}
             logoDataUrl={clinic.logoDataUrl}
           />
-          <UserMenu
-            name={session.user.name ?? ""}
-            email={session.user.email ?? ""}
-            role={session.user.role}
-          />
+          <div className="flex items-center gap-1">
+            <NotificationBell />
+            <UserMenu
+              name={session.user.name ?? ""}
+              email={session.user.email ?? ""}
+              role={session.user.role}
+            />
+          </div>
         </header>
         <main className="min-w-0 flex-1 bg-muted/30 p-4 md:p-6">{children}</main>
       </div>

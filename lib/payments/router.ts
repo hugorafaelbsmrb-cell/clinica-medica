@@ -23,6 +23,7 @@ import {
   queueAppointmentConfirmation,
 } from "@/lib/whatsapp/message-service"
 import { defaultAutomationMessage } from "@/lib/whatsapp/automations"
+import { notifyAppointmentConfirmed } from "@/lib/notifications"
 import type {
   CreateChargeInput,
   CreateChargeResult,
@@ -399,6 +400,8 @@ async function applyPaymentPaid(paymentId: string, paidAt: Date): Promise<void> 
         scheduledAt: payment.attendance.scheduledAt,
         cancelToken: payment.attendance.cancelToken,
       })
+      // Avisa a equipe no painel (sino) que a reserva virou consulta
+      await notifyAppointmentConfirmed(payment.attendance.id)
     }
     await queuePaymentConfirmedMessage(patientId, Number(payment.amount))
   }

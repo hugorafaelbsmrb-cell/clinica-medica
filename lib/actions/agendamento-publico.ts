@@ -20,6 +20,7 @@ import { getAppointmentSettings } from "@/lib/agenda/service"
 import { createCharge, simulatePaymentPaid } from "@/lib/payments/router"
 import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
 import { getPaymentSettings } from "@/lib/payments/settings"
+import { notifyNewAppointment } from "@/lib/notifications"
 import type { PaymentMethodType } from "@/lib/payments/types"
 
 const WEEKDAY_LABELS = [
@@ -302,6 +303,10 @@ export async function agendarPublico(
           "Este horário acabou de ser preenchido. Escolha outro horário, por favor.",
       }
     }
+
+    // Avisa a equipe no painel (sino): reserva quando há cobrança,
+    // consulta confirmada quando o horário é marcado direto.
+    await notifyNewAppointment(attendance.id, cobrar)
 
     // Com cobrança: gera o pagamento no gateway e devolve o link/QR para
     // o wizard exibir. A confirmação da consulta sai só quando pagar.

@@ -11,6 +11,7 @@ import {
   queueThankYouMessage,
 } from "@/lib/whatsapp/automations"
 import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
+import { notifyNewAppointment } from "@/lib/notifications"
 import {
   renderTemplate,
   sendImmediateMessage,
@@ -112,6 +113,9 @@ export async function createAttendance(
       patientId: attendance.patientId,
     },
   })
+
+  // Avisa a equipe no painel (sino)
+  await notifyNewAppointment(attendance.id)
 
   revalidatePath("/atendimentos")
   return {
