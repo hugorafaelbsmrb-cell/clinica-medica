@@ -233,6 +233,29 @@ export async function deletePatient(id: string): Promise<ActionState> {
     return { success: false, message: "Sessão expirada" }
   }
 
+  // Não permite excluir paciente com histórico: os vínculos em cascata
+  // apagariam atendimentos, prescrições e cobranças já registradas.
+  const linked = await prisma.patient.findUnique({
+    where: { id },
+    select: {
+      _count: {
+        select: { attendances: true, prescriptions: true, payments: true },
+      },
+    },
+  })
+  if (!linked) return { success: false, message: "Paciente não encontrado" }
+  if (
+    linked._count.attendances > 0 ||
+    linked._count.prescriptions > 0 ||
+    linked._count.payments > 0
+  ) {
+    return {
+      success: false,
+      message:
+        "Não é possível excluir: o paciente possui atendimentos, prescrições ou cobranças registradas",
+    }
+  }
+
   await prisma.patient.delete({ where: { id } })
 
   await prisma.auditLog.create({

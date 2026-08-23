@@ -318,13 +318,22 @@ export async function queueAppointmentReminders(now = new Date()): Promise<numbe
     })
     if (existing) continue
 
+    // Data relativa: "hoje", "amanhã" ou dia dd/MM para os próximos dias.
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+    const whenLabel =
+      attendance.scheduledAt.toDateString() === now.toDateString()
+        ? "hoje"
+        : attendance.scheduledAt.toDateString() === tomorrow.toDateString()
+          ? "amanhã"
+          : `no dia ${format(attendance.scheduledAt, "dd/MM", { locale: ptBR })}`
+
     const content = template
       ? renderTemplate(template.body, {
           nome: attendance.patient.name.split(" ")[0],
           data: format(attendance.scheduledAt, "dd/MM/yyyy", { locale: ptBR }),
           hora: format(attendance.scheduledAt, "HH:mm", { locale: ptBR }),
         })
-      : `Olá ${attendance.patient.name.split(" ")[0]}! Lembrete: sua consulta é amanhã, ${format(
+      : `Olá ${attendance.patient.name.split(" ")[0]}! Lembrete: sua consulta é ${whenLabel}, ${format(
           attendance.scheduledAt,
           "dd/MM/yyyy",
           { locale: ptBR }
@@ -410,9 +419,17 @@ export async function registerIncoming(
   receivedAt: Date
 ): Promise<string | null> {
   const normalized = normalizePhone(from)
-  const patient = await prisma.patient.findFirst({
-    where: { phone: { contains: normalized.slice(2) } },
+  // Pré-filtra pelos últimos 9 dígitos (usa o índice do banco) e compara os
+  // dígitos exatos em memória — o contains antigo casava número parcial.
+  const lastDigits = normalized.slice(-9)
+  const candidates = await prisma.patient.findMany({
+    where: { phone: { endsWith: lastDigits } },
+    select: { id: true, phone: true },
   })
+  const patient = candidates.find(
+    (candidate) =>
+      candidate.phone && normalizePhone(candidate.phone) === normalized
+  )
 
   if (!patient) {
     console.log(`[WhatsApp] Mensagem de número não cadastrado: ${normalized}`)

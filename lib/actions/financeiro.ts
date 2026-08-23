@@ -142,10 +142,23 @@ export async function toggleEntryStatus(entryId: string): Promise<ActionState> {
   if (!session?.user) return { success: false, message: "Sessão expirada" }
   requireRole(session, ["ADMIN", "FINANCEIRO"])
 
-  const entry = await prisma.financialEntry.findUnique({ where: { id: entryId } })
+  const entry = await prisma.financialEntry.findUnique({
+    where: { id: entryId },
+    include: { payment: { select: { id: true, status: true } } },
+  })
   if (!entry) return { success: false, message: "Lançamento não encontrado" }
 
   const next = entry.status === "PAGO" ? "PENDENTE" : "PAGO"
+  // Não reabre lançamento pago por cobrança: o estorno no gateway reabre
+  // sozinho (applyPaymentRefunded); reabrir aqui quebraria a consistência.
+  if (next === "PENDENTE" && entry.payment?.status === "PAGO") {
+    return {
+      success: false,
+      message:
+        "Este lançamento foi pago por uma cobrança — o estorno no gateway reabre o lançamento automaticamente",
+    }
+  }
+
   await prisma.financialEntry.update({
     where: { id: entryId },
     data: { status: next },
@@ -173,8 +186,21 @@ export async function deleteEntry(entryId: string): Promise<ActionState> {
   if (!session?.user) return { success: false, message: "Sessão expirada" }
   requireRole(session, ["ADMIN", "FINANCEIRO"])
 
-  const entry = await prisma.financialEntry.findUnique({ where: { id: entryId } })
+  const entry = await prisma.financialEntry.findUnique({
+    where: { id: entryId },
+    include: { payment: { select: { id: true, status: true } } },
+  })
   if (!entry) return { success: false, message: "Lançamento não encontrado" }
+
+  // Lançamento com cobrança vinculada não pode sumir do financeiro —
+  // encerre a cobrança primeiro (cancelar a consulta/acompanhamento).
+  if (entry.payment) {
+    return {
+      success: false,
+      message:
+        "Este lançamento tem uma cobrança vinculada — cancele a cobrança antes de excluir",
+    }
+  }
 
   await prisma.financialEntry.delete({ where: { id: entryId } })
 
