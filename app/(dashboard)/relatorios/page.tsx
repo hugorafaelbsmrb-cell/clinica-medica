@@ -2,7 +2,14 @@ import Link from "next/link"
 import type { Metadata } from "next"
 import { format, startOfMonth, endOfMonth } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { Download, Stethoscope, Wallet, Hourglass, MapPin } from "lucide-react"
+import {
+  Download,
+  FileText,
+  Stethoscope,
+  Wallet,
+  Hourglass,
+  MapPin,
+} from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
@@ -141,6 +148,16 @@ export default async function RelatoriosPage({
           >
             <Download className="h-4 w-4" />
             CSV financeiro
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            render={
+              <Link href={`/api/relatorios/pdf?de=${deQuery}&ate=${ateQuery}`} />
+            }
+          >
+            <FileText className="h-4 w-4" />
+            PDF financeiro
           </Button>
         </div>
       </div>
