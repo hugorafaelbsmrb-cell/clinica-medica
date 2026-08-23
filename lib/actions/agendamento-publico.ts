@@ -304,10 +304,6 @@ export async function agendarPublico(
       }
     }
 
-    // Avisa a equipe no painel (sino): reserva quando há cobrança,
-    // consulta confirmada quando o horário é marcado direto.
-    await notifyNewAppointment(attendance.id, cobrar)
-
     // Com cobrança: gera o pagamento no gateway e devolve o link/QR para
     // o wizard exibir. A confirmação da consulta sai só quando pagar.
     if (cobrar) {
@@ -361,6 +357,9 @@ export async function agendarPublico(
         })
       }
 
+      // Avisa a equipe no painel (sino) que o horário foi reservado
+      await notifyNewAppointment(attendance.id, true)
+
       return {
         success: true,
         message: "Horário reservado! Confirme o pagamento para concluir.",
@@ -386,6 +385,9 @@ export async function agendarPublico(
         cancelToken: attendance.cancelToken,
       })
     }
+
+    // Avisa a equipe no painel (sino) que a consulta foi agendada
+    await notifyNewAppointment(attendance.id)
 
     return {
       success: true,

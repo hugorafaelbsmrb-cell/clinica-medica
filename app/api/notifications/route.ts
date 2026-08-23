@@ -49,8 +49,14 @@ export async function POST(request: NextRequest) {
     ? body.ids.filter((id: unknown) => typeof id === "string")
     : null
 
+  // ids vazio significa "marcar todas" (array vazio é truthy em JS)
+  const where =
+    ids && ids.length > 0
+      ? { id: { in: ids }, readAt: null }
+      : { readAt: null }
+
   await prisma.notification.updateMany({
-    where: ids ? { id: { in: ids }, readAt: null } : { readAt: null },
+    where,
     data: { readAt: new Date() },
   })
 
