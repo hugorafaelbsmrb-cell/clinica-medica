@@ -28,10 +28,12 @@ export function PrescriptionForm({
   patients,
   attendances,
   preselectedAttendanceId,
+  preselectedPatientId,
 }: {
   patients: PatientOption[]
   attendances: AttendanceOption[]
   preselectedAttendanceId?: string
+  preselectedPatientId?: string
 }) {
   const router = useRouter()
   const [rows, setRows] = useState<ItemRow[]>([
@@ -83,6 +85,7 @@ export function PrescriptionForm({
               <select
                 name="patientId"
                 required
+                defaultValue={preselectedPatientId ?? ""}
                 className="h-9 rounded-md border bg-background px-3 text-sm"
               >
                 <option value="">Selecione o paciente...</option>

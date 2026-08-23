@@ -41,7 +41,7 @@ export type DayCardData = {
   status: "AGENDADO" | "EM_ATENDIMENTO"
   scheduledAt: string
   startedAt: string | null
-  type: "PRESENCIAL" | "DOMICILIAR"
+  type: "PRESENCIAL" | "DOMICILIAR" | "TELECONSULTA"
   patientId: string
   patientName: string
   age: number | null
@@ -170,7 +170,11 @@ function DayCard({ attendance }: { attendance: DayCardData }) {
           <>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">
-                {attendance.type === "DOMICILIAR" ? "Domiciliar" : "Presencial"}
+                {attendance.type === "DOMICILIAR"
+                  ? "Domiciliar"
+                  : attendance.type === "TELECONSULTA"
+                    ? "Teleconsulta"
+                    : "Presencial"}
               </Badge>
               {attendance.age !== null && (
                 <span className="text-sm text-muted-foreground">

@@ -20,7 +20,11 @@ import { AttendanceActions } from "./attendance-actions"
 
 export const metadata: Metadata = { title: "Detalhes do atendimento" }
 
-const TYPE_LABELS = { PRESENCIAL: "Presencial", DOMICILIAR: "Domiciliar" } as const
+const TYPE_LABELS = {
+  PRESENCIAL: "Presencial",
+  DOMICILIAR: "Domiciliar",
+  TELECONSULTA: "Teleconsulta",
+} as const
 
 const STATUS_LABELS = {
   AGUARDANDO_PAGAMENTO: "Aguardando pagamento",

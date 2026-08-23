@@ -12,6 +12,7 @@ import {
   KeyRound,
   Loader2,
   QrCode,
+  Stethoscope,
   Wallet,
   Webhook,
 } from "lucide-react"
@@ -40,6 +41,11 @@ export type PaymentInitialData = {
   stripeWebhookUrl: string
   consultaPrecoPresencial: number | null
   consultaPrecoDomiciliar: number | null
+  consultaPrecoTeleconsulta: number | null
+  acompValorBaixa: number | null
+  acompValorMedia: number | null
+  acompValorAlta: number | null
+  jurosParcelamento: number | null
 }
 
 type TestResult = { success: boolean; message: string } | null
@@ -84,6 +90,31 @@ export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
   const [precoDomiciliar, setPrecoDomiciliar] = useState(
     initial.consultaPrecoDomiciliar != null
       ? String(initial.consultaPrecoDomiciliar).replace(".", ",")
+      : ""
+  )
+  const [precoTeleconsulta, setPrecoTeleconsulta] = useState(
+    initial.consultaPrecoTeleconsulta != null
+      ? String(initial.consultaPrecoTeleconsulta).replace(".", ",")
+      : ""
+  )
+  const [acompBaixa, setAcompBaixa] = useState(
+    initial.acompValorBaixa != null
+      ? String(initial.acompValorBaixa).replace(".", ",")
+      : ""
+  )
+  const [acompMedia, setAcompMedia] = useState(
+    initial.acompValorMedia != null
+      ? String(initial.acompValorMedia).replace(".", ",")
+      : ""
+  )
+  const [acompAlta, setAcompAlta] = useState(
+    initial.acompValorAlta != null
+      ? String(initial.acompValorAlta).replace(".", ",")
+      : ""
+  )
+  const [jurosParcelamento, setJurosParcelamento] = useState(
+    initial.jurosParcelamento != null
+      ? String(initial.jurosParcelamento).replace(".", ",")
       : ""
   )
 
@@ -182,6 +213,76 @@ export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
                   value={precoDomiciliar}
                   onChange={(event) => setPrecoDomiciliar(event.target.value)}
                   placeholder="Ex.: 300,00"
+                />
+              </Field>
+              <Field>
+                <FieldLabel>Teleconsulta (R$)</FieldLabel>
+                <Input
+                  name="consultaPrecoTeleconsulta"
+                  type="text"
+                  inputMode="decimal"
+                  value={precoTeleconsulta}
+                  onChange={(event) => setPrecoTeleconsulta(event.target.value)}
+                  placeholder="Ex.: 200,00"
+                />
+              </Field>
+            </div>
+          </div>
+
+          {/* Acompanhamentos: sugestões de valor e juros do parcelamento */}
+          <div className="flex flex-col gap-4 rounded-lg border p-4">
+            <div className="flex items-center gap-2 font-medium">
+              <Stethoscope className="h-4 w-4 text-primary" />
+              Acompanhamentos
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Valores sugeridos por complexidade no modal de iniciar
+              acompanhamento (o médico pode editar na hora) e os juros
+              mensais repassados ao paciente ao parcelar no cartão.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel>Complexidade baixa (R$)</FieldLabel>
+                <Input
+                  name="acompValorBaixa"
+                  type="text"
+                  inputMode="decimal"
+                  value={acompBaixa}
+                  onChange={(event) => setAcompBaixa(event.target.value)}
+                  placeholder="Ex.: 500,00"
+                />
+              </Field>
+              <Field>
+                <FieldLabel>Complexidade média (R$)</FieldLabel>
+                <Input
+                  name="acompValorMedia"
+                  type="text"
+                  inputMode="decimal"
+                  value={acompMedia}
+                  onChange={(event) => setAcompMedia(event.target.value)}
+                  placeholder="Ex.: 900,00"
+                />
+              </Field>
+              <Field>
+                <FieldLabel>Complexidade alta (R$)</FieldLabel>
+                <Input
+                  name="acompValorAlta"
+                  type="text"
+                  inputMode="decimal"
+                  value={acompAlta}
+                  onChange={(event) => setAcompAlta(event.target.value)}
+                  placeholder="Ex.: 1.500,00"
+                />
+              </Field>
+              <Field>
+                <FieldLabel>Juros do parcelamento (% ao mês)</FieldLabel>
+                <Input
+                  name="jurosParcelamento"
+                  type="text"
+                  inputMode="decimal"
+                  value={jurosParcelamento}
+                  onChange={(event) => setJurosParcelamento(event.target.value)}
+                  placeholder="Ex.: 2,99"
                 />
               </Field>
             </div>

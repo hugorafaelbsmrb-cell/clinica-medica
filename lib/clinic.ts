@@ -35,6 +35,11 @@ export type ClinicInfo = {
   autoACaminhoMsg?: string | null
   consultaPrecoPresencial?: number | null
   consultaPrecoDomiciliar?: number | null
+  consultaPrecoTeleconsulta?: number | null
+  acompValorBaixa?: number | null
+  acompValorMedia?: number | null
+  acompValorAlta?: number | null
+  jurosParcelamento?: number | null
   autoPagamentoLinkEnabled?: boolean
   autoPagamentoLinkMsg?: string | null
   autoPagamentoLembreteEnabled?: boolean
@@ -88,6 +93,21 @@ export async function getClinicSettings(): Promise<ClinicInfo> {
           : null,
         consultaPrecoDomiciliar: settings.consultaPrecoDomiciliar
           ? Number(settings.consultaPrecoDomiciliar)
+          : null,
+        consultaPrecoTeleconsulta: settings.consultaPrecoTeleconsulta
+          ? Number(settings.consultaPrecoTeleconsulta)
+          : null,
+        acompValorBaixa: settings.acompValorBaixa
+          ? Number(settings.acompValorBaixa)
+          : null,
+        acompValorMedia: settings.acompValorMedia
+          ? Number(settings.acompValorMedia)
+          : null,
+        acompValorAlta: settings.acompValorAlta
+          ? Number(settings.acompValorAlta)
+          : null,
+        jurosParcelamento: settings.jurosParcelamento
+          ? Number(settings.jurosParcelamento)
           : null,
         autoPagamentoLinkEnabled: settings.autoPagamentoLinkEnabled,
         autoPagamentoLinkMsg: settings.autoPagamentoLinkMsg,

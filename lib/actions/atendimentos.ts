@@ -17,7 +17,7 @@ import {
 
 const atendimentoSchema = z.object({
   patientId: z.string().min(1, "Selecione o paciente"),
-  type: z.enum(["PRESENCIAL", "DOMICILIAR"]),
+  type: z.enum(["PRESENCIAL", "DOMICILIAR", "TELECONSULTA"]),
   scheduledAt: z.string().min(1, "Informe a data"),
   homeAddress: z.string().optional().nullable(),
   latitude: z
@@ -147,7 +147,9 @@ export async function completeAttendance(id: string): Promise<ActionState> {
           category:
             attendance.type === "DOMICILIAR"
               ? "CONSULTA_DOMICILIAR"
-              : "CONSULTA_PRESENCIAL",
+              : attendance.type === "TELECONSULTA"
+                ? "TELECONSULTA"
+                : "CONSULTA_PRESENCIAL",
           description: `Atendimento — ${attendance.patient.name}`,
           value: attendance.value,
           dueDate: new Date(),

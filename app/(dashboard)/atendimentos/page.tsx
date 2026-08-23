@@ -20,7 +20,11 @@ import { Badge } from "@/components/ui/badge"
 
 export const metadata: Metadata = { title: "Atendimentos" }
 
-const TYPE_LABELS = { PRESENCIAL: "Presencial", DOMICILIAR: "Domiciliar" } as const
+const TYPE_LABELS = {
+  PRESENCIAL: "Presencial",
+  DOMICILIAR: "Domiciliar",
+  TELECONSULTA: "Teleconsulta",
+} as const
 
 const STATUS_VARIANTS = {
   AGUARDANDO_PAGAMENTO: "secondary",

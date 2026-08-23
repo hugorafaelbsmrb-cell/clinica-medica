@@ -44,7 +44,9 @@ export function AttendanceForm({
 }) {
   const router = useRouter()
   // Home care é o modelo do sistema: domiciliar como padrão.
-  const [type, setType] = useState<"PRESENCIAL" | "DOMICILIAR">("DOMICILIAR")
+  const [type, setType] = useState<"PRESENCIAL" | "DOMICILIAR" | "TELECONSULTA">(
+    "DOMICILIAR"
+  )
   const [address, setAddress] = useState("")
   const [latitude, setLatitude] = useState("")
   const [longitude, setLongitude] = useState("")
@@ -216,6 +218,16 @@ export function AttendanceForm({
                   onChange={() => setType("PRESENCIAL")}
                 />
                 Presencial (na clínica)
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="type"
+                  value="TELECONSULTA"
+                  checked={type === "TELECONSULTA"}
+                  onChange={() => setType("TELECONSULTA")}
+                />
+                Teleconsulta (vídeo chamada)
               </label>
             </div>
           </Field>

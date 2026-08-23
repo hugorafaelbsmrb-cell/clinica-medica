@@ -18,6 +18,7 @@ enum Role {
 enum AttendanceType {
   PRESENCIAL
   DOMICILIAR
+  TELECONSULTA
 }
 
 enum AttendanceStatus {
@@ -74,6 +75,8 @@ enum EntryType {
 enum EntryCategory {
   CONSULTA_PRESENCIAL
   CONSULTA_DOMICILIAR
+  TELECONSULTA
+  ACOMPANHAMENTO
   PROCEDIMENTO
   MEDICAMENTO
   OPERACIONAL
@@ -105,20 +108,40 @@ enum PaymentStatus {
   FALHOU
 }
 
+enum FollowUpComplexity {
+  BAIXA
+  MEDIA
+  ALTA
+}
+
+enum FollowUpBillingMode {
+  INTEGRAL
+  RECORRENTE
+}
+
+enum FollowUpStatus {
+  ATIVO
+  PAUSADO
+  CONCLUIDO
+  CANCELADO
+}
+
 model User {
-  id           String       @id @default(cuid())
-  name         String
-  email        String       @unique
-  password     String
-  role         Role         @default(SECRETARIA)
-  active       Boolean      @default(true)
-  crm          String? // CRM do médico (ex.: "CRM/SP 123456")
-  signatureText String? // Assinatura pré-cadastrada (ex.: "Dr. Carlos Mendes")
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  attendances  Attendance[] @relation("AttendanceDoctor")
-  prescriptions Prescription[]
-  plans        TherapeuticPlan[]
+  id                  String               @id @default(cuid())
+  name                String
+  email               String               @unique
+  password            String
+  role                Role                 @default(SECRETARIA)
+  active              Boolean              @default(true)
+  crm                 String? // CRM do médico (ex.: "CRM/SP 123456")
+  signatureText       String? // Assinatura pré-cadastrada (ex.: "Dr. Carlos Mendes")
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  attendances         Attendance[]         @relation("AttendanceDoctor")
+  prescriptions       Prescription[]
+  plans               TherapeuticPlan[]
+  followUpPrograms    FollowUpProgram[]
+  followUpEvaluations FollowUpEvaluation[]
 }
 
 /**
@@ -127,40 +150,40 @@ model User {
  * direto em <img> e na geração de PDF.
  */
 model ClinicSettings {
-  id             Int      @id @default(1)
-  name           String   @default("Clínica Médica")
-  address        String?
-  phone          String?
-  email          String?
-  cnpj           String?
-  horarioAtendimento String? @db.Text // texto livre exibido pelo bot (ex.: "Seg. a sex., 8h às 17h")
-  logoDataUrl    String?  @db.Text
-  deepseekApiKey String? // chave da DeepSeek (tela Configurações → Integrações)
-  wApiInstance   String? // instanceId da W-API
-  wApiToken      String? // token da W-API
-  botEnabled     Boolean  @default(true) // bot de atendimento ligado/desligado
-  botMsgAtendente String? @db.Text // resposta personalizada ao pedir atendente (vazio = padrão)
-  botMsgSaude     String? @db.Text // resposta personalizada de segurança/saúde (vazio = padrão)
+  id                     Int     @id @default(1)
+  name                   String  @default("Clínica Médica")
+  address                String?
+  phone                  String?
+  email                  String?
+  cnpj                   String?
+  horarioAtendimento     String? @db.Text // texto livre exibido pelo bot (ex.: "Seg. a sex., 8h às 17h")
+  logoDataUrl            String? @db.Text
+  deepseekApiKey         String? // chave da DeepSeek (tela Configurações → Integrações)
+  wApiInstance           String? // instanceId da W-API
+  wApiToken              String? // token da W-API
+  botEnabled             Boolean @default(true) // bot de atendimento ligado/desligado
+  botMsgAtendente        String? @db.Text // resposta personalizada ao pedir atendente (vazio = padrão)
+  botMsgSaude            String? @db.Text // resposta personalizada de segurança/saúde (vazio = padrão)
   botMsgCpfNaoEncontrado String? @db.Text // resposta personalizada de CPF não encontrado (vazio = padrão)
-  botMsgBoasVindas String? @db.Text // saudação inicial da conversa, antes do menu (vazio = padrão)
-  botMsgAgendar   String? @db.Text // resposta ao pedido de novo agendamento (vazio = padrão com link de cadastro)
+  botMsgBoasVindas       String? @db.Text // saudação inicial da conversa, antes do menu (vazio = padrão)
+  botMsgAgendar          String? @db.Text // resposta ao pedido de novo agendamento (vazio = padrão com link de cadastro)
 
   // Automações de mensagens (painel Automações)
-  autoCadastroEnabled    Boolean @default(true) // lembrete para quem iniciou o cadastro e não finalizou
-  autoCadastroDelayHours Int     @default(24)  // horas de espera após iniciar o cadastro
-  autoCadastroMsg        String? @db.Text
-  autoTratamentoEnabled  Boolean @default(true) // mensagem periódica para pacientes em tratamento
-  autoTratamentoIntervalDays Int @default(7)   // periodicidade em dias
-  autoTratamentoMsg      String? @db.Text
-  autoAniversarioEnabled Boolean @default(true) // mensagem de aniversário
-  autoAniversarioMsg     String? @db.Text
-  autoReativacaoEnabled  Boolean @default(true) // mensagem para clientes sem consulta há X dias
-  autoReativacaoDays     Int     @default(60)  // dias desde a última consulta
-  autoReativacaoMsg      String? @db.Text
-  autoAgradecimentoEnabled Boolean @default(true) // agradecimento ao finalizar a consulta
-  autoAgradecimentoMsg   String? @db.Text
-  autoACaminhoEnabled    Boolean @default(true) // aviso "médico a caminho" ao iniciar o atendimento
-  autoACaminhoMsg        String? @db.Text
+  autoCadastroEnabled        Boolean @default(true) // lembrete para quem iniciou o cadastro e não finalizou
+  autoCadastroDelayHours     Int     @default(24) // horas de espera após iniciar o cadastro
+  autoCadastroMsg            String? @db.Text
+  autoTratamentoEnabled      Boolean @default(true) // mensagem periódica para pacientes em tratamento
+  autoTratamentoIntervalDays Int     @default(7) // periodicidade em dias
+  autoTratamentoMsg          String? @db.Text
+  autoAniversarioEnabled     Boolean @default(true) // mensagem de aniversário
+  autoAniversarioMsg         String? @db.Text
+  autoReativacaoEnabled      Boolean @default(true) // mensagem para clientes sem consulta há X dias
+  autoReativacaoDays         Int     @default(60) // dias desde a última consulta
+  autoReativacaoMsg          String? @db.Text
+  autoAgradecimentoEnabled   Boolean @default(true) // agradecimento ao finalizar a consulta
+  autoAgradecimentoMsg       String? @db.Text
+  autoACaminhoEnabled        Boolean @default(true) // aviso "médico a caminho" ao iniciar o atendimento
+  autoACaminhoMsg            String? @db.Text
 
   // Gateways de pagamento (tela Configurações → Pagamentos)
   // PIX → Asaas | Cartão e Apple Pay → Stripe. Chaves vazias = gateway desativado.
@@ -170,54 +193,63 @@ model ClinicSettings {
 
   // Preços das consultas (usados no agendamento online com pagamento antecipado)
   // Vazio = agendamento online sem cobrança (confirmado na hora).
-  consultaPrecoPresencial Decimal? @db.Decimal(10, 2) // valor da consulta presencial
-  consultaPrecoDomiciliar Decimal? @db.Decimal(10, 2) // valor da consulta domiciliar
+  consultaPrecoPresencial   Decimal? @db.Decimal(10, 2) // valor da consulta presencial
+  consultaPrecoDomiciliar   Decimal? @db.Decimal(10, 2) // valor da consulta domiciliar
+  consultaPrecoTeleconsulta Decimal? @db.Decimal(10, 2) // valor da teleconsulta
+
+  // Acompanhamento: valores sugeridos por complexidade (o médico pode editar
+  // no modal) e juros mensais repassados ao paciente no cartão parcelado.
+  acompValorBaixa   Decimal? @db.Decimal(10, 2)
+  acompValorMedia   Decimal? @db.Decimal(10, 2)
+  acompValorAlta    Decimal? @db.Decimal(10, 2)
+  jurosParcelamento Decimal  @default(2.99) @db.Decimal(5, 2)
 
   // Automações de pagamento (painel Automações)
-  autoPagamentoLinkEnabled      Boolean @default(true) // envia o link de pagamento ao reservar o horário
-  autoPagamentoLinkMsg          String? @db.Text
-  autoPagamentoLembreteEnabled Boolean @default(true) // lembrete para quem reservou e não pagou
-  autoPagamentoLembreteDelayMinutes Int @default(60) // espera antes do primeiro lembrete
-  autoPagamentoLembreteMsg      String? @db.Text
-  autoPagamentoConfirmadoEnabled Boolean @default(true) // aviso de pagamento confirmado
-  autoPagamentoConfirmadoMsg    String? @db.Text
-  updatedAt      DateTime @updatedAt
+  autoPagamentoLinkEnabled          Boolean  @default(true) // envia o link de pagamento ao reservar o horário
+  autoPagamentoLinkMsg              String?  @db.Text
+  autoPagamentoLembreteEnabled      Boolean  @default(true) // lembrete para quem reservou e não pagou
+  autoPagamentoLembreteDelayMinutes Int      @default(60) // espera antes do primeiro lembrete
+  autoPagamentoLembreteMsg          String?  @db.Text
+  autoPagamentoConfirmadoEnabled    Boolean  @default(true) // aviso de pagamento confirmado
+  autoPagamentoConfirmadoMsg        String?  @db.Text
+  updatedAt                         DateTime @updatedAt
 }
 
 model Patient {
-  id               String         @id @default(cuid())
-  name             String
-  cpf              String?        @unique
-  birthDate        DateTime?
-  phone            String?
-  email            String?
-  street           String?
-  number           String?
-  complement       String?
-  neighborhood     String?
-  city             String?
-  state            String?
-  zipCode          String?
-  insurance        String?
-  notes            String?        @db.Text
-  consultationReason String?      @db.Text // Motivo da consulta informado no pré-cadastro online
-  lgpdConsent      Boolean        @default(false)
-  lgpdConsentAt    DateTime?
-  whatsappEnabled  Boolean        @default(false)
-  registeredVia    String         @default("MANUAL") // MANUAL = equipe, ONLINE = autoatendimento público
-  latitude         Float?         // localização do domicílio (home care)
-  longitude        Float?
-  locationSource   String?        // GPS | GEOCODE | MANUAL
-  locationUpdatedAt DateTime?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  attendances      Attendance[]
-  prescriptions    Prescription[]
-  plans            TherapeuticPlan[]
-  messages         Message[]
-  payments         Payment[]
-  followUp         FollowUpConfig?
-  auditLogs        AuditLog[]     @relation("AuditLogPatient")
+  id                 String            @id @default(cuid())
+  name               String
+  cpf                String?           @unique
+  birthDate          DateTime?
+  phone              String?
+  email              String?
+  street             String?
+  number             String?
+  complement         String?
+  neighborhood       String?
+  city               String?
+  state              String?
+  zipCode            String?
+  insurance          String?
+  notes              String?           @db.Text
+  consultationReason String?           @db.Text // Motivo da consulta informado no pré-cadastro online
+  lgpdConsent        Boolean           @default(false)
+  lgpdConsentAt      DateTime?
+  whatsappEnabled    Boolean           @default(false)
+  registeredVia      String            @default("MANUAL") // MANUAL = equipe, ONLINE = autoatendimento público
+  latitude           Float? // localização do domicílio (home care)
+  longitude          Float?
+  locationSource     String? // GPS | GEOCODE | MANUAL
+  locationUpdatedAt  DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  attendances        Attendance[]
+  prescriptions      Prescription[]
+  plans              TherapeuticPlan[]
+  messages           Message[]
+  payments           Payment[]
+  followUp           FollowUpConfig?
+  followUpPrograms   FollowUpProgram[]
+  auditLogs          AuditLog[]        @relation("AuditLogPatient")
 
   @@index([name])
   @@index([neighborhood])
@@ -232,14 +264,14 @@ model Attendance {
   type             AttendanceType   @default(PRESENCIAL)
   status           AttendanceStatus @default(AGENDADO)
   origin           String           @default("INTERNO") // INTERNO = equipe, ONLINE = autoatendimento
-  slotNote         String?          // Motivo da consulta informado no agendamento online
+  slotNote         String? // Motivo da consulta informado no agendamento online
   cancelToken      String?          @unique // token público de cancelamento (link na confirmação)
   scheduledAt      DateTime
-  startedAt        DateTime?        // médico iniciou o atendimento (módulo do dia)
+  startedAt        DateTime? // médico iniciou o atendimento (módulo do dia)
   homeAddress      String?
-  latitude         Float?           // localização do domicílio deste atendimento
+  latitude         Float? // localização do domicílio deste atendimento
   longitude        Float?
-  locationSource   String?          // GPS | GEOCODE | PATIENT (herdado do cadastro)
+  locationSource   String? // GPS | GEOCODE | PATIENT (herdado do cadastro)
   anamnesis        String?          @db.Text
   value            Decimal          @default(0) @db.Decimal(10, 2)
   createdAt        DateTime         @default(now())
@@ -300,22 +332,22 @@ model TherapeuticPlan {
 }
 
 model Message {
-  id          String        @id @default(cuid())
-  patientId   String
-  patient     Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  attendanceId String? // consulta relacionada (confirmação/lembrete)
-  attendance  Attendance?   @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
-  type        MessageType   @default(MANUAL)
-  direction   String        @default("OUT") // OUT = enviada ao paciente, IN = resposta recebida
-  content     String        @db.Text
-  status      MessageStatus @default(PENDENTE)
-  needsAttention Boolean    @default(false) // mensagem que o bot marcou para a equipe (ex.: pedido de atendente)
-  scheduledFor DateTime?
-  sentAt      DateTime?
-  deliveredAt DateTime?
-  readAt      DateTime?
-  error       String?
-  createdAt   DateTime      @default(now())
+  id             String        @id @default(cuid())
+  patientId      String
+  patient        Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  attendanceId   String? // consulta relacionada (confirmação/lembrete)
+  attendance     Attendance?   @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  type           MessageType   @default(MANUAL)
+  direction      String        @default("OUT") // OUT = enviada ao paciente, IN = resposta recebida
+  content        String        @db.Text
+  status         MessageStatus @default(PENDENTE)
+  needsAttention Boolean       @default(false) // mensagem que o bot marcou para a equipe (ex.: pedido de atendente)
+  scheduledFor   DateTime?
+  sentAt         DateTime?
+  deliveredAt    DateTime?
+  readAt         DateTime?
+  error          String?
+  createdAt      DateTime      @default(now())
 
   @@index([patientId])
   @@index([status])
@@ -341,27 +373,84 @@ model MessageTemplate {
 }
 
 model FollowUpConfig {
-  id          String    @id @default(cuid())
-  patientId   String    @unique
-  patient     Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  active      Boolean   @default(true)
-  intervalDays Int      @default(30)
-  lastSentAt  DateTime?
-  nextDueAt   DateTime?
-  templateId  String?
+  id           String    @id @default(cuid())
+  patientId    String    @unique
+  patient      Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  active       Boolean   @default(true)
+  intervalDays Int       @default(30)
+  lastSentAt   DateTime?
+  nextDueAt    DateTime?
+  templateId   String?
+}
+
+/**
+ * Programa de acompanhamento clínico: o médico marca o paciente para ser
+ * acompanhado (telemedicina) com cobrança à vista (PIX ou cartão parcelado)
+ * ou recorrente. Cada programa tem valor conforme a complexidade do
+ * tratamento e dura por um período definido pelo médico.
+ */
+model FollowUpProgram {
+  id          String              @id @default(cuid())
+  patientId   String
+  patient     Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId    String?
+  doctor      User?               @relation(fields: [doctorId], references: [id])
+  status      FollowUpStatus      @default(ATIVO)
+  complexity  FollowUpComplexity
+  description String?             @db.Text // motivo/condição acompanhada
+  billingMode FollowUpBillingMode
+
+  // Valores: baseValue é o valor da complexidade (INTEGRAL) ou o valor por
+  // ciclo (RECORRENTE). totalValue é o que o paciente paga no programa.
+  baseValue  Decimal @db.Decimal(10, 2)
+  totalValue Decimal @db.Decimal(10, 2)
+
+  // Cartão parcelado (INTEGRAL): nº de parcelas e valor de cada parcela
+  installments     Int?
+  installmentValue Decimal? @db.Decimal(10, 2)
+
+  // Recorrência: ciclo em dias e data da próxima cobrança
+  cycleDays Int?
+  nextDueAt DateTime?
+
+  startDate DateTime  @default(now())
+  endDate   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  payments    Payment[]
+  evaluations FollowUpEvaluation[]
+
+  @@index([patientId])
+  @@index([status])
+}
+
+/**
+ * Evolução clínica registrada pelo médico durante o acompanhamento.
+ */
+model FollowUpEvaluation {
+  id         String          @id @default(cuid())
+  followUpId String
+  followUp   FollowUpProgram @relation(fields: [followUpId], references: [id], onDelete: Cascade)
+  doctorId   String?
+  doctor     User?           @relation(fields: [doctorId], references: [id])
+  notes      String          @db.Text
+  createdAt  DateTime        @default(now())
+
+  @@index([followUpId])
 }
 
 // Tentativa de pré-cadastro online: registrada quando o visitante informa o
 // telefone no wizard público. Usada para lembrar quem não finalizou o cadastro.
 model RegistrationAttempt {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   name        String?
-  phone       String   @unique
-  converted   Boolean  @default(false) // virou paciente cadastrado
-  contacted   Boolean  @default(false) // já recebeu o lembrete
+  phone       String    @unique
+  converted   Boolean   @default(false) // virou paciente cadastrado
+  contacted   Boolean   @default(false) // já recebeu o lembrete
   contactedAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([converted, contacted, createdAt])
 }
@@ -392,28 +481,33 @@ model FinancialEntry {
  * quando o webhook confirma o pagamento, o lançamento é baixado sozinho.
  */
 model Payment {
-  id                String          @id @default(cuid())
+  id                String           @id @default(cuid())
   provider          PaymentProvider
   method            PaymentMethod
-  amount            Decimal         @db.Decimal(10, 2)
-  status            PaymentStatus   @default(PENDENTE)
+  amount            Decimal          @db.Decimal(10, 2)
+  status            PaymentStatus    @default(PENDENTE)
   providerPaymentId String? // id da cobrança no gateway (Asaas: payment id; Stripe: checkout session id)
-  checkoutUrl       String?         @db.Text // link de pagamento para o paciente
-  pixCopiaCola      String?         @db.Text // código copia-e-cola do PIX (Asaas)
-  pixQrCodeUrl      String?         @db.Text // URL da imagem do QR code do PIX (Asaas)
+  checkoutUrl       String?          @db.Text // link de pagamento para o paciente
+  pixCopiaCola      String?          @db.Text // código copia-e-cola do PIX (Asaas)
+  pixQrCodeUrl      String?          @db.Text // URL da imagem do QR code do PIX (Asaas)
   expiresAt         DateTime?
   paidAt            DateTime?
   externalStatus    String? // status bruto reportado pelo gateway
-  fee               Decimal?        @db.Decimal(10, 2) // taxa cobrada pelo gateway
+  fee               Decimal?         @db.Decimal(10, 2) // taxa cobrada pelo gateway
   remindedAt        DateTime? // quando o lembrete automático de pagamento foi enviado
-  financialEntryId  String?         @unique
-  financialEntry    FinancialEntry? @relation(fields: [financialEntryId], references: [id], onDelete: SetNull)
+  financialEntryId  String?          @unique
+  financialEntry    FinancialEntry?  @relation(fields: [financialEntryId], references: [id], onDelete: SetNull)
   attendanceId      String?
-  attendance        Attendance?     @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  attendance        Attendance?      @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  followUpId        String?
+  followUp          FollowUpProgram? @relation(fields: [followUpId], references: [id], onDelete: SetNull)
+  installments      Int? // nº de parcelas no cartão (acompanhamento)
+  installmentValue  Decimal?         @db.Decimal(10, 2) // valor de cada parcela
+  cycleNumber       Int? // nº do ciclo na cobrança recorrente
   patientId         String?
-  patient           Patient?        @relation(fields: [patientId], references: [id], onDelete: SetNull)
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  patient           Patient?         @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   @@index([status])
   @@index([providerPaymentId])

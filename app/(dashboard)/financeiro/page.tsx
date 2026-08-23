@@ -26,6 +26,8 @@ export const metadata: Metadata = { title: "Financeiro" }
 const CATEGORY_LABELS: Record<string, string> = {
   CONSULTA_PRESENCIAL: "Consulta presencial",
   CONSULTA_DOMICILIAR: "Consulta domiciliar",
+  TELECONSULTA: "Teleconsulta",
+  ACOMPANHAMENTO: "Acompanhamento",
   PROCEDIMENTO: "Procedimento",
   MEDICAMENTO: "Medicamento",
   OPERACIONAL: "Operacional",

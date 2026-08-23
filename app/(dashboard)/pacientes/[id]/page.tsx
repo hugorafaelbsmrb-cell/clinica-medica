@@ -3,7 +3,14 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { ArrowLeft, Navigation, Pencil, Phone, MapPin } from "lucide-react"
+import {
+  ArrowLeft,
+  Navigation,
+  Pencil,
+  Phone,
+  MapPin,
+  HeartPulse,
+} from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
@@ -15,12 +22,14 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { CobrarPacienteButton } from "@/components/pacientes/cobrar-paciente-button"
+import { MarcarAcompanhamentoButton } from "@/components/acompanhamentos/marcar-acompanhamento-button"
 
 export const metadata: Metadata = { title: "Detalhes do paciente" }
 
 const TYPE_LABELS = {
   PRESENCIAL: "Presencial",
   DOMICILIAR: "Domiciliar",
+  TELECONSULTA: "Teleconsulta",
 } as const
 
 const STATUS_LABELS = {
@@ -36,8 +45,10 @@ export default async function PacienteDetalhePage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  const session = await auth()
-  requireRole(session, ["ADMIN", "MEDICO", "SECRETARIA"])
+  const session = requireRole(
+    await auth(),
+    ["ADMIN", "MEDICO", "SECRETARIA"]
+  )
 
   const { id } = await params
   const [patient, paymentSettings] = await Promise.all([
@@ -45,6 +56,7 @@ export default async function PacienteDetalhePage({
       where: { id },
       include: {
         followUp: true,
+        followUpPrograms: { orderBy: { createdAt: "desc" } },
         attendances: { orderBy: { scheduledAt: "desc" }, take: 10 },
         messages: { orderBy: { createdAt: "desc" }, take: 10 },
         prescriptions: {
@@ -58,6 +70,13 @@ export default async function PacienteDetalhePage({
   ])
 
   if (!patient) notFound()
+
+  // Programa de acompanhamento ativo (ATIVO ou PAUSADO), se existir.
+  const activeProgram = patient.followUpPrograms.find(
+    (program) => program.status === "ATIVO" || program.status === "PAUSADO"
+  )
+  const canManageFollowUp =
+    session.user.role === "ADMIN" || session.user.role === "MEDICO"
 
   const address = [
     patient.street,
@@ -99,6 +118,41 @@ export default async function PacienteDetalhePage({
           </div>
         </div>
         <div className="flex gap-2">
+          {activeProgram && canManageFollowUp ? (
+            <Button
+              variant="outline"
+              render={<Link href={`/acompanhamentos/${activeProgram.id}`} />}
+            >
+              <HeartPulse className="h-4 w-4" />
+              Em acompanhamento
+            </Button>
+          ) : activeProgram ? (
+            <Badge variant="secondary" className="h-9 px-3">
+              <HeartPulse className="mr-1 h-4 w-4" />
+              Em acompanhamento
+            </Badge>
+          ) : canManageFollowUp ? (
+            <MarcarAcompanhamentoButton
+              patientId={patient.id}
+              patientName={patient.name}
+              sugestaoBaixa={
+                paymentSettings.acompValorBaixa > 0
+                  ? paymentSettings.acompValorBaixa
+                  : null
+              }
+              sugestaoMedia={
+                paymentSettings.acompValorMedia > 0
+                  ? paymentSettings.acompValorMedia
+                  : null
+              }
+              sugestaoAlta={
+                paymentSettings.acompValorAlta > 0
+                  ? paymentSettings.acompValorAlta
+                  : null
+              }
+              jurosParcelamento={paymentSettings.jurosParcelamento}
+            />
+          ) : null}
           <CobrarPacienteButton
             patientId={patient.id}
             patientName={patient.name}

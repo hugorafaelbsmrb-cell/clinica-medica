@@ -9,12 +9,12 @@ export const metadata: Metadata = { title: "Novo plano terapêutico" }
 export default async function NovoPlanoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ atendimento?: string }>
+  searchParams: Promise<{ atendimento?: string; patientId?: string }>
 }) {
   const session = await auth()
   requireRole(session, ["ADMIN", "MEDICO"])
 
-  const { atendimento } = await searchParams
+  const { atendimento, patientId } = await searchParams
 
   const [patients, attendance] = await Promise.all([
     prisma.patient.findMany({
@@ -39,7 +39,7 @@ export default async function NovoPlanoPage({
       </div>
       <PlanForm
         patients={patients}
-        preselectedPatientId={attendance?.patientId}
+        preselectedPatientId={patientId ?? attendance?.patientId}
       />
     </div>
   )

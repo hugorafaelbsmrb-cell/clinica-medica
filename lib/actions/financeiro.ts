@@ -19,6 +19,8 @@ const entrySchema = z.object({
     [
       "CONSULTA_PRESENCIAL",
       "CONSULTA_DOMICILIAR",
+      "TELECONSULTA",
+      "ACOMPANHAMENTO",
       "PROCEDIMENTO",
       "MEDICAMENTO",
       "OPERACIONAL",

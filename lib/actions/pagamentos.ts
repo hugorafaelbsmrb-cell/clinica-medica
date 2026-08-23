@@ -39,6 +39,11 @@ const paymentKeysSchema = z.object({
   stripeWebhookSecret: z.string().optional(),
   consultaPrecoPresencial: z.string().optional(),
   consultaPrecoDomiciliar: z.string().optional(),
+  consultaPrecoTeleconsulta: z.string().optional(),
+  acompValorBaixa: z.string().optional(),
+  acompValorMedia: z.string().optional(),
+  acompValorAlta: z.string().optional(),
+  jurosParcelamento: z.string().optional(),
 })
 
 /** Converte o campo de preço do formulário (aceita vírgula) para número. */
@@ -72,6 +77,11 @@ export async function savePaymentSettings(
     stripeWebhookSecret: formData.get("stripeWebhookSecret"),
     consultaPrecoPresencial: formData.get("consultaPrecoPresencial"),
     consultaPrecoDomiciliar: formData.get("consultaPrecoDomiciliar"),
+    consultaPrecoTeleconsulta: formData.get("consultaPrecoTeleconsulta"),
+    acompValorBaixa: formData.get("acompValorBaixa"),
+    acompValorMedia: formData.get("acompValorMedia"),
+    acompValorAlta: formData.get("acompValorAlta"),
+    jurosParcelamento: formData.get("jurosParcelamento"),
   })
   if (!parsed.success) {
     return {
@@ -93,6 +103,14 @@ export async function savePaymentSettings(
       consultaPrecoDomiciliar: parsePrice(
         formData.get("consultaPrecoDomiciliar")
       ),
+      consultaPrecoTeleconsulta: parsePrice(
+        formData.get("consultaPrecoTeleconsulta")
+      ),
+      acompValorBaixa: parsePrice(formData.get("acompValorBaixa")),
+      acompValorMedia: parsePrice(formData.get("acompValorMedia")),
+      acompValorAlta: parsePrice(formData.get("acompValorAlta")),
+      jurosParcelamento:
+        parsePrice(formData.get("jurosParcelamento")) ?? 2.99,
     },
     create: {
       id: 1,
@@ -105,6 +123,14 @@ export async function savePaymentSettings(
       consultaPrecoDomiciliar: parsePrice(
         formData.get("consultaPrecoDomiciliar")
       ),
+      consultaPrecoTeleconsulta: parsePrice(
+        formData.get("consultaPrecoTeleconsulta")
+      ),
+      acompValorBaixa: parsePrice(formData.get("acompValorBaixa")),
+      acompValorMedia: parsePrice(formData.get("acompValorMedia")),
+      acompValorAlta: parsePrice(formData.get("acompValorAlta")),
+      jurosParcelamento:
+        parsePrice(formData.get("jurosParcelamento")) ?? 2.99,
     },
   })
 

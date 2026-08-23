@@ -15,6 +15,14 @@ export type PaymentSettings = {
   consultaPrecoPresencial: number
   /** Preço da consulta domiciliar. */
   consultaPrecoDomiciliar: number
+  /** Preço da teleconsulta (vídeo chamada). */
+  consultaPrecoTeleconsulta: number
+  /** Valores sugeridos por complexidade no acompanhamento. */
+  acompValorBaixa: number
+  acompValorMedia: number
+  acompValorAlta: number
+  /** Juros mensais repassados ao paciente no cartão parcelado (%). */
+  jurosParcelamento: number
 }
 
 let cache: PaymentSettings | null = null
@@ -32,6 +40,13 @@ export async function getPaymentSettings(): Promise<PaymentSettings> {
       settings?.stripeWebhookSecret || process.env.STRIPE_WEBHOOK_SECRET || "",
     consultaPrecoPresencial: Number(settings?.consultaPrecoPresencial ?? 0),
     consultaPrecoDomiciliar: Number(settings?.consultaPrecoDomiciliar ?? 0),
+    consultaPrecoTeleconsulta: Number(
+      settings?.consultaPrecoTeleconsulta ?? 0
+    ),
+    acompValorBaixa: Number(settings?.acompValorBaixa ?? 0),
+    acompValorMedia: Number(settings?.acompValorMedia ?? 0),
+    acompValorAlta: Number(settings?.acompValorAlta ?? 0),
+    jurosParcelamento: Number(settings?.jurosParcelamento ?? 2.99),
   }
   return cache
 }

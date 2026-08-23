@@ -17,6 +17,7 @@ import {
 } from "@/lib/whatsapp/message-service"
 import { queueAutomationMessages } from "@/lib/whatsapp/automations"
 import { sweepExpiredPayments } from "@/lib/payments/router"
+import { generateDueFollowUpCharges } from "@/lib/actions/acompanhamentos"
 import { getIntegrationSettings } from "@/lib/integrations"
 
 export const runtime = "nodejs"
@@ -44,6 +45,7 @@ export async function GET(request: NextRequest) {
   const queuedReminders = await queueAppointmentReminders()
   const automations = await queueAutomationMessages()
   const expiredPayments = await sweepExpiredPayments()
+  const followUpCharges = await generateDueFollowUpCharges()
   const { sent, failed } = await processPendingMessages()
 
   const integrations = await getIntegrationSettings()
@@ -54,6 +56,7 @@ export async function GET(request: NextRequest) {
     queuedReminders,
     automations,
     expiredPayments,
+    followUpCharges,
     sent,
     failed,
     provider:

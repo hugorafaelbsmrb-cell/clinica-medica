@@ -11,12 +11,12 @@ export const metadata: Metadata = { title: "Nova prescrição" }
 export default async function NovaPrescricaoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ atendimento?: string }>
+  searchParams: Promise<{ atendimento?: string; patientId?: string }>
 }) {
   const session = await auth()
   requireRole(session, ["ADMIN", "MEDICO"])
 
-  const { atendimento } = await searchParams
+  const { atendimento, patientId } = await searchParams
 
   const [patients, attendances] = await Promise.all([
     prisma.patient.findMany({
@@ -49,6 +49,7 @@ export default async function NovaPrescricaoPage({
           )}`,
         }))}
         preselectedAttendanceId={atendimento}
+        preselectedPatientId={patientId}
       />
     </div>
   )

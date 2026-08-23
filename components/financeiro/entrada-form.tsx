@@ -26,6 +26,8 @@ export type EntryInitialData = {
 const CATEGORIES: { value: string; label: string; group: string }[] = [
   { value: "CONSULTA_PRESENCIAL", label: "Consulta presencial", group: "receita" },
   { value: "CONSULTA_DOMICILIAR", label: "Consulta domiciliar", group: "receita" },
+  { value: "TELECONSULTA", label: "Teleconsulta", group: "receita" },
+  { value: "ACOMPANHAMENTO", label: "Acompanhamento", group: "receita" },
   { value: "PROCEDIMENTO", label: "Procedimento", group: "receita" },
   { value: "MEDICAMENTO", label: "Medicamento", group: "despesa" },
   { value: "OPERACIONAL", label: "Operacional", group: "despesa" },

@@ -46,6 +46,10 @@ export async function createCharge(
     financialEntryId?: string
     attendanceId?: string
     patientId?: string
+    followUpId?: string
+    installments?: number | null
+    installmentValue?: number | null
+    cycleNumber?: number | null
   }
 ): Promise<
   CreateChargeResult & { paymentId?: string; provider?: PaymentProviderType }
@@ -79,6 +83,10 @@ export async function createCharge(
       financialEntryId: input.financialEntryId ?? null,
       attendanceId: input.attendanceId ?? null,
       patientId: input.patientId ?? null,
+      followUpId: input.followUpId ?? null,
+      installments: input.installments ?? null,
+      installmentValue: input.installmentValue ?? null,
+      cycleNumber: input.cycleNumber ?? null,
       expiresAt,
     },
   })
