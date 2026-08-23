@@ -7,6 +7,7 @@
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { prisma } from "@/lib/prisma"
+import { dispatchPush } from "@/lib/push"
 
 const TYPE_LABELS: Record<string, string> = {
   PRESENCIAL: "Presencial",
@@ -16,6 +17,26 @@ const TYPE_LABELS: Record<string, string> = {
 
 function typeLabel(type: string): string {
   return TYPE_LABELS[type] ?? type
+}
+
+/** Cria a notificação no painel e dispara o push para os celulares. */
+async function createAndDispatch(data: {
+  type: "NOVA_CONSULTA" | "CONSULTA_CONFIRMADA" | "ATENDENTE"
+  title: string
+  body: string
+  link: string
+  attendanceId?: string
+  patientId?: string
+}): Promise<void> {
+  const created = await prisma.notification.create({ data })
+
+  // Push não bloqueia o fluxo: roda em segundo plano e nunca lança erro
+  dispatchPush({
+    title: created.title,
+    body: created.body ?? undefined,
+    url: created.link ?? "/dashboard",
+    notificationId: created.id,
+  }).catch((error) => console.error("[Push] Erro no envio:", error))
 }
 
 /**
@@ -36,17 +57,15 @@ export async function notifyNewAppointment(
     locale: ptBR,
   })
 
-  await prisma.notification.create({
-    data: {
-      type: "NOVA_CONSULTA",
-      title: awaitingPayment ? "Nova reserva de consulta" : "Nova consulta agendada",
-      body: `${attendance.patient.name} — ${typeLabel(attendance.type)} em ${when}${
-        awaitingPayment ? " (aguardando pagamento)" : ""
-      }`,
-      link: `/atendimentos/${attendance.id}`,
-      attendanceId: attendance.id,
-      patientId: attendance.patientId,
-    },
+  await createAndDispatch({
+    type: "NOVA_CONSULTA",
+    title: awaitingPayment ? "Nova reserva de consulta" : "Nova consulta agendada",
+    body: `${attendance.patient.name} — ${typeLabel(attendance.type)} em ${when}${
+      awaitingPayment ? " (aguardando pagamento)" : ""
+    }`,
+    link: `/atendimentos/${attendance.id}`,
+    attendanceId: attendance.id,
+    patientId: attendance.patientId,
   })
 }
 
@@ -64,15 +83,13 @@ export async function notifyAppointmentConfirmed(
     locale: ptBR,
   })
 
-  await prisma.notification.create({
-    data: {
-      type: "CONSULTA_CONFIRMADA",
-      title: "Consulta confirmada",
-      body: `${attendance.patient.name} — ${typeLabel(attendance.type)} em ${when} (pagamento confirmado)`,
-      link: `/atendimentos/${attendance.id}`,
-      attendanceId: attendance.id,
-      patientId: attendance.patientId,
-    },
+  await createAndDispatch({
+    type: "CONSULTA_CONFIRMADA",
+    title: "Consulta confirmada",
+    body: `${attendance.patient.name} — ${typeLabel(attendance.type)} em ${when} (pagamento confirmado)`,
+    link: `/atendimentos/${attendance.id}`,
+    attendanceId: attendance.id,
+    patientId: attendance.patientId,
   })
 }
 
@@ -87,13 +104,11 @@ export async function notifyAttendantNeeded(
       ? `${messageContent.slice(0, 120).trimEnd()}…`
       : messageContent
 
-  await prisma.notification.create({
-    data: {
-      type: "ATENDENTE",
-      title: "Paciente pediu atendente",
-      body: `${patientName}: “${snippet}”`,
-      link: "/whatsapp",
-      patientId,
-    },
+  await createAndDispatch({
+    type: "ATENDENTE",
+    title: "Paciente pediu atendente",
+    body: `${patientName}: “${snippet}”`,
+    link: "/whatsapp",
+    patientId,
   })
 }

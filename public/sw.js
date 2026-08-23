@@ -10,6 +10,57 @@
  */
 const CACHE_NAME = "clinica-medica-v1"
 
+/** Notificação recebida por Web Push: mostra na tela do celular. */
+self.addEventListener("push", (event) => {
+  let data = {}
+  try {
+    data = event.data?.json() ?? {}
+  } catch {
+    // payload não-JSON: usa os campos padrão
+  }
+  const { title = "Clínica Médica", body = "", url = "/dashboard", notificationId } = data
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: notificationId ?? undefined,
+      data: { url, notificationId },
+    })
+  )
+})
+
+/** Toque na notificação: abre a página relacionada e marca como lida. */
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close()
+  const { url = "/dashboard", notificationId } = event.notification.data ?? {}
+
+  // Marca como lida no painel (se estiver logado; 401 é ignorado)
+  if (notificationId) {
+    event.waitUntil(
+      fetch("/api/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [notificationId] }),
+      }).catch(() => {})
+    )
+  }
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clients) => {
+        for (const client of clients) {
+          if ("focus" in client) {
+            client.navigate(url)
+            return client.focus()
+          }
+        }
+        return self.clients.openWindow(url)
+      })
+  )
+})
+
 self.addEventListener("install", () => {
   self.skipWaiting()
 })

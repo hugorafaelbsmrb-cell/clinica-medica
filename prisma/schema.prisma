@@ -142,6 +142,7 @@ model User {
   prescriptions       Prescription[]
   plans               TherapeuticPlan[]
   followUpPrograms    FollowUpProgram[]
+  pushSubscriptions   PushSubscription[]
   followUpEvaluations FollowUpEvaluation[]
 }
 
@@ -382,6 +383,19 @@ model Notification {
 
   @@index([createdAt])
   @@index([readAt])
+}
+
+// Inscrição de Web Push de um usuário (notificações no celular).
+// O endpoint é único por navegador/instalação; chaves no padrão
+// applicationServerKey (p256dh/auth) usadas pelo web-push.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  keysJson  String   @db.Text // JSON: { p256dh, auth }
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Sessão do bot de atendimento: lembra em qual etapa o paciente está

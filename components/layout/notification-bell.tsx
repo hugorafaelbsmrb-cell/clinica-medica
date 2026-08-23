@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Bell, CheckCheck } from "lucide-react"
+import { Bell, BellRing, CheckCheck } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { Button } from "@/components/ui/button"
@@ -29,6 +29,18 @@ function timeLabel(iso: string): string {
   return formatDistanceToNow(new Date(iso), { addSuffix: true, locale: ptBR })
 }
 
+/** Converte a chave VAPID (base64url) para Uint8Array do pushManager. */
+function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4)
+  const base64url = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/")
+  const raw = window.atob(base64url)
+  const bytes = new Uint8Array(raw.length)
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i)
+  return bytes
+}
+
+type PushStatus = "unsupported" | "denied" | "idle" | "active"
+
 /**
  * Sino de notificações do topo do painel: contagem de não lidas +
  * lista das últimas 20. Atualiza por polling (60s) e ao focar a aba.
@@ -37,6 +49,7 @@ export function NotificationBell() {
   const [items, setItems] = useState<NotificationItem[]>([])
   const [unread, setUnread] = useState(0)
   const [open, setOpen] = useState(false)
+  const [pushStatus, setPushStatus] = useState<PushStatus>("unsupported")
   const router = useRouter()
 
   const load = useCallback(async () => {
@@ -90,6 +103,98 @@ export function NotificationBell() {
     if (item.link) router.push(item.link)
   }
 
+  const ensureRegistration = async (): Promise<ServiceWorkerRegistration | null> => {
+    try {
+      return (
+        (await navigator.serviceWorker.getRegistration()) ??
+        (await navigator.serviceWorker.register("/sw.js"))
+      )
+    } catch {
+      return null
+    }
+  }
+
+  const subscribePush = async (): Promise<boolean> => {
+    try {
+      const configRes = await fetch("/api/push/config", { cache: "no-store" })
+      const config = await configRes.json()
+      const publicKey = config.publicKey as string | null
+      if (!configRes.ok || !publicKey) return false
+
+      const registration = await ensureRegistration()
+      if (!registration) return false
+
+      let sub = await registration.pushManager.getSubscription()
+      if (!sub) {
+        sub = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        })
+      }
+
+      const res = await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sub.toJSON()),
+      })
+      return res.ok
+    } catch {
+      return false
+    }
+  }
+
+  const enablePush = async () => {
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) return
+    try {
+      const permission = await Notification.requestPermission()
+      if (permission !== "granted") {
+        setPushStatus("denied")
+        return
+      }
+      const ok = await subscribePush()
+      setPushStatus(ok ? "active" : "idle")
+    } catch {
+      setPushStatus("idle")
+    }
+  }
+
+  const disablePush = async () => {
+    try {
+      const registration = await ensureRegistration()
+      const sub = registration
+        ? await registration.pushManager.getSubscription()
+        : null
+      if (sub) {
+        await sub.unsubscribe()
+        await fetch("/api/push/unsubscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: sub.endpoint }),
+        })
+      }
+    } catch {
+      // falha não é crítica: o estado local segue consistente
+    }
+    setPushStatus("idle")
+  }
+
+  // Ao montar: se a permissão já foi concedida, reativa a inscrição
+  useEffect(() => {
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) return
+    const refresh = async () => {
+      if (Notification.permission === "granted") {
+        const ok = await subscribePush()
+        setPushStatus(ok ? "active" : "idle")
+      } else if (Notification.permission === "denied") {
+        setPushStatus("denied")
+      } else {
+        setPushStatus("idle")
+      }
+    }
+    void refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
@@ -137,7 +242,7 @@ export function NotificationBell() {
             Nenhuma notificação por enquanto.
           </p>
         ) : (
-          <ul className="max-h-[70vh] overflow-y-auto py-1">
+          <ul className="max-h-[55vh] overflow-y-auto py-1">
             {items.map((item) => (
               <li key={item.id}>
                 <button
@@ -167,6 +272,51 @@ export function NotificationBell() {
             ))}
           </ul>
         )}
+
+        {/* Notificações no celular (Web Push) */}
+        <div className="border-t px-3 py-2">
+          {pushStatus === "unsupported" ? (
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              Seu navegador não suporta notificações push.
+            </p>
+          ) : pushStatus === "denied" ? (
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              Notificações bloqueadas neste navegador. Libere nas
+              configurações do site para recebê-las no celular.
+            </p>
+          ) : pushStatus === "active" ? (
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <BellRing className="h-3.5 w-3.5 text-primary" />
+                Notificações no celular ativadas
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => void disablePush()}
+              >
+                Desativar
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full gap-1.5"
+                onClick={() => void enablePush()}
+              >
+                <BellRing className="h-3.5 w-3.5" />
+                Ativar notificações no celular
+              </Button>
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                No iPhone, instale o app na tela inicial para receber os
+                alertas com o app fechado.
+              </p>
+            </div>
+          )}
+        </div>
       </PopoverContent>
     </Popover>
   )
