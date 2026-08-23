@@ -118,6 +118,20 @@ export async function createFollowUpProgram(
   })
   if (!patient) return { success: false, message: "Paciente não encontrado" }
 
+  // Guarda contra duplicidade: um paciente não pode ter dois programas
+  // de acompanhamento ativos ao mesmo tempo.
+  const activeProgram = await prisma.followUpProgram.findFirst({
+    where: { patientId: data.patientId, status: "ATIVO" },
+    select: { id: true },
+  })
+  if (activeProgram) {
+    return {
+      success: false,
+      message:
+        "Este paciente já possui um acompanhamento ativo — conclua ou cancele o atual antes de criar outro",
+    }
+  }
+
   const settings = await getPaymentSettings()
 
   // --- Cálculo da cobrança conforme o modo escolhido ---
@@ -363,7 +377,8 @@ export async function createFollowUpEvaluation(
  */
 export async function generateFollowUpRecurringCharge(
   followUpId: string,
-  now = new Date()
+  now = new Date(),
+  cycleNumberOverride?: number
 ): Promise<{ ok: boolean; message: string }> {
   const program = await prisma.followUpProgram.findUnique({
     where: { id: followUpId },
@@ -387,7 +402,12 @@ export async function generateFollowUpRecurringCharge(
   const lastPayment = program.payments[0]
   const method: PaymentMethodType =
     lastPayment?.method === "CARTAO" ? "CARTAO" : "PIX"
-  const cycleNumber = program.payments.length + 1
+  // Número do ciclo conta só ciclos efetivamente pagos — cobranças
+  // canceladas/expiradas/falhas não inflam a numeração.
+  const paidCount = await prisma.payment.count({
+    where: { followUpId: program.id, status: "PAGO" },
+  })
+  const cycleNumber = cycleNumberOverride ?? paidCount + 1
   const value = Number(program.baseValue)
 
   const entry = await prisma.financialEntry.create({
@@ -418,14 +438,11 @@ export async function generateFollowUpRecurringCharge(
     return { ok: false, message: result.error ?? "Falha ao gerar a cobrança do ciclo" }
   }
 
-  // Avança o próximo vencimento mantendo a cadência original (ciclos
-  // atrasados são alcançados de uma vez, sem gerar cobrança retroativa).
-  let next = new Date(
+  // Avança um ciclo na cadência original; ciclos atrasados adicionais são
+  // gerados em sequência pelo laço do cron (generateDueFollowUpCharges).
+  const next = new Date(
     program.nextDueAt.getTime() + program.cycleDays * 24 * 60 * 60 * 1000
   )
-  while (next.getTime() <= now.getTime()) {
-    next = new Date(next.getTime() + program.cycleDays * 24 * 60 * 60 * 1000)
-  }
   await prisma.followUpProgram.update({
     where: { id: program.id },
     data: { nextDueAt: next },
@@ -478,13 +495,41 @@ export async function generateDueFollowUpCharges(now = new Date()): Promise<numb
 
   let generated = 0
   for (const program of due) {
-    const result = await generateFollowUpRecurringCharge(program.id, now)
-    if (result.ok) {
-      generated++
-    } else {
-      console.error(
-        `[Acompanhamento] Falha no ciclo do programa ${program.id}: ${result.message}`
+    // Gera uma cobrança por ciclo vencido (o programa pode ter acumulado
+    // mais de um). O limite de 12 por execução evita laço descontrolado —
+    // atrasos maiores são alcançados nas próximas execuções do cron.
+    const paidCount = await prisma.payment.count({
+      where: { followUpId: program.id, status: "PAGO" },
+    })
+    let offset = 0
+    while (offset < 12) {
+      const current = await prisma.followUpProgram.findUnique({
+        where: { id: program.id },
+        select: { status: true, billingMode: true, nextDueAt: true },
+      })
+      if (
+        !current ||
+        current.status !== "ATIVO" ||
+        current.billingMode !== "RECORRENTE" ||
+        !current.nextDueAt ||
+        current.nextDueAt > now
+      ) {
+        break
+      }
+      offset++
+      const result = await generateFollowUpRecurringCharge(
+        program.id,
+        now,
+        paidCount + offset
       )
+      if (result.ok) {
+        generated++
+      } else {
+        console.error(
+          `[Acompanhamento] Falha no ciclo do programa ${program.id}: ${result.message}`
+        )
+        break
+      }
     }
   }
   return generated

@@ -207,7 +207,11 @@ export async function queueDueFollowUps(now = new Date()): Promise<number> {
     where: {
       active: true,
       nextDueAt: { lte: now },
-      patient: { whatsappEnabled: true, phone: { not: null } },
+      patient: {
+        whatsappEnabled: true,
+        phone: { not: null },
+        lgpdConsent: true,
+      },
     },
     include: { patient: true },
   })
@@ -293,7 +297,11 @@ export async function queueAppointmentReminders(now = new Date()): Promise<numbe
     where: {
       status: "AGENDADO",
       scheduledAt: { gte: now, lte: windowEnd },
-      patient: { whatsappEnabled: true, phone: { not: null } },
+      patient: {
+        whatsappEnabled: true,
+        phone: { not: null },
+        lgpdConsent: true,
+      },
     },
     include: { patient: true },
   })

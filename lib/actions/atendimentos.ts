@@ -258,9 +258,11 @@ export async function startAttendance(id: string): Promise<ActionState> {
   })
 
   // Aviso "médico a caminho": envio direto via provider (não espera o cron).
-  // Respeita WhatsApp habilitado + consentimento LGPD + telefone cadastrado.
+  // Só faz sentido em deslocamento (presencial/domiciliar); teleconsulta não
+  // tem trajeto. Respeita WhatsApp habilitado + consentimento LGPD + telefone.
   let notifyError: string | null = null
   if (
+    attendance.type !== "TELECONSULTA" &&
     attendance.patient.phone &&
     attendance.patient.whatsappEnabled &&
     attendance.patient.lgpdConsent

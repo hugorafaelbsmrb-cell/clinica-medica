@@ -578,3 +578,12 @@ model AuditLog {
   details   Json?
   createdAt DateTime @default(now())
 }
+
+// Trava simples de concorrência do cron: uma linha por job com início/fim.
+// Execuções simultâneas ou repetidas em < 5 min são puladas.
+model CronRun {
+  id         String    @id @default(cuid())
+  name       String    @unique
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+}

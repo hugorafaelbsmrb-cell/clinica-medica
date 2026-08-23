@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { requireRole } from "@/lib/rbac"
 
 export type ActionState = {
   success: boolean
@@ -40,6 +41,7 @@ export async function createEntry(
 ): Promise<ActionState> {
   const session = await auth()
   if (!session?.user) return { success: false, message: "Sessão expirada" }
+  requireRole(session, ["ADMIN", "FINANCEIRO"])
 
   const parsed = entrySchema.safeParse({
     type: formData.get("type"),
@@ -80,8 +82,12 @@ export async function updateEntry(
 ): Promise<ActionState> {
   const session = await auth()
   if (!session?.user) return { success: false, message: "Sessão expirada" }
+  requireRole(session, ["ADMIN", "FINANCEIRO"])
 
   const id = formData.get("id")?.toString() ?? ""
+  const existing = await prisma.financialEntry.findUnique({ where: { id } })
+  if (!existing) return { success: false, message: "Lançamento não encontrado" }
+
   const parsed = entrySchema.safeParse({
     type: formData.get("type"),
     category: formData.get("category"),
@@ -111,6 +117,21 @@ export async function updateEntry(
     },
   })
 
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      action: "UPDATE",
+      entity: "FinancialEntry",
+      entityId: id,
+      details: {
+        type: data.type,
+        category: data.category,
+        description: data.description,
+        value: data.value,
+      },
+    },
+  })
+
   revalidatePath("/financeiro")
   return { success: true, message: "Lançamento atualizado", entryId: id }
 }
@@ -119,6 +140,7 @@ export async function updateEntry(
 export async function toggleEntryStatus(entryId: string): Promise<ActionState> {
   const session = await auth()
   if (!session?.user) return { success: false, message: "Sessão expirada" }
+  requireRole(session, ["ADMIN", "FINANCEIRO"])
 
   const entry = await prisma.financialEntry.findUnique({ where: { id: entryId } })
   if (!entry) return { success: false, message: "Lançamento não encontrado" }
@@ -149,11 +171,28 @@ export async function toggleEntryStatus(entryId: string): Promise<ActionState> {
 export async function deleteEntry(entryId: string): Promise<ActionState> {
   const session = await auth()
   if (!session?.user) return { success: false, message: "Sessão expirada" }
+  requireRole(session, ["ADMIN", "FINANCEIRO"])
 
   const entry = await prisma.financialEntry.findUnique({ where: { id: entryId } })
   if (!entry) return { success: false, message: "Lançamento não encontrado" }
 
   await prisma.financialEntry.delete({ where: { id: entryId } })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      action: "DELETE",
+      entity: "FinancialEntry",
+      entityId: entryId,
+      details: {
+        type: entry.type,
+        category: entry.category,
+        description: entry.description,
+        value: Number(entry.value),
+        status: entry.status,
+      },
+    },
+  })
 
   revalidatePath("/financeiro")
   return { success: true, message: "Lançamento excluído" }
