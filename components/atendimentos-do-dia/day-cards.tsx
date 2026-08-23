@@ -38,7 +38,7 @@ import { completeAttendance, startAttendance } from "@/lib/actions/atendimentos"
 
 export type DayCardData = {
   id: string
-  status: "AGENDADO" | "EM_ATENDIMENTO"
+  status: "AGENDADO" | "EM_ATENDIMENTO" | "REALIZADO"
   scheduledAt: string
   startedAt: string | null
   type: "PRESENCIAL" | "DOMICILIAR" | "TELECONSULTA"
@@ -64,6 +64,8 @@ function formatTime(iso: string): string {
 
 function DayCard({ attendance }: { attendance: DayCardData }) {
   const router = useRouter()
+  // Atendimento já realizado: aparece como registro do dia, sem ação.
+  const done = attendance.status === "REALIZADO"
   const [started, setStarted] = useState(
     attendance.status === "EM_ATENDIMENTO"
   )
@@ -118,6 +120,7 @@ function DayCard({ attendance }: { attendance: DayCardData }) {
             {formatTime(attendance.scheduledAt)}
           </span>
           {started && <Badge>Em atendimento</Badge>}
+          {done && <Badge variant="secondary">Realizado</Badge>}
           <p className="min-w-0 flex-1 truncate text-base font-semibold">
             {attendance.patientName}
           </p>
@@ -136,34 +139,35 @@ function DayCard({ attendance }: { attendance: DayCardData }) {
           </Button>
         </div>
 
-        {/* Ação principal: iniciar/finalizar atendimento */}
-        {!started ? (
-          <Button
-            className="h-12 w-full text-base"
-            onClick={handleStart}
-            disabled={busy !== null}
-          >
-            {busy === "start" ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <PlayCircle className="h-5 w-5" />
-            )}
-            {busy === "start" ? "Iniciando..." : "Iniciar atendimento"}
-          </Button>
-        ) : (
-          <Button
-            className="h-12 w-full text-base"
-            onClick={handleComplete}
-            disabled={busy !== null}
-          >
-            {busy === "complete" ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <CheckCircle2 className="h-5 w-5" />
-            )}
-            {busy === "complete" ? "Finalizando..." : "Finalizar atendimento"}
-          </Button>
-        )}
+        {/* Ação principal: iniciar/finalizar atendimento (só para os pendentes) */}
+        {!done &&
+          (!started ? (
+            <Button
+              className="h-12 w-full text-base"
+              onClick={handleStart}
+              disabled={busy !== null}
+            >
+              {busy === "start" ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <PlayCircle className="h-5 w-5" />
+              )}
+              {busy === "start" ? "Iniciando..." : "Iniciar atendimento"}
+            </Button>
+          ) : (
+            <Button
+              className="h-12 w-full text-base"
+              onClick={handleComplete}
+              disabled={busy !== null}
+            >
+              {busy === "complete" ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-5 w-5" />
+              )}
+              {busy === "complete" ? "Finalizando..." : "Finalizar atendimento"}
+            </Button>
+          ))}
 
         {/* Demais opções: aparecem ao iniciar o atendimento (ou ao expandir) */}
         {expanded && (

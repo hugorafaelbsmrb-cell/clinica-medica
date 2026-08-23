@@ -1,9 +1,21 @@
 import type { Metadata } from "next"
-import { MapPinned } from "lucide-react"
+import Link from "next/link"
+import { ChevronLeft, ChevronRight, MapPinned } from "lucide-react"
+import {
+  addDays,
+  endOfDay,
+  format,
+  isSameDay,
+  isValid,
+  parse,
+  startOfDay,
+} from "date-fns"
+import { ptBR } from "date-fns/locale"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { buildAddress } from "@/lib/geo"
+import { Button } from "@/components/ui/button"
 import {
   DayCards,
   type DayCardData,
@@ -27,20 +39,31 @@ function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max).trimEnd()}…` : text
 }
 
-export default async function AtendimentosDoDiaPage() {
+export default async function AtendimentosDoDiaPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>
+}) {
   const session = await auth()
   requireRole(session, ["ADMIN", "MEDICO"])
 
-  const now = new Date()
-  const endOfToday = new Date(now)
-  endOfToday.setHours(23, 59, 59, 999)
+  const { date: dateParam } = await searchParams
 
-  // Agendados e em atendimento de hoje (incluindo atrasados de dias
-  // anteriores que ainda não foram finalizados).
+  // Dia selecionado (padrão: hoje). A navegação usa ?date=yyyy-MM-dd.
+  const today = startOfDay(new Date())
+  const parsedDate = dateParam ? parse(dateParam, "yyyy-MM-dd", new Date()) : null
+  const selectedDay = parsedDate && isValid(parsedDate) ? parsedDate : today
+  const isToday = isSameDay(selectedDay, today)
+
+  // Somente os atendimentos do dia selecionado. Atrasados de dias
+  // anteriores continuam visíveis navegando para o dia deles.
   const attendances = await prisma.attendance.findMany({
     where: {
-      status: { in: ["AGENDADO", "EM_ATENDIMENTO"] },
-      scheduledAt: { lte: endOfToday },
+      status: { in: ["AGENDADO", "EM_ATENDIMENTO", "REALIZADO"] },
+      scheduledAt: {
+        gte: startOfDay(selectedDay),
+        lte: endOfDay(selectedDay),
+      },
     },
     include: {
       patient: {
@@ -89,7 +112,7 @@ export default async function AtendimentosDoDiaPage() {
 
     return {
       id: attendance.id,
-      status: attendance.status as "AGENDADO" | "EM_ATENDIMENTO",
+      status: attendance.status as "AGENDADO" | "EM_ATENDIMENTO" | "REALIZADO",
       scheduledAt: attendance.scheduledAt.toISOString(),
       startedAt: attendance.startedAt?.toISOString() ?? null,
       type: attendance.type,
@@ -109,27 +132,89 @@ export default async function AtendimentosDoDiaPage() {
     }
   })
 
+  const prevDate = addDays(selectedDay, -1)
+  const nextDate = addDays(selectedDay, 1)
+  const dayLabel = format(
+    selectedDay,
+    selectedDay.getFullYear() === today.getFullYear()
+      ? "EEEE, d 'de' MMMM"
+      : "EEEE, d 'de' MMMM 'de' yyyy",
+    { locale: ptBR }
+  )
+  const pendingCount = cards.filter((card) => card.status !== "REALIZADO").length
+
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Atendimentos do dia
-        </h1>
-        <p className="text-muted-foreground">
-          {cards.length === 0
-            ? "Nenhum atendimento pendente para hoje"
-            : `${cards.length} ${
-                cards.length === 1 ? "atendimento pendente" : "atendimentos pendentes"
-              } — toque em "Iniciar atendimento" para avisar o paciente`}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Atendimentos do dia
+          </h1>
+          <p className="text-muted-foreground">
+            {cards.length === 0
+              ? `Nenhum atendimento ${
+                  isToday
+                    ? "para hoje"
+                    : `em ${format(selectedDay, "dd/MM/yyyy")}`
+                }`
+              : isToday
+                ? `${pendingCount} ${
+                    pendingCount === 1
+                      ? "atendimento pendente"
+                      : "atendimentos pendentes"
+                  } — toque em "Iniciar atendimento" para avisar o paciente`
+                : `${cards.length} ${
+                    cards.length === 1 ? "atendimento" : "atendimentos"
+                  } no dia ${format(selectedDay, "dd/MM/yyyy")}`}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Dia anterior"
+            render={
+              <Link
+                href={`/atendimentos-do-dia?date=${format(prevDate, "yyyy-MM-dd")}`}
+              />
+            }
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="min-w-44 text-center text-sm font-medium capitalize">
+            {dayLabel}
+          </span>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Próximo dia"
+            render={
+              <Link
+                href={`/atendimentos-do-dia?date=${format(nextDate, "yyyy-MM-dd")}`}
+              />
+            }
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          {!isToday && (
+            <Button
+              variant="ghost"
+              size="sm"
+              render={<Link href="/atendimentos-do-dia" />}
+            >
+              Hoje
+            </Button>
+          )}
+        </div>
       </div>
 
       {cards.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-muted-foreground">
           <MapPinned className="h-12 w-12" />
           <p className="text-sm">
-            Quando houver consultas agendadas para hoje, elas aparecem aqui em
-            cartões prontos para o celular.
+            Quando houver consultas agendadas para este dia, elas aparecem aqui
+            em cartões prontos para o celular.
           </p>
         </div>
       ) : (
