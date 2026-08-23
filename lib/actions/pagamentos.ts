@@ -10,6 +10,7 @@ import {
   refreshPaymentStatus,
   simulatePaymentPaid,
 } from "@/lib/payments/router"
+import { cancelPendingPayment } from "@/lib/payments/cancellation"
 import { invalidatePaymentSettingsCache } from "@/lib/payments/settings"
 import { testAsaasConnection } from "@/lib/payments/asaas"
 import { testStripeConnection } from "@/lib/payments/stripe"
@@ -214,6 +215,12 @@ export async function createPaymentForEntry(input: {
         provider: entry.payment.provider,
       }
     }
+    // Meio de pagamento diferente: encerra a cobrança anterior antes de
+    // criar a nova (a entry é mantida para ser cobrada agora).
+    await cancelPendingPayment(
+      entry.payment.id,
+      `Nova cobrança por ${input.method}`
+    )
   }
 
   const patient = entry.attendanceId
@@ -225,14 +232,32 @@ export async function createPaymentForEntry(input: {
         .then((a) => a?.patient ?? null)
     : null
 
-  const result = await createCharge({
-    method: input.method,
-    amountCents: Math.round(Number(entry.value) * 100),
-    description: `${entry.description} — ${entry.dueDate.toLocaleDateString("pt-BR")}`,
-    customerName: patient?.name ?? undefined,
-    customerCpf: patient?.cpf ?? undefined,
-    financialEntryId: entry.id,
-  })
+  let result: Awaited<ReturnType<typeof createCharge>>
+  try {
+    result = await createCharge({
+      method: input.method,
+      amountCents: Math.round(Number(entry.value) * 100),
+      description: `${entry.description} — ${entry.dueDate.toLocaleDateString("pt-BR")}`,
+      customerName: patient?.name ?? undefined,
+      customerCpf: patient?.cpf ?? undefined,
+      financialEntryId: entry.id,
+    })
+  } catch (error) {
+    // P2002: o vínculo Payment↔FinancialEntry é único — outra cobrança
+    // acabou de ser criada em paralelo para o mesmo lançamento.
+    const code =
+      typeof error === "object" && error !== null && "code" in error
+        ? (error as { code?: string }).code
+        : undefined
+    if (code === "P2002") {
+      return {
+        success: false,
+        message:
+          "Uma cobrança para este lançamento acabou de ser gerada — recarregue a página",
+      }
+    }
+    throw error
+  }
 
   if (!result.ok) {
     return {

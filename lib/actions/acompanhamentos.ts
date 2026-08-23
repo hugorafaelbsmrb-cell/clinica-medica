@@ -16,6 +16,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { createCharge } from "@/lib/payments/router"
+import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
 import { getPaymentSettings } from "@/lib/payments/settings"
 import type { PaymentMethodType } from "@/lib/payments/types"
 import { sendImmediateMessage } from "@/lib/whatsapp/message-service"
@@ -189,8 +190,8 @@ export async function createFollowUpProgram(
     financialEntryId: entry.id,
     patientId: patient.id,
     followUpId: program.id,
-    installments,
-    installmentValue,
+    installments: installments ?? undefined,
+    installmentValue: installmentValue ?? undefined,
     cycleNumber: isRecurring ? 1 : undefined,
   })
 
@@ -268,24 +269,29 @@ export async function updateFollowUpStatus(
   }
 
   const encerrado = status === "CONCLUIDO" || status === "CANCELADO"
-  await prisma.$transaction([
-    prisma.followUpProgram.update({
-      where: { id },
-      data: {
-        status,
-        endDate: encerrado ? new Date() : null,
-        nextDueAt: encerrado ? null : program.nextDueAt,
-      },
-    }),
-    ...(status === "CANCELADO"
-      ? [
-          prisma.payment.updateMany({
-            where: { followUpId: id, status: "PENDENTE" },
-            data: { status: "CANCELADO" },
-          }),
-        ]
-      : []),
-  ])
+  await prisma.followUpProgram.update({
+    where: { id },
+    data: {
+      status,
+      endDate: encerrado ? new Date() : null,
+      nextDueAt: encerrado ? null : program.nextDueAt,
+    },
+  })
+
+  // Cancelar também encerra as cobranças pendentes do programa e remove
+  // os lançamentos PENDENTES vinculados (nunca foram pagos).
+  if (status === "CANCELADO") {
+    const pendingPayments = await prisma.payment.findMany({
+      where: { followUpId: id, status: "PENDENTE" },
+      select: { id: true },
+    })
+    for (const payment of pendingPayments) {
+      await cancelPendingPaymentAndEntry(
+        payment.id,
+        "Acompanhamento cancelado"
+      )
+    }
+  }
 
   await prisma.auditLog.create({
     data: {

@@ -10,6 +10,7 @@ import {
   defaultAutomationMessage,
   queueThankYouMessage,
 } from "@/lib/whatsapp/automations"
+import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
 import {
   renderTemplate,
   sendImmediateMessage,
@@ -184,17 +185,23 @@ export async function cancelAttendance(id: string): Promise<ActionState> {
   const session = await auth()
   if (!session?.user) return { success: false, message: "Sessão expirada" }
 
-  // Cancela também a cobrança pendente vinculada, se houver
-  await prisma.$transaction([
-    prisma.attendance.update({
-      where: { id },
-      data: { status: "CANCELADO" },
-    }),
-    prisma.payment.updateMany({
-      where: { attendanceId: id, status: "PENDENTE" },
-      data: { status: "CANCELADO" },
-    }),
-  ])
+  await prisma.attendance.update({
+    where: { id },
+    data: { status: "CANCELADO" },
+  })
+
+  // Encerra as cobranças pendentes do atendimento e remove os lançamentos
+  // PENDENTES criados junto com elas (nunca foram pagos).
+  const pendingPayments = await prisma.payment.findMany({
+    where: { attendanceId: id, status: "PENDENTE" },
+    select: { id: true },
+  })
+  for (const payment of pendingPayments) {
+    await cancelPendingPaymentAndEntry(
+      payment.id,
+      "Atendimento cancelado pela clínica"
+    )
+  }
 
   revalidatePath("/atendimentos")
   revalidatePath(`/atendimentos/${id}`)

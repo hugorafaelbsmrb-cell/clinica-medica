@@ -106,6 +106,7 @@ enum PaymentStatus {
   EXPIRADO
   CANCELADO
   FALHOU
+  REFUNDED
 }
 
 enum FollowUpComplexity {

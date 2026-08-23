@@ -18,6 +18,7 @@
  */
 import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
+import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
 import { getWhatsAppProvider, normalizePhone } from "./provider"
 import { renderTemplate, enqueueMessage, sendImmediateMessage } from "./message-service"
 
@@ -320,12 +321,13 @@ async function processPagamentosPendentes(
 
   let queued = 0
   for (const payment of payments) {
-    // Horário já foi cancelado/liberado: encerra a cobrança e não lembra
+    // Horário já foi cancelado/liberado: encerra a cobrança e o lançamento
+    // pendente vinculado, e não lembra o pagamento.
     if (payment.attendance && payment.attendance.status !== "AGUARDANDO_PAGAMENTO") {
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: "CANCELADO" },
-      })
+      await cancelPendingPaymentAndEntry(
+        payment.id,
+        "Horário não está mais reservado"
+      )
       continue
     }
 

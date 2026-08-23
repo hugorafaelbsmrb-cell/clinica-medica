@@ -18,6 +18,7 @@ import { queueAppointmentConfirmation } from "@/lib/whatsapp/message-service"
 import { queuePaymentLinkMessage } from "@/lib/whatsapp/automations"
 import { getAppointmentSettings } from "@/lib/agenda/service"
 import { createCharge, simulatePaymentPaid } from "@/lib/payments/router"
+import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
 import { getPaymentSettings } from "@/lib/payments/settings"
 import type { PaymentMethodType } from "@/lib/payments/types"
 
@@ -735,16 +736,21 @@ export async function cancelarConsultaPublica(
 
   // Cancela também a cobrança pendente vinculada, se houver, para que o
   // lembrete automático não cobre por um horário já liberado.
-  await prisma.$transaction([
-    prisma.attendance.update({
-      where: { id: attendance.id },
-      data: { status: "CANCELADO" },
-    }),
-    prisma.payment.updateMany({
-      where: { attendanceId: attendance.id, status: "PENDENTE" },
-      data: { status: "CANCELADO" },
-    }),
-  ])
+  await prisma.attendance.update({
+    where: { id: attendance.id },
+    data: { status: "CANCELADO" },
+  })
+
+  const pendingPayments = await prisma.payment.findMany({
+    where: { attendanceId: attendance.id, status: "PENDENTE" },
+    select: { id: true },
+  })
+  for (const payment of pendingPayments) {
+    await cancelPendingPaymentAndEntry(
+      payment.id,
+      "Consulta cancelada pelo paciente"
+    )
+  }
 
   await prisma.auditLog.create({
     data: {

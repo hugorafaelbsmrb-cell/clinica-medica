@@ -17,6 +17,9 @@ export type CreateChargeInput = {
   description: string
   customerName?: string
   customerCpf?: string
+  /** Parcelamento no cartão (Tabela Price): nº de parcelas e valor de cada. */
+  installments?: number
+  installmentValue?: number
 }
 
 export type CreateChargeResult = {
@@ -36,12 +39,13 @@ export type NormalizedPaymentEvent =
   | { type: "PAID"; providerPaymentId: string; paidAt: Date }
   | { type: "EXPIRED"; providerPaymentId: string }
   | { type: "CANCELLED"; providerPaymentId: string }
+  | { type: "REFUNDED"; providerPaymentId: string }
   | { type: "UNKNOWN" }
 
 export type ProviderStatusResult = {
   ok: boolean
   /** Status interno mapeado a partir do status bruto do gateway. */
-  status?: "PAGO" | "PENDENTE" | "EXPIRADO" | "CANCELADO" | "FALHOU"
+  status?: "PAGO" | "PENDENTE" | "EXPIRADO" | "CANCELADO" | "FALHOU" | "REFUNDED"
   externalStatus?: string
   paidAt?: Date
   error?: string

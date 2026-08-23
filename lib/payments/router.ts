@@ -123,6 +123,8 @@ export async function createCharge(
     description: input.description,
     customerName: input.customerName,
     customerCpf: input.customerCpf,
+    installments: input.installments ?? undefined,
+    installmentValue: input.installmentValue ?? undefined,
   }
 
   const result =
@@ -193,6 +195,14 @@ export async function refreshPaymentStatus(
     await applyPaymentPaid(payment.id, result.paidAt ?? new Date())
     return { success: true, message: "Pagamento confirmado — lançamento baixado", status: "PAGO" }
   }
+  if (result.status === "REFUNDED") {
+    await applyPaymentRefunded(payment.id)
+    return {
+      success: true,
+      message: "Pagamento estornado no gateway — lançamento reaberto",
+      status: "REFUNDED",
+    }
+  }
   if (result.status === "EXPIRADO") {
     await prisma.payment.update({
       where: { id: payment.id },
@@ -242,6 +252,9 @@ export async function processPaymentWebhook(
     case "PAID":
       await applyPaymentPaid(payment.id, event.paidAt)
       break
+    case "REFUNDED":
+      await applyPaymentRefunded(payment.id)
+      break
     case "EXPIRED":
       if (payment.status === "PENDENTE") {
         await prisma.payment.update({
@@ -286,7 +299,7 @@ async function applyPaymentPaid(paymentId: string, paidAt: Date): Promise<void> 
     },
   })
   if (!payment) return
-  if (payment.status === "PAGO") return // já baixada — evita mensagens duplicadas
+  if (payment.status === "PAGO" || payment.status === "REFUNDED") return
 
   const methodLabel: Record<PaymentMethodType, string> = {
     PIX: "PIX",
@@ -294,9 +307,46 @@ async function applyPaymentPaid(paymentId: string, paidAt: Date): Promise<void> 
     APPLE_PAY: "APPLE_PAY",
   }
 
-  const confirmAttendance =
+  // Confirmação do horário reservado. Se o horário foi liberado por
+  // expiração (sweep/webhook) e o pagamento confirmou depois, reativa a
+  // consulta quando o slot continua livre; ocupado, registra a necessidade
+  // de reembolso para a clínica resolver manualmente.
+  let confirmAttendance =
     !!payment.attendanceId &&
     payment.attendance?.status === "AGUARDANDO_PAGAMENTO"
+
+  if (
+    payment.attendanceId &&
+    payment.attendance &&
+    payment.attendance.status === "CANCELADO"
+  ) {
+    const conflict = await prisma.attendance.findFirst({
+      where: {
+        scheduledAt: payment.attendance.scheduledAt,
+        status: { not: "CANCELADO" },
+        id: { not: payment.attendance.id },
+      },
+      select: { id: true },
+    })
+    if (!conflict) {
+      confirmAttendance = true
+    } else {
+      await prisma.auditLog.create({
+        data: {
+          action: "REFUND_NEEDED",
+          entity: "Payment",
+          entityId: payment.id,
+          patientId: payment.patientId ?? payment.attendance.patientId,
+          details: {
+            motivo:
+              "Pagamento confirmado após o horário ser liberado e ocupado — reembolso necessário",
+            provider: payment.provider,
+            amount: Number(payment.amount),
+          },
+        },
+      })
+    }
+  }
 
   await prisma.$transaction([
     prisma.payment.update({
@@ -352,6 +402,45 @@ async function applyPaymentPaid(paymentId: string, paidAt: Date): Promise<void> 
     }
     await queuePaymentConfirmedMessage(patientId, Number(payment.amount))
   }
+}
+
+/**
+ * Estorno: o gateway devolveu o dinheiro (REFUNDED/chargeback). Marca a
+ * cobrança como estornada e reabre o lançamento financeiro vinculado.
+ */
+async function applyPaymentRefunded(paymentId: string): Promise<void> {
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId } })
+  if (!payment || payment.status !== "PAGO") return
+
+  await prisma.$transaction([
+    prisma.payment.update({
+      where: { id: payment.id },
+      data: { status: "REFUNDED" },
+    }),
+    ...(payment.financialEntryId
+      ? [
+          prisma.financialEntry.update({
+            where: { id: payment.financialEntryId },
+            data: { status: "PENDENTE" },
+          }),
+        ]
+      : []),
+  ])
+
+  await prisma.auditLog.create({
+    data: {
+      action: "PAYMENT_REFUNDED",
+      entity: "Payment",
+      entityId: payment.id,
+      patientId: payment.patientId ?? undefined,
+      details: {
+        provider: payment.provider,
+        method: payment.method,
+        amount: Number(payment.amount),
+        financialEntryId: payment.financialEntryId,
+      },
+    },
+  })
 }
 
 /**
@@ -417,11 +506,22 @@ async function releasePendingAttendance(attendanceId: string): Promise<void> {
 export async function sweepExpiredPayments(now = new Date()): Promise<number> {
   const expired = await prisma.payment.findMany({
     where: { status: "PENDENTE", expiresAt: { lt: now } },
-    select: { id: true, attendanceId: true },
+    select: {
+      id: true,
+      attendanceId: true,
+      provider: true,
+      providerPaymentId: true,
+    },
   })
 
   let released = 0
   for (const payment of expired) {
+    // Antes de expirar, confere o gateway: pagamento confirmado no limite
+    // (webhook atrasado) baixa normalmente em vez de liberar o horário.
+    if (payment.provider !== "MOCK" && payment.providerPaymentId) {
+      const check = await refreshPaymentStatus(payment.id)
+      if (check.status === "PAGO" || check.status === "REFUNDED") continue
+    }
     await prisma.payment.update({
       where: { id: payment.id },
       data: { status: "EXPIRADO" },

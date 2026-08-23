@@ -52,9 +52,27 @@ export async function createAsaasCharge(
     const today = new Date()
     const dueDate = today.toISOString().slice(0, 10) // vence hoje (23:59)
 
+    // Parcelado (2+ parcelas no cartão): o Asaas usa installmentCount +
+    // installmentValue no lugar de value (cobrança única manda só value).
+    // A resposta é a 1ª parcela — seu webhook de pagamento baixa o
+    // lançamento inteiro localmente (simplificação do sistema).
+    const isInstallment =
+      input.method === "CARTAO" &&
+      !!input.installments &&
+      input.installments > 1
     const body: Record<string, unknown> = {
       billingType: input.method === "CARTAO" ? "CREDIT_CARD" : "PIX",
-      value: Number((input.amountCents / 100).toFixed(2)),
+      ...(isInstallment
+        ? {
+            installmentCount: input.installments,
+            installmentValue: Number(
+              (
+                input.installmentValue ??
+                input.amountCents / 100 / (input.installments ?? 1)
+              ).toFixed(2)
+            ),
+          }
+        : { value: Number((input.amountCents / 100).toFixed(2)) }),
       dueDate,
       description: input.description.slice(0, 500),
       externalReference: `clinica-medica`,
@@ -130,7 +148,8 @@ export async function getAsaasPaymentStatus(
 /**
  * Converte o webhook do Asaas no formato normalizado.
  * Eventos: PAYMENT_RECEIVED/CONFIRMED (pago), PAYMENT_OVERDUE (vencido),
- * PAYMENT_DELETED (cancelado). O resto é ignorado (UNKNOWN).
+ * PAYMENT_DELETED (cancelado), PAYMENT_REFUNDED/CHARGEBACK_* (estornado).
+ * O resto é ignorado (UNKNOWN).
  */
 export function parseAsaasWebhook(
   payload: unknown
@@ -159,6 +178,13 @@ export function parseAsaasWebhook(
     event = { type: "EXPIRED", providerPaymentId: paymentId }
   } else if (eventName === "PAYMENT_DELETED") {
     event = { type: "CANCELLED", providerPaymentId: paymentId }
+  } else if (
+    eventName === "PAYMENT_REFUNDED" ||
+    eventName === "PAYMENT_REFUND_IN_PROGRESS" ||
+    eventName === "PAYMENT_CHARGEBACK_REQUESTED" ||
+    eventName === "PAYMENT_CHARGEBACK_DISPUTE"
+  ) {
+    event = { type: "REFUNDED", providerPaymentId: paymentId }
   } else {
     event = { type: "UNKNOWN" }
   }
@@ -184,7 +210,7 @@ function mapAsaasStatus(
     case "REFUNDED":
     case "CHARGEBACK_REQUESTED":
     case "CHARGEBACK_DISPUTE":
-      return { ...result, status: "CANCELADO" as const }
+      return { ...result, status: "REFUNDED" as const }
     case "PENDING":
     case "AWAITING_RISK_ANALYSIS":
       return { ...result, status: "PENDENTE" as const }
