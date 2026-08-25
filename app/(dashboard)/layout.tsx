@@ -29,7 +29,10 @@ export default async function DashboardLayout({
             clinicName={clinic.name}
             logoDataUrl={clinic.logoDataUrl}
           />
-          <div className="flex items-center gap-1">
+          {/* O trigger mobile fica oculto em telas grandes (lg:hidden), então
+              o justify-between só vê um item — o ml-auto garante que sino e
+              menu do usuário fiquem sempre à direita. */}
+          <div className="ml-auto flex items-center gap-1">
             <NotificationBell />
             <UserMenu
               name={session.user.name ?? ""}
