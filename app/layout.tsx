@@ -14,15 +14,15 @@ const poppins = Poppins({
 
 export const metadata: Metadata = {
   title: {
-    default: "Clínica Médica",
-    template: "%s | Clínica Médica",
+    default: "Médico em Domicílio",
+    template: "%s | Médico em Domicílio",
   },
-  description: "Sistema de gestão para clínica médica",
-  applicationName: "Clínica Médica",
+  description: "Sistema de gestão de atendimentos médicos domiciliares",
+  applicationName: "Médico em Domicílio",
   // PWA no iOS: abre em tela cheia quando adicionado à tela inicial.
   appleWebApp: {
     capable: true,
-    title: "Clínica Médica",
+    title: "Médico em Domicílio",
     statusBarStyle: "default",
   },
   // Next 16 não emite mais este meta a partir de appleWebApp.capable;

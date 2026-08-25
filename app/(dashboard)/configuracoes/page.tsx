@@ -7,6 +7,7 @@ import { getPaymentSettings } from "@/lib/payments/settings"
 import { ClinicaForm } from "@/components/configuracoes/clinica-form"
 import { IntegracoesForm } from "@/components/configuracoes/integracoes-form"
 import { PagamentosForm } from "@/components/configuracoes/pagamentos-form"
+import { WebhooksForm } from "@/components/configuracoes/webhooks-form"
 
 export const metadata: Metadata = { title: "Configurações" }
 
@@ -39,6 +40,13 @@ export default async function ConfiguracoesPage() {
         initial={integrations}
         clinicPhone={clinic.phone}
         webhookUrl={webhookUrl}
+      />
+      <WebhooksForm
+        initial={{
+          whatsappWebhookUrl: webhookUrl,
+          asaasWebhookUrl,
+          stripeWebhookUrl,
+        }}
       />
       <PagamentosForm
         initial={{

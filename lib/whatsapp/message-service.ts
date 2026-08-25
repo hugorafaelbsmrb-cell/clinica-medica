@@ -119,7 +119,7 @@ export async function queueFirstContact(patientId: string): Promise<void> {
         nome: patient.name.split(" ")[0],
         data: format(new Date(), "dd/MM/yyyy", { locale: ptBR }),
       })
-    : `Olá ${patient.name.split(" ")[0]}! Aqui é da Clínica Médica. Que bom ter você com a gente!`
+    : `Olá ${patient.name.split(" ")[0]}! Aqui é do Médico em Domicílio. Que bom ter você com a gente!`
 
   await enqueueMessage(patientId, "PRIMEIRO_CONTATO", content)
 }

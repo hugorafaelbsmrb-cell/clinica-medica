@@ -50,7 +50,7 @@ export type ClinicInfo = {
 }
 
 const DEFAULTS: ClinicInfo = {
-  name: "Clínica Médica",
+  name: "Médico em Domicílio",
   botEnabled: true,
   autoACaminhoEnabled: true,
 }

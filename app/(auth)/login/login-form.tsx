@@ -73,7 +73,7 @@ export function LoginForm({ logoDataUrl, clinicName }: LoginFormProps) {
             className="mx-auto h-20 w-20 object-contain"
           />
         )}
-        <CardTitle className="text-2xl">{clinicName ?? "Clínica Médica"}</CardTitle>
+        <CardTitle className="text-2xl">{clinicName ?? "Médico em Domicílio"}</CardTitle>
         <CardDescription>
           Entre com suas credenciais para acessar o sistema
         </CardDescription>

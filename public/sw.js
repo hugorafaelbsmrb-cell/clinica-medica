@@ -18,7 +18,7 @@ self.addEventListener("push", (event) => {
   } catch {
     // payload não-JSON: usa os campos padrão
   }
-  const { title = "Clínica Médica", body = "", url = "/dashboard", notificationId } = data
+  const { title = "Médico em Domicílio", body = "", url = "/dashboard", notificationId } = data
   event.waitUntil(
     self.registration.showNotification(title, {
       body,

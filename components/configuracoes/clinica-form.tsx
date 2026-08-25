@@ -138,7 +138,7 @@ export function ClinicaForm({ initial }: { initial: ClinicInitialData }) {
                 required
                 minLength={2}
                 defaultValue={initial.name}
-                placeholder="Clínica Médica"
+                placeholder="Médico em Domicílio"
               />
             </Field>
             <Field>

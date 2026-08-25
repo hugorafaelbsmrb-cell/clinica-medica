@@ -31,7 +31,7 @@ export function drawClinicHeader(
   const right = doc.page.width - doc.page.margins.right
 
   const logo = parseLogoBuffer(clinic?.logoDataUrl)
-  const name = clinic?.name || "Clínica Médica"
+  const name = clinic?.name || "Médico em Domicílio"
 
   if (logo) {
     doc.image(logo, left, top, { fit: [110, 46] })

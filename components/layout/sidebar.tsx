@@ -96,7 +96,7 @@ export function Sidebar({
           <Stethoscope className="h-5 w-5 shrink-0 text-primary" />
         )}
         {!collapsed && (
-          <span className="truncate font-semibold">{clinicName ?? "Clínica Médica"}</span>
+          <span className="truncate font-semibold">{clinicName ?? "Médico em Domicílio"}</span>
         )}
       </div>
       <nav className={cn("flex flex-1 flex-col gap-1", collapsed ? "p-2" : "p-3")}>
@@ -203,7 +203,7 @@ export function MobileSidebar({
           ) : (
             <Stethoscope className="h-5 w-5 shrink-0 text-primary" />
           )}
-          <span className="truncate font-semibold">{clinicName ?? "Clínica Médica"}</span>
+          <span className="truncate font-semibold">{clinicName ?? "Médico em Domicílio"}</span>
         </div>
         <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
           {items.map((item) => {

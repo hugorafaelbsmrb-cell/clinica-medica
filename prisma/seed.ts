@@ -75,7 +75,7 @@ async function main() {
     update: {},
     create: {
       id: 1,
-      name: "Clínica Médica",
+      name: "Médico em Domicílio",
       address: "Rua Exemplo, 123 — Centro, São Paulo/SP — CEP 00000-000",
       phone: "(11) 99999-0000",
       email: "contato@clinica.com",
@@ -89,7 +89,7 @@ async function main() {
     {
       name: "Primeiro contato",
       type: "PRIMEIRO_CONTATO" as const,
-      body: "Olá {{nome}}! Aqui é da Clínica Médica. Que bom ter você com a gente. Estamos à disposição para cuidar da sua saúde. Qualquer dúvida, é só responder por aqui.",
+      body: "Olá {{nome}}! Aqui é do Médico em Domicílio. Que bom ter você com a gente. Estamos à disposição para cuidar da sua saúde. Qualquer dúvida, é só responder por aqui.",
     },
     {
       name: "Acompanhamento de saúde",
