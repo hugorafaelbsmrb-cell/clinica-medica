@@ -28,7 +28,7 @@ export async function dispatchPush(payload: PushPayload): Promise<void> {
   if (!isConfigured()) return
 
   webpush.setVapidDetails(
-    "mailto:contato@homecare.vhex.app",
+    "mailto:contato@medicoemdomicilio.com",
     process.env.VAPID_PUBLIC_KEY!,
     process.env.VAPID_PRIVATE_KEY!
   )

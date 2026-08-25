@@ -16,7 +16,7 @@ import type {
 } from "@/lib/payments/types"
 
 const APP_URL =
-  process.env.NEXT_PUBLIC_APP_URL ?? "https://homecare.vhex.app"
+  process.env.NEXT_PUBLIC_APP_URL ?? "https://painel.medicoemdomicilio.com"
 
 function client(secretKey: string): Stripe {
   return new Stripe(secretKey)
