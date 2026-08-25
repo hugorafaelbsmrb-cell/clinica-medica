@@ -99,12 +99,15 @@ function SelectLabel({
   className,
   ...props
 }: SelectPrimitive.GroupLabel.Props) {
+  // GroupLabel exige um Group como pai (mesmo requisito do Menu #31).
   return (
-    <SelectPrimitive.GroupLabel
-      data-slot="select-label"
-      className={cn("px-1.5 py-1 text-xs text-muted-foreground", className)}
-      {...props}
-    />
+    <SelectPrimitive.Group>
+      <SelectPrimitive.GroupLabel
+        data-slot="select-label"
+        className={cn("px-1.5 py-1 text-xs text-muted-foreground", className)}
+        {...props}
+      />
+    </SelectPrimitive.Group>
   )
 }
 

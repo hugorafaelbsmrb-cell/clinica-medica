@@ -60,16 +60,20 @@ function DropdownMenuLabel({
 }: MenuPrimitive.GroupLabel.Props & {
   inset?: boolean
 }) {
+  // O GroupLabel do Base UI exige estar dentro de um Group (ou RadioGroup)
+  // — fora dele lança o erro #31 e derruba a árvore React ao abrir o menu.
   return (
-    <MenuPrimitive.GroupLabel
-      data-slot="dropdown-menu-label"
-      data-inset={inset}
-      className={cn(
-        "px-1.5 py-1 text-xs font-medium text-muted-foreground data-inset:pl-7",
-        className
-      )}
-      {...props}
-    />
+    <MenuPrimitive.Group>
+      <MenuPrimitive.GroupLabel
+        data-slot="dropdown-menu-label"
+        data-inset={inset}
+        className={cn(
+          "px-1.5 py-1 text-xs font-medium text-muted-foreground data-inset:pl-7",
+          className
+        )}
+        {...props}
+      />
+    </MenuPrimitive.Group>
   )
 }
 
