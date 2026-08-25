@@ -21,7 +21,7 @@ export default async function ConfiguracoesPage() {
 
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ??
-    "https://clinica.vps10746.panel.icontainer.run"
+    "https://painel.medicoemdomicilio.com"
   const webhookUrl = `${appUrl}/api/webhooks/whatsapp`
   const asaasWebhookUrl = `${appUrl}/api/webhooks/asaas`
   const stripeWebhookUrl = `${appUrl}/api/webhooks/stripe`
