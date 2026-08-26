@@ -303,6 +303,10 @@ model Attendance {
   pricingZone      String? // URBANO | FORA — faixa de preço aplicada ao domiciliar
   anamnesis        String?          @db.Text
   value            Decimal          @default(0) @db.Decimal(10, 2)
+  paymentMethod    String? // PIX | CARTAO | APPLE_PAY | DINHEIRO (método escolhido no agendamento)
+  cashReceivedAt   DateTime? // médico confirmou o recebimento em dinheiro
+  cashReceivedBy   String? // id do usuário que confirmou o recebimento
+  teleconsentAcceptedAt DateTime? // aceite do termo de consentimento da teleconsulta (CFM 2314/2022)
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   prescriptions    Prescription[]

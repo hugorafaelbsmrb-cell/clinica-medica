@@ -143,6 +143,10 @@ export default async function AtendimentosDoDiaPage({
       medications,
       planDiagnosis: currentPlan ? truncate(currentPlan.diagnosis, 160) : null,
       planSummary: currentPlan?.summary ? truncate(currentPlan.summary, 200) : null,
+      anamnesis: attendance.anamnesis,
+      value: Number(attendance.value),
+      paymentMethod: attendance.paymentMethod,
+      cashReceivedAt: attendance.cashReceivedAt?.toISOString() ?? null,
     }
   })
 

@@ -59,12 +59,16 @@ export default async function ConfiguracoesPage() {
           consultaPrecoDomiciliar: clinic.consultaPrecoDomiciliar ?? null,
           consultaPrecoDomiciliarFora:
             clinic.consultaPrecoDomiciliarFora ?? null,
-          raioUrbanoKm: clinic.raioUrbanoKm ?? null,
           consultaPrecoTeleconsulta: clinic.consultaPrecoTeleconsulta ?? null,
           acompValorBaixa: clinic.acompValorBaixa ?? null,
           acompValorMedia: clinic.acompValorMedia ?? null,
           acompValorAlta: clinic.acompValorAlta ?? null,
           jurosParcelamento: clinic.jurosParcelamento ?? null,
+        }}
+        enabledModalities={{
+          presencial: clinic.consultaPresencialEnabled ?? true,
+          domiciliar: clinic.consultaDomiciliarEnabled ?? true,
+          teleconsulta: clinic.consultaTeleconsultaEnabled ?? true,
         }}
       />
     </div>

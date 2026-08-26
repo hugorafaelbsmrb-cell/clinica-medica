@@ -89,6 +89,9 @@ export default async function AtendimentoDetalhePage({
       <AttendanceActions
         attendanceId={attendance.id}
         status={attendance.status}
+        paymentMethod={attendance.paymentMethod}
+        cashReceivedAt={attendance.cashReceivedAt}
+        value={Number(attendance.value)}
       />
 
       <Card>
@@ -169,6 +172,23 @@ export default async function AtendimentoDetalhePage({
             </div>
           )}
           <Separator />
+          {attendance.type === "TELECONSULTA" &&
+            attendance.teleconsentAcceptedAt && (
+              <div>
+                <p className="text-muted-foreground">
+                  Termo de consentimento da teleconsulta
+                </p>
+                <p>
+                  Aceito em{" "}
+                  {format(
+                    attendance.teleconsentAcceptedAt,
+                    "dd/MM/yyyy 'às' HH:mm",
+                    { locale: ptBR }
+                  )}{" "}
+                  (Resolução CFM nº 2.314/2022)
+                </p>
+              </div>
+            )}
           <div>
             <p className="text-muted-foreground">Anamnese</p>
             <p className="whitespace-pre-wrap">

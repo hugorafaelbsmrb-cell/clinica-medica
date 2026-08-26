@@ -41,7 +41,6 @@ const paymentKeysSchema = z.object({
   consultaPrecoPresencial: z.string().optional(),
   consultaPrecoDomiciliar: z.string().optional(),
   consultaPrecoDomiciliarFora: z.string().optional(),
-  raioUrbanoKm: z.string().optional(),
   consultaPrecoTeleconsulta: z.string().optional(),
   acompValorBaixa: z.string().optional(),
   acompValorMedia: z.string().optional(),
@@ -55,14 +54,6 @@ function parsePrice(value: FormDataEntryValue | null): number | null {
   if (!text) return null
   const parsed = Number(text)
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
-}
-
-/** Converte o campo de raio urbano (aceita vírgula) para km. */
-function parseRadius(value: FormDataEntryValue | null): number | null {
-  const text = String(value ?? "").trim().replace(",", ".")
-  if (!text) return null
-  const parsed = Number(text)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
 /**
@@ -89,7 +80,6 @@ export async function savePaymentSettings(
     consultaPrecoPresencial: formData.get("consultaPrecoPresencial"),
     consultaPrecoDomiciliar: formData.get("consultaPrecoDomiciliar"),
     consultaPrecoDomiciliarFora: formData.get("consultaPrecoDomiciliarFora"),
-    raioUrbanoKm: formData.get("raioUrbanoKm"),
     consultaPrecoTeleconsulta: formData.get("consultaPrecoTeleconsulta"),
     acompValorBaixa: formData.get("acompValorBaixa"),
     acompValorMedia: formData.get("acompValorMedia"),
@@ -119,7 +109,6 @@ export async function savePaymentSettings(
       consultaPrecoDomiciliarFora: parsePrice(
         formData.get("consultaPrecoDomiciliarFora")
       ),
-      raioUrbanoKm: parseRadius(formData.get("raioUrbanoKm")),
       consultaPrecoTeleconsulta: parsePrice(
         formData.get("consultaPrecoTeleconsulta")
       ),
@@ -143,7 +132,6 @@ export async function savePaymentSettings(
       consultaPrecoDomiciliarFora: parsePrice(
         formData.get("consultaPrecoDomiciliarFora")
       ),
-      raioUrbanoKm: parseRadius(formData.get("raioUrbanoKm")),
       consultaPrecoTeleconsulta: parsePrice(
         formData.get("consultaPrecoTeleconsulta")
       ),

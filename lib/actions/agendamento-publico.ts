@@ -27,6 +27,10 @@ import {
 } from "@/lib/pricing/domiciliar"
 import { listActiveDoctors } from "@/lib/doctor"
 import { notifyNewAppointment } from "@/lib/notifications"
+import {
+  reverseGeocodeAddress,
+  type AddressParts,
+} from "@/lib/geo"
 import type { PaymentMethodType } from "@/lib/payments/types"
 
 const WEEKDAY_LABELS = [
@@ -265,7 +269,12 @@ const agendarSchema = z.object({
     .trim()
     .min(5, "Conte brevemente o motivo da sua consulta"),
   lgpdConsent: z.boolean().optional(),
-  method: z.enum(["PIX", "CARTAO", "APPLE_PAY"]).optional().default("PIX"),
+  method: z
+    .enum(["PIX", "CARTAO", "APPLE_PAY", "DINHEIRO"])
+    .optional()
+    .default("PIX"),
+  /** Aceite do termo de consentimento da teleconsulta (CFM 2314/2022). */
+  teleconsent: z.boolean().optional(),
   /** Modalidade escolhida pelo paciente no wizard. */
   type: z
     .enum(["PRESENCIAL", "DOMICILIAR", "TELECONSULTA"])
@@ -323,7 +332,9 @@ export async function agendarPublico(
     type: typeInput,
     doctorId,
   } = parsed.data
-  const method: PaymentMethodType = methodInput ?? "PIX"
+  // Dinheiro não passa pelo gateway: o pagamento acontece no atendimento.
+  const isCash = methodInput === "DINHEIRO"
+  const method: PaymentMethodType = isCash ? "PIX" : (methodInput ?? "PIX")
   const scheduledAt = new Date(scheduledAtIso)
   if (Number.isNaN(scheduledAt.getTime())) {
     return { success: false, message: "Data e horário inválidos." }
@@ -342,6 +353,22 @@ export async function agendarPublico(
       success: false,
       message:
         "Esta modalidade de consulta não está mais disponível no agendamento online. Escolha outra, por favor.",
+    }
+  }
+
+  // Dinheiro não se aplica à teleconsulta (o pagamento é presencial).
+  if (isCash && typeInput === "TELECONSULTA") {
+    return {
+      success: false,
+      message: "Pagamento em dinheiro não está disponível para teleconsulta.",
+    }
+  }
+
+  // Teleconsulta exige o aceite do termo de consentimento (CFM 2314/2022).
+  if (typeInput === "TELECONSULTA" && !parsed.data.teleconsent) {
+    return {
+      success: false,
+      message: "Para teleconsulta, é necessário aceitar o termo de consentimento.",
     }
   }
 
@@ -399,7 +426,9 @@ export async function agendarPublico(
         ? paymentSettings.consultaPrecoTeleconsulta
         : paymentSettings.consultaPrecoPresencial
   }
-  const cobrar = price > 0
+  // Com dinheiro não há cobrança antecipada: o valor fica registrado no
+  // atendimento para recebimento no ato (o médico confirma depois).
+  const cobrar = price > 0 && !isCash
 
   try {
     // Re-checa se o horário continua livre antes de confirmar
@@ -439,6 +468,12 @@ export async function agendarPublico(
           // Rastro da precificação domiciliar por raio (quando aplicável).
           distanceKm: domiciliarDistanceKm,
           pricingZone: domiciliarZone,
+          // Dinheiro: valor cobrado no ato do atendimento. Online: o valor
+          // fica no lançamento financeiro do webhook (value permanece 0).
+          value: isCash ? price : 0,
+          paymentMethod: isCash ? "DINHEIRO" : null,
+          teleconsentAcceptedAt:
+            typeInput === "TELECONSULTA" ? new Date() : null,
         },
       })
 
@@ -477,7 +512,11 @@ export async function agendarPublico(
             data: scheduledAt.toISOString(),
             modalidade: typeInput,
             medicoId: doctorId ?? null,
-            cobranca: cobrar ? "pagamento antecipado" : "sem cobrança",
+            cobranca: isCash
+              ? "dinheiro no atendimento"
+              : cobrar
+                ? "pagamento antecipado"
+                : "sem cobrança",
           },
         },
       })
@@ -589,7 +628,9 @@ export async function agendarPublico(
 
     return {
       success: true,
-      message: "Consulta agendada!",
+      message: isCash
+        ? "Consulta agendada! O pagamento será feito em dinheiro no momento do atendimento."
+        : "Consulta agendada!",
       scheduledAt: scheduledAt.toISOString(),
     }
   } catch (error) {
@@ -600,6 +641,43 @@ export async function agendarPublico(
         "Não foi possível confirmar o agendamento agora. Tente novamente ou fale com a clínica.",
     }
   }
+}
+
+/**
+ * Geocodificação reversa pública (sem sessão): a partir do GPS capturado
+ * no cadastro, devolve as partes do endereço para preencher os campos
+ * vazios do formulário — o paciente confere antes de continuar.
+ */
+export async function reverseGeocodeCoordinates(input: {
+  latitude: number
+  longitude: number
+}): Promise<{
+  success: boolean
+  address?: AddressParts
+  message?: string
+}> {
+  const latitude = Number(input.latitude)
+  const longitude = Number(input.longitude)
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180
+  ) {
+    return { success: false, message: "Coordenadas inválidas" }
+  }
+
+  const address = await reverseGeocodeAddress(latitude, longitude)
+  if (!address) {
+    return {
+      success: false,
+      message: "Não foi possível identificar o endereço",
+    }
+  }
+
+  return { success: true, address }
 }
 
 /**

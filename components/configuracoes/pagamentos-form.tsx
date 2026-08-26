@@ -42,7 +42,6 @@ export type PaymentInitialData = {
   consultaPrecoPresencial: number | null
   consultaPrecoDomiciliar: number | null
   consultaPrecoDomiciliarFora: number | null
-  raioUrbanoKm: number | null
   consultaPrecoTeleconsulta: number | null
   acompValorBaixa: number | null
   acompValorMedia: number | null
@@ -77,7 +76,18 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
+export function PagamentosForm({
+  initial,
+  enabledModalities,
+}: {
+  initial: PaymentInitialData
+  /** Modalidades ligadas no agendamento online (Dados da clínica). */
+  enabledModalities: {
+    presencial: boolean
+    domiciliar: boolean
+    teleconsulta: boolean
+  }
+}) {
   const router = useRouter()
 
   const [asaasKey, setAsaasKey] = useState(initial.asaasApiKey)
@@ -98,11 +108,6 @@ export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
     initial.consultaPrecoDomiciliarFora != null
       ? String(initial.consultaPrecoDomiciliarFora).replace(".", ",")
       : ""
-  )
-  const [raioUrbano, setRaioUrbano] = useState(
-    initial.raioUrbanoKm != null
-      ? String(initial.raioUrbanoKm).replace(".", ",")
-      : "8"
   )
   const [precoTeleconsulta, setPrecoTeleconsulta] = useState(
     initial.consultaPrecoTeleconsulta != null
@@ -180,6 +185,26 @@ export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
   const asaasConfigured = !!initial.asaasApiKey
   const stripeConfigured = !!(initial.stripeSecretKey && initial.stripeWebhookSecret)
 
+  // Converte o campo de preço (aceita vírgula) para número.
+  function parseMoney(text: string): number {
+    const parsed = Number(text.trim().replace(".", "").replace(",", "."))
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
+  // Modalidade habilitada sem preço: o agendamento online confirma o
+  // horário sem cobrança — aviso preventivo para o admin configurar.
+  const missingPriceModalities = [
+    enabledModalities.presencial && parseMoney(precoPresencial) <= 0
+      ? "Presencial"
+      : null,
+    enabledModalities.domiciliar && parseMoney(precoDomiciliar) <= 0
+      ? "Domiciliar"
+      : null,
+    enabledModalities.teleconsulta && parseMoney(precoTeleconsulta) <= 0
+      ? "Teleconsulta"
+      : null,
+  ].filter((label): label is string => label !== null)
+
   return (
     <Card>
       <CardHeader>
@@ -204,6 +229,14 @@ export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
               até o pagamento). Deixe em branco para confirmar na hora, sem
               cobrança.
             </p>
+            {missingPriceModalities.length > 0 && (
+              <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                {missingPriceModalities.join(", ")}{" "}
+                {missingPriceModalities.length === 1
+                  ? "está habilitada sem preço configurado — os agendamentos online desta modalidade são confirmados sem cobrança."
+                  : "estão habilitadas sem preço configurado — os agendamentos online destas modalidades são confirmados sem cobrança."}
+              </p>
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field>
                 <FieldLabel>Consulta presencial (R$)</FieldLabel>
@@ -250,22 +283,6 @@ export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
                   onChange={(event) => setPrecoTeleconsulta(event.target.value)}
                   placeholder="Ex.: 200,00"
                 />
-              </Field>
-              <Field>
-                <FieldLabel>Raio urbano (km)</FieldLabel>
-                <Input
-                  name="raioUrbanoKm"
-                  type="text"
-                  inputMode="decimal"
-                  value={raioUrbano}
-                  onChange={(event) => setRaioUrbano(event.target.value)}
-                  placeholder="Ex.: 8"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Distância máxima a partir da clínica para o preço domiciliar
-                  de dentro do raio. Configure a localização da clínica em
-                  "Dados da clínica".
-                </p>
               </Field>
             </div>
           </div>

@@ -32,6 +32,7 @@ export type ClinicInitialData = {
   consultaTeleconsultaEnabled?: boolean
   latitude?: number | null
   longitude?: number | null
+  raioUrbanoKm?: number | null
 }
 
 const MAX_LOGO_BYTES = 1024 * 1024 // 1 MB
@@ -87,6 +88,11 @@ export function ClinicaForm({ initial }: { initial: ClinicInitialData }) {
   )
   const [longitude, setLongitude] = useState(
     initial.longitude != null ? String(initial.longitude).replace(".", ",") : ""
+  )
+  const [raioUrbano, setRaioUrbano] = useState(
+    initial.raioUrbanoKm != null
+      ? String(initial.raioUrbanoKm).replace(".", ",")
+      : "8"
   )
   const [geocoding, setGeocoding] = useState(false)
 
@@ -324,6 +330,21 @@ export function ClinicaForm({ initial }: { initial: ClinicInitialData }) {
                 />
               </Field>
             </div>
+            <Field>
+              <FieldLabel>Raio urbano do atendimento domiciliar (km)</FieldLabel>
+              <Input
+                name="raioUrbanoKm"
+                type="text"
+                inputMode="decimal"
+                value={raioUrbano}
+                onChange={(event) => setRaioUrbano(event.target.value)}
+                placeholder="Ex.: 8"
+              />
+              <p className="text-xs text-muted-foreground">
+                Distância máxima para o preço domiciliar padrão; acima disso,
+                vale o preço "fora do raio".
+              </p>
+            </Field>
             <p className="text-xs text-muted-foreground">
               Coordenadas em branco: o domiciliar usa um preço único (sem raio).
               O botão busca pelo endereço acima e salva na hora.

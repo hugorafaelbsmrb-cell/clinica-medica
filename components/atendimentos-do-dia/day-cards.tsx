@@ -12,6 +12,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
+  Banknote,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -19,6 +20,7 @@ import {
   Clock,
   CarFront,
   FileText,
+  History,
   Loader2,
   MapPin,
   MessageCircle,
@@ -29,12 +31,18 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Textarea } from "@/components/ui/textarea"
 import {
   mapsNavigationUrl,
   mapsSearchUrl,
   wazeNavigationUrl,
 } from "@/lib/geo"
-import { completeAttendance, startAttendance } from "@/lib/actions/atendimentos"
+import {
+  completeAttendance,
+  confirmCashPayment,
+  saveAttendanceAnamnesis,
+  startAttendance,
+} from "@/lib/actions/atendimentos"
 
 export type DayCardData = {
   id: string
@@ -54,6 +62,10 @@ export type DayCardData = {
   medications: string[]
   planDiagnosis: string | null
   planSummary: string | null
+  anamnesis: string | null
+  value: number
+  paymentMethod: string | null
+  cashReceivedAt: string | null
 }
 
 function formatTime(iso: string): string {
@@ -61,6 +73,10 @@ function formatTime(iso: string): string {
   return `${String(date.getHours()).padStart(2, "0")}:${String(
     date.getMinutes()
   ).padStart(2, "0")}`
+}
+
+function formatMoney(value: number): string {
+  return value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })
 }
 
 function DayCard({ attendance }: { attendance: DayCardData }) {
@@ -73,7 +89,14 @@ function DayCard({ attendance }: { attendance: DayCardData }) {
   const [expanded, setExpanded] = useState(
     attendance.status === "EM_ATENDIMENTO"
   )
-  const [busy, setBusy] = useState<"start" | "complete" | null>(null)
+  const [busy, setBusy] = useState<"start" | "complete" | "cash" | null>(null)
+  // Anamnese preenchida pelo médico durante o exame do paciente.
+  const [anamnesis, setAnamnesis] = useState(attendance.anamnesis ?? "")
+  const [savingAnamnesis, setSavingAnamnesis] = useState(false)
+  // Recebimento em dinheiro já confirmado neste cartão.
+  const [cashReceived, setCashReceived] = useState(
+    attendance.cashReceivedAt !== null
+  )
 
   const hasCoords =
     attendance.latitude !== null && attendance.longitude !== null
@@ -103,6 +126,31 @@ function DayCard({ attendance }: { attendance: DayCardData }) {
     setBusy("complete")
     const result = await completeAttendance(attendance.id)
     setBusy(null)
+    if (result.success) {
+      toast.success(result.message)
+      router.refresh()
+    } else {
+      toast.error(result.message)
+    }
+  }
+
+  async function handleConfirmCash() {
+    setBusy("cash")
+    const result = await confirmCashPayment(attendance.id)
+    setBusy(null)
+    if (result.success) {
+      setCashReceived(true)
+      toast.success(result.message)
+      router.refresh()
+    } else {
+      toast.error(result.message)
+    }
+  }
+
+  async function handleSaveAnamnesis() {
+    setSavingAnamnesis(true)
+    const result = await saveAttendanceAnamnesis(attendance.id, anamnesis)
+    setSavingAnamnesis(false)
     if (result.success) {
       toast.success(result.message)
       router.refresh()
@@ -200,6 +248,70 @@ function DayCard({ attendance }: { attendance: DayCardData }) {
               </p>
             )}
 
+            {/* Pagamento em dinheiro: o médico confirma o recebimento no
+                local antes de finalizar o atendimento. */}
+            {attendance.paymentMethod === "DINHEIRO" && !done && (
+              <div className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950/40">
+                <p className="flex items-center gap-2 font-medium text-amber-900 dark:text-amber-200">
+                  <Banknote className="h-4 w-4 shrink-0" />
+                  Pagamento em dinheiro: R$ {formatMoney(attendance.value)}
+                </p>
+                {started && !cashReceived && (
+                  <Button
+                    variant="secondary"
+                    className="h-11 w-full text-base"
+                    onClick={handleConfirmCash}
+                    disabled={busy !== null}
+                  >
+                    {busy === "cash" ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <Banknote className="h-5 w-5" />
+                    )}
+                    {busy === "cash" ? "Confirmando..." : "Confirmar recebimento"}
+                  </Button>
+                )}
+                {cashReceived && (
+                  <p className="flex items-center gap-1.5 font-medium text-emerald-700 dark:text-emerald-400">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    Recebimento confirmado
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Anamnese: o médico registra enquanto examina o paciente,
+                antes de prescrever ou montar o plano terapêutico. */}
+            {started && !done && (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium">Anamnese</p>
+                  {attendance.anamnesis && (
+                    <Badge variant="secondary">Salva</Badge>
+                  )}
+                </div>
+                <Textarea
+                  value={anamnesis}
+                  onChange={(event) => setAnamnesis(event.target.value)}
+                  placeholder="Registre a anamnese enquanto examina o paciente..."
+                  className="min-h-24 text-sm"
+                />
+                <Button
+                  variant="outline"
+                  className="h-11 text-base"
+                  onClick={handleSaveAnamnesis}
+                  disabled={savingAnamnesis || busy !== null}
+                >
+                  {savingAnamnesis ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <ClipboardList className="h-5 w-5" />
+                  )}
+                  Salvar anamnese
+                </Button>
+              </div>
+            )}
+
             {/* Endereço */}
             <div className="flex items-start gap-2 rounded-lg bg-muted/60 p-3 text-sm">
               <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -252,6 +364,16 @@ function DayCard({ attendance }: { attendance: DayCardData }) {
                 Plano terapêutico
               </Button>
             </div>
+
+            {/* Histórico completo do paciente (atendimentos e prescrições) */}
+            <Button
+              variant="outline"
+              className="h-12 w-full text-base"
+              render={<a href={`/pacientes/${attendance.patientId}`} />}
+            >
+              <History className="h-5 w-5" />
+              Histórico do paciente
+            </Button>
 
             {/* Navegação e contato */}
             <div className="grid grid-cols-2 gap-2">

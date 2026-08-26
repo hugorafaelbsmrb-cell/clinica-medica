@@ -28,6 +28,14 @@ function parseCoordinate(
     : null
 }
 
+/** Converte o campo de raio urbano (aceita vírgula) para km. */
+function parseRadius(value: FormDataEntryValue | null): number | null {
+  const text = String(value ?? "").trim().replace(",", ".")
+  if (!text) return null
+  const parsed = Number(text)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
 const clinicSchema = z.object({
   name: z.string().min(2, "Informe o nome da clínica"),
   address: z.string().optional(),
@@ -38,6 +46,7 @@ const clinicSchema = z.object({
   cnpj: z.string().optional(),
   horarioAtendimento: z.string().optional(),
   logoDataUrl: z.string().optional(),
+  raioUrbanoKm: z.string().optional(),
 })
 
 /**
@@ -89,6 +98,7 @@ export async function saveClinicSettings(
     cnpj: formData.get("cnpj"),
     horarioAtendimento: formData.get("horarioAtendimento"),
     logoDataUrl: logoDataUrl || undefined,
+    raioUrbanoKm: formData.get("raioUrbanoKm"),
   })
 
   if (!parsed.success) {
@@ -101,6 +111,7 @@ export async function saveClinicSettings(
   const data = parsed.data
   const latitude = parseCoordinate(formData.get("latitude"), -90, 90)
   const longitude = parseCoordinate(formData.get("longitude"), -180, 180)
+  const raioUrbanoKm = parseRadius(formData.get("raioUrbanoKm"))
   await prisma.clinicSettings.upsert({
     where: { id: 1 },
     update: {
@@ -113,6 +124,7 @@ export async function saveClinicSettings(
       logoDataUrl: data.logoDataUrl || null,
       latitude,
       longitude,
+      raioUrbanoKm,
       enableDigitalSignature,
       consultaPresencialEnabled,
       consultaDomiciliarEnabled,
@@ -129,6 +141,7 @@ export async function saveClinicSettings(
       logoDataUrl: data.logoDataUrl || null,
       latitude,
       longitude,
+      raioUrbanoKm,
       enableDigitalSignature,
       consultaPresencialEnabled,
       consultaDomiciliarEnabled,

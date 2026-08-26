@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { getClinicSettings } from "@/lib/clinic"
 import { resolveDoctorId } from "@/lib/doctor"
-import { geocodeAddress } from "@/lib/geo"
+import { geocodeAddress, reverseGeocodeAddress, type AddressParts } from "@/lib/geo"
 import {
   defaultAutomationMessage,
   queueThankYouMessage,
@@ -51,6 +51,11 @@ const atendimentoSchema = z.object({
     .nullable(),
   anamnesis: z.string().optional().nullable(),
   value: z.coerce.number().min(0).default(0),
+  paymentMethod: z
+    .enum(["PIX", "CARTAO", "APPLE_PAY", "DINHEIRO"])
+    .optional()
+    .nullable(),
+  teleconsent: z.boolean().optional(),
 })
 
 export type ActionState = {
@@ -76,6 +81,8 @@ export async function createAttendance(
     locationSource: formData.get("locationSource") || null,
     anamnesis: formData.get("anamnesis") || null,
     value: formData.get("value") || 0,
+    paymentMethod: formData.get("paymentMethod") || null,
+    teleconsent: formData.get("teleconsent") === "on",
   })
 
   if (!parsed.success) {
@@ -91,6 +98,14 @@ export async function createAttendance(
     return {
       success: false,
       message: "Atendimento domiciliar exige o endereço do domicílio",
+    }
+  }
+
+  // Teleconsulta exige o aceite do termo de consentimento (CFM 2314/2022).
+  if (data.type === "TELECONSULTA" && !data.teleconsent) {
+    return {
+      success: false,
+      message: "Para teleconsulta, é necessário aceitar o termo de consentimento.",
     }
   }
 
@@ -119,6 +134,9 @@ export async function createAttendance(
       locationSource: hasCoords ? data.locationSource : null,
       anamnesis: data.anamnesis || null,
       value: data.value,
+      paymentMethod: data.paymentMethod ?? null,
+      teleconsentAcceptedAt:
+        data.type === "TELECONSULTA" ? new Date() : null,
     },
   })
 
@@ -157,13 +175,29 @@ export async function completeAttendance(id: string): Promise<ActionState> {
   })
   if (!attendance) return { success: false, message: "Atendimento não encontrado" }
 
+  // Pagamento em dinheiro: o médico precisa confirmar o recebimento
+  // antes de finalizar o atendimento (trava do caixa no home care).
+  if (
+    attendance.paymentMethod === "DINHEIRO" &&
+    !attendance.cashReceivedAt &&
+    attendance.value.gt(0)
+  ) {
+    return {
+      success: false,
+      message: `Confirme o recebimento de R$ ${attendance.value
+        .toFixed(2)
+        .replace(".", ",")} em dinheiro antes de finalizar o atendimento.`,
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.attendance.update({
       where: { id },
       data: { status: "REALIZADO" },
     })
 
-    if (attendance.value.gt(0)) {
+    // Dinheiro: a entrada PAGO já foi lançada na confirmação do recebimento.
+    if (attendance.value.gt(0) && attendance.paymentMethod !== "DINHEIRO") {
       await tx.financialEntry.create({
         data: {
           type: "RECEITA",
@@ -387,4 +421,172 @@ export async function suggestDomiciliarPrice(input: {
   }
 
   return { success: true, ...pricing }
+}
+
+/**
+ * Confirma o recebimento em dinheiro de um atendimento e lança a entrada
+ * financeira já como PAGO (baixa imediata no caixa). Usada no módulo
+ * "Atendimentos do dia" e no detalhe do atendimento — o médico precisa
+ * confirmar o recebimento antes de finalizar. Apenas ADMIN e MEDICO.
+ */
+export async function confirmCashPayment(
+  attendanceId: string
+): Promise<ActionState> {
+  const session = await auth()
+  if (!session?.user) return { success: false, message: "Sessão expirada" }
+  if (session.user.role !== "ADMIN" && session.user.role !== "MEDICO") {
+    return {
+      success: false,
+      message: "Apenas médicos podem confirmar o recebimento",
+    }
+  }
+
+  const attendance = await prisma.attendance.findUnique({
+    where: { id: attendanceId },
+  })
+  if (!attendance) {
+    return { success: false, message: "Atendimento não encontrado" }
+  }
+  if (attendance.paymentMethod !== "DINHEIRO") {
+    return {
+      success: false,
+      message: "Este atendimento não usa pagamento em dinheiro.",
+    }
+  }
+  if (attendance.cashReceivedAt) {
+    return { success: true, message: "Recebimento já confirmado." }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.attendance.update({
+      where: { id: attendanceId },
+      data: {
+        cashReceivedAt: new Date(),
+        cashReceivedBy: session.user.id,
+      },
+    })
+
+    await tx.financialEntry.create({
+      data: {
+        type: "RECEITA",
+        category:
+          attendance.type === "DOMICILIAR"
+            ? "CONSULTA_DOMICILIAR"
+            : "CONSULTA_PRESENCIAL",
+        description: `Atendimento (dinheiro) — recebido no local`,
+        value: attendance.value,
+        dueDate: new Date(),
+        status: "PAGO",
+        paymentMethod: "DINHEIRO",
+        attendanceId,
+      },
+    })
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      action: "COMPLETE",
+      entity: "Attendance",
+      entityId: attendanceId,
+      patientId: attendance.patientId,
+      details: { recebimentoDinheiro: attendance.value.toFixed(2) },
+    },
+  })
+
+  revalidatePath("/atendimentos-do-dia")
+  revalidatePath(`/atendimentos/${attendanceId}`)
+  return { success: true, message: "Recebimento em dinheiro confirmado." }
+}
+
+/**
+ * Salva a anamnese preenchida pelo médico durante o atendimento
+ * (módulo "Atendimentos do dia"). O médico examina o paciente e registra
+ * a anamnese antes de prescrever ou montar o plano terapêutico.
+ * Apenas ADMIN e MEDICO.
+ */
+export async function saveAttendanceAnamnesis(
+  attendanceId: string,
+  anamnesis: string
+): Promise<ActionState> {
+  const session = await auth()
+  if (!session?.user) return { success: false, message: "Sessão expirada" }
+  if (session.user.role !== "ADMIN" && session.user.role !== "MEDICO") {
+    return { success: false, message: "Apenas médicos podem registrar a anamnese" }
+  }
+
+  const attendance = await prisma.attendance.findUnique({
+    where: { id: attendanceId },
+    select: { id: true, status: true, patientId: true },
+  })
+  if (!attendance) {
+    return { success: false, message: "Atendimento não encontrado" }
+  }
+  if (attendance.status === "REALIZADO" || attendance.status === "CANCELADO") {
+    return {
+      success: false,
+      message: "Este atendimento já foi encerrado e não aceita edição.",
+    }
+  }
+
+  await prisma.attendance.update({
+    where: { id: attendanceId },
+    data: { anamnesis: anamnesis.trim() || null },
+  })
+
+  revalidatePath("/atendimentos-do-dia")
+  revalidatePath(`/atendimentos/${attendanceId}`)
+  return { success: true, message: "Anamnese salva." }
+}
+
+/**
+ * Geocodificação reversa das coordenadas do atendimento: preenche o
+ * campo de endereço do domicílio a partir do GPS capturado pela equipe.
+ */
+export async function reverseGeocodeAttendanceAddress(
+  latitude: number,
+  longitude: number
+): Promise<{
+  success: boolean
+  address?: string
+  message?: string
+}> {
+  const session = await auth()
+  if (!session?.user) return { success: false, message: "Sessão expirada" }
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180
+  ) {
+    return { success: false, message: "Coordenadas inválidas" }
+  }
+
+  const parts: AddressParts | null = await reverseGeocodeAddress(
+    latitude,
+    longitude
+  )
+  if (!parts) {
+    return { success: false, message: "Não foi possível identificar o endereço" }
+  }
+
+  const address = [
+    parts.street && parts.number
+      ? `${parts.street}, ${parts.number}`
+      : (parts.street ?? ""),
+    parts.neighborhood,
+    parts.city,
+    parts.state,
+  ]
+    .filter(Boolean)
+    .join(", ")
+
+  if (!address) {
+    return { success: false, message: "Não foi possível identificar o endereço" }
+  }
+
+  return { success: true, address }
 }

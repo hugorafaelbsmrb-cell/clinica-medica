@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import {
   AlertTriangle,
   BadgeCheck,
+  Banknote,
   CalendarCheck2,
   CalendarClock,
   CalendarDays,
@@ -45,12 +46,17 @@ import {
   getConsultasByCpf,
   getPublicAgenda,
   lookupPatientByCpf,
+  reverseGeocodeCoordinates,
   simularPagamentoAgendamento,
   verificarPagamentoAgendamento,
   type AgendarState,
   type ConsultasPublicasResult,
   type PublicAgendaResult,
 } from "@/lib/actions/agendamento-publico"
+import {
+  TELEMEDICINE_CONSENT_LABEL,
+  TELEMEDICINE_CONSENT_TERM,
+} from "@/lib/teleconsent"
 
 const CAD_STEPS = ["Seus dados", "Seu contato", "Seu endereço", "Confirmação"]
 const AG_STEPS = [
@@ -215,11 +221,15 @@ export function CadastroWizard() {
   const [agendarError, setAgendarError] = useState("")
   const [agendarPending, startAgendar] = useTransition()
   const [successDate, setSuccessDate] = useState("")
+  const [successMessage, setSuccessMessage] = useState("")
 
-  // Pagamento antecipado do agendamento online
+  // Pagamento antecipado do agendamento online (DINHEIRO = no atendimento)
   const [metodoPagamento, setMetodoPagamento] = useState<
-    "PIX" | "CARTAO" | "APPLE_PAY"
+    "PIX" | "CARTAO" | "APPLE_PAY" | "DINHEIRO"
   >("PIX")
+  // Aceite do termo de consentimento da teleconsulta (CFM 2314/2022)
+  const [teleconsent, setTeleconsent] = useState(false)
+  const [showTeleTerm, setShowTeleTerm] = useState(false)
   const [paymentData, setPaymentData] = useState<
     AgendarState["payment"] | null
   >(null)
@@ -368,6 +378,29 @@ export function CadastroWizard() {
         })
         setGpsStatus("done")
         toast.success("Localização capturada!")
+        // Preenche os campos de endereço que ainda estiverem vazios com
+        // o endereço da localização (geocodificação reversa) — o paciente
+        // confere os dados antes de continuar.
+        reverseGeocodeCoordinates({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        })
+          .then((result) => {
+            if (!result.success || !result.address) return
+            const parts = result.address
+            if (!street.trim()) setStreet(parts.street ?? "")
+            if (!number.trim()) setNumber(parts.number ?? "")
+            if (!neighborhood.trim()) {
+              setNeighborhood(parts.neighborhood ?? "")
+            }
+            if (!city.trim()) setCity(parts.city ?? "")
+            toast.success(
+              "Endereço preenchido pela sua localização — confira os dados."
+            )
+          })
+          .catch(() => {
+            /* sem reverse geocode, o endereço fica para preenchimento manual */
+          })
       },
       () => {
         setGpsStatus("error")
@@ -515,6 +548,12 @@ export function CadastroWizard() {
       )
       return
     }
+    if (tipoConsulta === "TELECONSULTA" && !teleconsent) {
+      setAgendarError(
+        "Para teleconsulta, é necessário aceitar o termo de consentimento."
+      )
+      return
+    }
 
     startAgendar(async () => {
       const result = await agendarPublico({
@@ -526,6 +565,7 @@ export function CadastroWizard() {
         doctorId: selectedDoctorId || undefined,
         lgpdConsent:
           existingPatient && !existingPatient.lgpdConsent ? lgpdAgend : true,
+        teleconsent: tipoConsulta === "TELECONSULTA" ? teleconsent : true,
       })
       if (!result.success) {
         setAgendarError(result.message)
@@ -540,6 +580,9 @@ export function CadastroWizard() {
         setPhase("pagamento")
         return
       }
+      // Sem cobrança antecipada (ex.: dinheiro no atendimento), a mensagem
+      // do servidor orienta o pagamento no ato — exibida na tela de sucesso.
+      setSuccessMessage(result.message)
       setPhase("sucesso")
     })
   }
@@ -794,6 +837,11 @@ export function CadastroWizard() {
               ? `${displayName}, enviaremos a confirmação pelo WhatsApp, se você autorizou o contato.`
               : "Enviaremos a confirmação pelo WhatsApp, se você autorizou o contato."}
           </p>
+          {successMessage && successMessage !== "Consulta agendada!" && (
+            <p className="text-base font-medium text-amber-700 dark:text-amber-400">
+              {successMessage}
+            </p>
+          )}
         </CardContent>
       </Card>
     )
@@ -1632,6 +1680,23 @@ export function CadastroWizard() {
                         <CreditCard className="h-5 w-5" />
                         Cartão
                       </button>
+                      {/* Dinheiro: só para consultas no local (presencial/domiciliar),
+                          o pagamento acontece no momento do atendimento. */}
+                      {tipoConsulta !== "TELECONSULTA" && (
+                        <button
+                          type="button"
+                          onClick={() => setMetodoPagamento("DINHEIRO")}
+                          className={cn(
+                            "flex h-16 items-center justify-center gap-2 rounded-xl border-2 text-lg font-semibold transition-colors",
+                            metodoPagamento === "DINHEIRO"
+                              ? "border-primary bg-primary/5 text-primary"
+                              : "border-border hover:bg-muted"
+                          )}
+                        >
+                          <Banknote className="h-5 w-5" />
+                          Dinheiro
+                        </button>
+                      )}
                       {/* Apple Pay só com o Stripe configurado — no modo teste
                           (sem chave) a opção fica oculta. */}
                       {agenda?.applePayEnabled && (
@@ -1655,8 +1720,42 @@ export function CadastroWizard() {
                         ? "Você verá o QR code na próxima tela."
                         : metodoPagamento === "APPLE_PAY"
                           ? "Disponível em aparelhos Apple com cartão na carteira."
-                          : "Você será direcionado para pagar com seu cartão."}
+                          : metodoPagamento === "DINHEIRO"
+                            ? "Você pagará em dinheiro para o médico no momento da consulta."
+                            : "Você será direcionado para pagar com seu cartão."}
                     </p>
+                  </div>
+                )}
+
+                {tipoConsulta === "TELECONSULTA" && (
+                  <div className="flex flex-col gap-2">
+                    <label
+                      htmlFor="agendamento-teleconsent"
+                      className="flex items-start gap-3 rounded-xl border-2 border-border p-4"
+                    >
+                      <input
+                        id="agendamento-teleconsent"
+                        type="checkbox"
+                        checked={teleconsent}
+                        onChange={(event) => setTeleconsent(event.target.checked)}
+                        className="mt-1 h-6 w-6 shrink-0 accent-primary"
+                      />
+                      <span className="text-base leading-snug">
+                        {TELEMEDICINE_CONSENT_LABEL}
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowTeleTerm((value) => !value)}
+                      className="self-start text-sm font-medium text-primary underline-offset-4 hover:underline"
+                    >
+                      {showTeleTerm ? "Ocultar termo" : "Ler termo completo"}
+                    </button>
+                    {showTeleTerm && (
+                      <p className="max-h-56 overflow-y-auto whitespace-pre-line rounded-lg bg-muted/60 p-3 text-sm leading-relaxed text-muted-foreground">
+                        {TELEMEDICINE_CONSENT_TERM}
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -1720,7 +1819,8 @@ export function CadastroWizard() {
                       <Loader2 className="h-5 w-5 animate-spin" />
                       Confirmando...
                     </>
-                  ) : tipoConsultaPreco > 0 ? (
+                  ) : tipoConsultaPreco > 0 &&
+                    metodoPagamento !== "DINHEIRO" ? (
                     "Reservar horário e pagar"
                   ) : (
                     "Confirmar consulta"

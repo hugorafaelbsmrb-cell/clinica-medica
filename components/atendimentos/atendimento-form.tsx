@@ -13,9 +13,14 @@ import { buildAddress } from "@/lib/geo"
 import {
   createAttendance,
   geocodeAttendanceAddress,
+  reverseGeocodeAttendanceAddress,
   suggestDomiciliarPrice,
   type ActionState,
 } from "@/lib/actions/atendimentos"
+import {
+  TELEMEDICINE_CONSENT_LABEL,
+  TELEMEDICINE_CONSENT_TERM,
+} from "@/lib/teleconsent"
 import type { DoctorOption } from "@/lib/doctor"
 
 type PatientOption = {
@@ -64,6 +69,13 @@ export function AttendanceForm({
   )
   const [geocoding, startGeocoding] = useTransition()
   const [value, setValue] = useState("0")
+  // Pagamento em dinheiro no ato do atendimento (presencial/domiciliar).
+  const [cashPayment, setCashPayment] = useState(false)
+  // Aceite do termo de consentimento da teleconsulta (CFM 2314/2022).
+  const [teleconsent, setTeleconsent] = useState(false)
+  const [showTeleTerm, setShowTeleTerm] = useState(false)
+  // Preenchimento do endereço pela localização (geocodificação reversa).
+  const [reversing, startReversing] = useTransition()
   // Sugestão de preço domiciliar por raio (urbano/fora), quando há coordenadas.
   const [priceSuggestion, setPriceSuggestion] = useState<{
     price: number
@@ -226,6 +238,27 @@ export function AttendanceForm({
     })
   }
 
+  // Preenche o endereço do domicílio a partir das coordenadas capturadas
+  // (GPS no local): o sistema monta o endereço por extenso sozinho.
+  function handleFillAddressFromLocation() {
+    if (!latitude || !longitude) {
+      toast.error("Capture a localização antes de preencher o endereço")
+      return
+    }
+    startReversing(async () => {
+      const result = await reverseGeocodeAttendanceAddress(
+        Number(latitude),
+        Number(longitude)
+      )
+      if (!result.success || !result.address) {
+        toast.error(result.message ?? "Não foi possível identificar o endereço")
+        return
+      }
+      setAddress(result.address)
+      toast.success("Endereço preenchido pela localização — confira os dados.")
+    })
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -325,6 +358,37 @@ export function AttendanceForm({
             </div>
           </Field>
 
+          {type === "TELECONSULTA" && (
+            <div className="flex flex-col gap-2">
+              <label
+                htmlFor="atendimento-teleconsent"
+                className="flex items-start gap-2 text-sm"
+              >
+                <input
+                  id="atendimento-teleconsent"
+                  type="checkbox"
+                  name="teleconsent"
+                  checked={teleconsent}
+                  onChange={(event) => setTeleconsent(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                />
+                <span>{TELEMEDICINE_CONSENT_LABEL}</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowTeleTerm((show) => !show)}
+                className="self-start text-xs font-medium text-primary underline-offset-4 hover:underline"
+              >
+                {showTeleTerm ? "Ocultar termo" : "Ler termo completo"}
+              </button>
+              {showTeleTerm && (
+                <p className="max-h-40 overflow-y-auto whitespace-pre-line rounded-lg bg-muted/60 p-3 text-xs leading-relaxed text-muted-foreground">
+                  {TELEMEDICINE_CONSENT_TERM}
+                </p>
+              )}
+            </div>
+          )}
+
           {type === "DOMICILIAR" && (
             <>
               <Field>
@@ -373,6 +437,25 @@ export function AttendanceForm({
                       <MapPin className="h-4 w-4" />
                     )}
                     Buscar coordenadas pelo endereço
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11"
+                    onClick={handleFillAddressFromLocation}
+                    disabled={
+                      reversing ||
+                      gpsStatus === "loading" ||
+                      !latitude ||
+                      !longitude
+                    }
+                  >
+                    {reversing ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <MapPin className="h-4 w-4" />
+                    )}
+                    Preencher endereço pela localização
                   </Button>
                 </div>
                 {source && (
@@ -432,6 +515,31 @@ export function AttendanceForm({
                   sugerido
                 </p>
               )}
+              {Number(value) > 0 && type !== "TELECONSULTA" && (
+                <label className="mt-1 flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={cashPayment}
+                    onChange={(event) => setCashPayment(event.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                  />
+                  <span>
+                    Pagamento em dinheiro no atendimento — o médico confirma
+                    o recebimento antes de finalizar.
+                  </span>
+                </label>
+              )}
+              <input
+                type="hidden"
+                name="paymentMethod"
+                value={
+                  cashPayment &&
+                  type !== "TELECONSULTA" &&
+                  Number(value) > 0
+                    ? "DINHEIRO"
+                    : ""
+                }
+              />
             </Field>
           </div>
 

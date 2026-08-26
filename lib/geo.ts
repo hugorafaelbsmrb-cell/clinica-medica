@@ -7,6 +7,11 @@
 export type LatLng = { latitude: number; longitude: number }
 
 const GEOCODE_BASE = "https://nominatim.openstreetmap.org/search"
+const REVERSE_GEOCODE_BASE = "https://nominatim.openstreetmap.org/reverse"
+const GEOCODE_HEADERS = {
+  "User-Agent": "clinica-medica-homecare/1.0 (sistema de agenda da clínica)",
+  Accept: "application/json",
+}
 
 /**
  * Geocodifica um endereço brasileiro via Nominatim.
@@ -16,10 +21,7 @@ export async function geocodeAddress(address: string): Promise<LatLng | null> {
   const url = `${GEOCODE_BASE}?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(address)}`
   try {
     const response = await fetch(url, {
-      headers: {
-        "User-Agent": "clinica-medica-homecare/1.0 (sistema de agenda da clínica)",
-        Accept: "application/json",
-      },
+      headers: GEOCODE_HEADERS,
       cache: "no-store",
     })
     if (!response.ok) return null
@@ -33,6 +35,58 @@ export async function geocodeAddress(address: string): Promise<LatLng | null> {
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
 
     return { latitude, longitude }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Geocodificação reversa (coordenadas → endereço) via Nominatim.
+ * Usada para preencher os campos de endereço a partir do GPS capturado
+ * (wizard público e formulário interno). Mesma política de uso do
+ * geocodeAddress: máx. 1 requisição por segundo, User-Agent identificável.
+ */
+export async function reverseGeocodeAddress(
+  latitude: number,
+  longitude: number
+): Promise<AddressParts | null> {
+  const url = `${REVERSE_GEOCODE_BASE}?format=json&addressdetails=1&accept-language=pt-BR&lat=${latitude}&lon=${longitude}`
+  try {
+    const response = await fetch(url, {
+      headers: GEOCODE_HEADERS,
+      cache: "no-store",
+    })
+    if (!response.ok) return null
+
+    const data = (await response.json()) as {
+      address?: {
+        road?: string
+        house_number?: string
+        suburb?: string
+        neighbourhood?: string
+        city?: string
+        town?: string
+        village?: string
+        municipality?: string
+        state?: string
+      }
+    }
+    const address = data.address
+    if (!address) return null
+
+    return {
+      street: address.road ?? null,
+      number: address.house_number ?? null,
+      neighborhood:
+        address.suburb ?? address.neighbourhood ?? null,
+      city:
+        address.city ??
+        address.town ??
+        address.village ??
+        address.municipality ??
+        null,
+      state: address.state ?? null,
+    }
   } catch {
     return null
   }
@@ -67,7 +121,7 @@ export function haversineKm(a: LatLng, b: LatLng): number {
   return 2 * R * Math.asin(Math.sqrt(h))
 }
 
-type AddressParts = {
+export type AddressParts = {
   street?: string | null
   number?: string | null
   neighborhood?: string | null
