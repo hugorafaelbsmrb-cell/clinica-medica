@@ -9,9 +9,17 @@ import { useEffect, useRef, useState, useTransition } from "react"
 import { useActionState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { ImagePlus, Loader2, Trash2, Users } from "lucide-react"
+import { ImagePlus, Loader2, Sparkles, Trash2, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -19,6 +27,7 @@ import {
   createMarketingCampaign,
   updateMarketingCampaign,
   previewMarketingAudience,
+  generateMarketingMessage,
   type MarketingActionState,
 } from "@/lib/actions/marketing"
 import { TONE_LABELS } from "@/lib/marketing/labels"
@@ -75,6 +84,11 @@ export function CampaignForm({
   const [audienceDays, setAudienceDays] = useState(initial?.audienceDays ?? "90")
   const [asDraft, setAsDraft] = useState(false)
 
+  // Geração da mensagem com IA (DeepSeek): diálogo com o tema.
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiTopic, setAiTopic] = useState("")
+  const [generating, setGenerating] = useState(false)
+
   // Prévia da audiência (server action) com debounce simples.
   const [audienceCount, setAudienceCount] = useState<number | null>(null)
   const [previewing, startPreview] = useTransition()
@@ -121,6 +135,36 @@ export function CampaignForm({
     const reader = new FileReader()
     reader.onload = () => setImage(String(reader.result))
     reader.readAsDataURL(file)
+  }
+
+  async function handleGenerateMessage() {
+    const topic = aiTopic.trim()
+    if (topic.length < 3) {
+      toast.error("Descreva o tema da mensagem antes de gerar")
+      return
+    }
+
+    setGenerating(true)
+    try {
+      const result = await generateMarketingMessage({
+        tone,
+        topic,
+        linkUrl: linkUrl || null,
+        currentMessage: body || null,
+      })
+      if (result.success && result.content) {
+        setBody(result.content)
+        setAiOpen(false)
+        setAiTopic("")
+        toast.success(result.message)
+      } else {
+        toast.error(result.message)
+      }
+    } catch {
+      toast.error("Falha ao gerar a mensagem — tente novamente")
+    } finally {
+      setGenerating(false)
+    }
   }
 
   return (
@@ -172,10 +216,21 @@ export function CampaignForm({
               rows={5}
               required
             />
-            <p className="text-xs text-muted-foreground">
-              Use {"{{nome}}"} para o primeiro nome do paciente — cada mensagem
-              sai personalizada.
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                Use {"{{nome}}"} para o primeiro nome do paciente — cada mensagem
+                sai personalizada.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9"
+                onClick={() => setAiOpen(true)}
+              >
+                <Sparkles className="h-4 w-4" />
+                Gerar mensagem com IA
+              </Button>
+            </div>
           </Field>
 
           {/* Imagem opcional (upload local, data URL no banco — como a logo). */}
@@ -353,6 +408,55 @@ export function CampaignForm({
             )}
           </div>
         </form>
+
+        {/* Diálogo da geração com IA: o tema vira prompt para a DeepSeek. */}
+        <Dialog open={aiOpen} onOpenChange={setAiOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Gerar mensagem com IA</DialogTitle>
+              <DialogDescription>
+                Descreva o tema da campanha (ex.: "campanha de vacinação contra
+                a gripe para pacientes acima de 60 anos"). A DeepSeek escreve a
+                mensagem no tom {TONE_LABELS[tone]?.toLowerCase() ?? tone} e
+                preenche o campo Mensagem — revise antes de agendar.
+              </DialogDescription>
+            </DialogHeader>
+            <Textarea
+              value={aiTopic}
+              onChange={(e) => setAiTopic(e.target.value)}
+              placeholder="Tema ou ideia da campanha..."
+              rows={4}
+              autoFocus
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAiOpen(false)}
+                disabled={generating}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={handleGenerateMessage}
+                disabled={generating}
+              >
+                {generating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Gerando...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Gerar mensagem
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   )

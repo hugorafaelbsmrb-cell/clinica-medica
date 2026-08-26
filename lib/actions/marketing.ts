@@ -8,6 +8,8 @@ import { z } from "zod"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { isAIEnabled } from "@/lib/ai/provider"
+import { generateMarketingMessage as generateMarketingMessageWithAI } from "@/lib/ai/marketing-message"
 import {
   countMarketingAudience,
   type MarketingAudience,
@@ -374,4 +376,57 @@ export async function previewMarketingAudience(input: {
 
   const count = await countMarketingAudience(parsedAudience.audience)
   return { ok: true, count }
+}
+
+/**
+ * Gera a mensagem da campanha com IA (DeepSeek) a partir do tema, sem salvar
+ * nada: o texto volta para o formulário, e o admin revisa antes de agendar.
+ * Sem chave da DeepSeek, retorna erro amigável e o fluxo manual continua.
+ */
+export async function generateMarketingMessage(input: {
+  tone?: string
+  topic?: string
+  linkUrl?: string | null
+  currentMessage?: string | null
+}): Promise<{ success: boolean; message: string; content?: string }> {
+  const session = await auth()
+  if (!session?.user) return { success: false, message: "Sessão expirada" }
+  if (session.user.role !== "ADMIN") {
+    return {
+      success: false,
+      message: "Apenas administradores podem usar a IA nas campanhas",
+    }
+  }
+
+  if (!(await isAIEnabled())) {
+    return {
+      success: false,
+      message:
+        "IA não configurada. Adicione a chave da DeepSeek em Configurações → Integrações.",
+    }
+  }
+
+  const tone = TONES.includes(input.tone as (typeof TONES)[number])
+    ? (input.tone as (typeof TONES)[number])
+    : "informativo"
+  const topic = input.topic?.trim() ?? ""
+  if (topic.length < 3) {
+    return { success: false, message: "Descreva o tema da mensagem antes de gerar" }
+  }
+  if (topic.length > 500) {
+    return { success: false, message: "Tema muito longo — resuma em até 500 caracteres" }
+  }
+
+  const result = await generateMarketingMessageWithAI({
+    tone,
+    topic,
+    linkUrl: input.linkUrl?.trim() || null,
+    currentMessage: input.currentMessage?.trim() || null,
+  })
+
+  if (!result.ok || !result.content) {
+    return { success: false, message: result.error ?? "Falha na geração com IA" }
+  }
+
+  return { success: true, message: "Mensagem gerada com IA", content: result.content }
 }

@@ -16,10 +16,22 @@ export type AIResult = {
   error?: string
 }
 
+/** Opções de geração (opcionais; cada provider define padrões sensatos). */
+export type AICompleteOptions = {
+  /** Criatividade (0 = direto, 1+ = mais variado). Padrão: 0.4. */
+  temperature?: number
+  /** Limite de tokens da resposta. Padrão: 1000. */
+  maxTokens?: number
+}
+
 export interface AIProvider {
   readonly name: string
   /** Envia um prompt e retorna o texto gerado. */
-  complete(systemPrompt: string, userPrompt: string): Promise<AIResult>
+  complete(
+    systemPrompt: string,
+    userPrompt: string,
+    options?: AICompleteOptions
+  ): Promise<AIResult>
 }
 
 /** Indica se há algum provedor de IA configurado. */

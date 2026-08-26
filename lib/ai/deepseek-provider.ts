@@ -5,7 +5,7 @@
  * Configuração: Configurações → Integrações (ou DEEPSEEK_API_KEY no .env)
  * Docs: https://api-docs.deepseek.com
  */
-import type { AIResult, AIProvider } from "./provider"
+import type { AICompleteOptions, AIResult, AIProvider } from "./provider"
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
 const DEEPSEEK_MODEL = "deepseek-chat"
@@ -15,7 +15,11 @@ export class DeepSeekProvider implements AIProvider {
 
   constructor(private readonly apiKey: string) {}
 
-  async complete(systemPrompt: string, userPrompt: string): Promise<AIResult> {
+  async complete(
+    systemPrompt: string,
+    userPrompt: string,
+    options: AICompleteOptions = {}
+  ): Promise<AIResult> {
     if (!this.apiKey) {
       return { ok: false, error: "Chave da DeepSeek não configurada" }
     }
@@ -33,8 +37,8 @@ export class DeepSeekProvider implements AIProvider {
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
           ],
-          temperature: 0.4,
-          max_tokens: 1000,
+          temperature: options.temperature ?? 0.4,
+          max_tokens: options.maxTokens ?? 1000,
         }),
       })
 
