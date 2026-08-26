@@ -554,6 +554,12 @@ export function CadastroWizard() {
       )
       return
     }
+    if (tipoConsultaPreco > 0 && metodosDisponiveis.length === 0) {
+      setAgendarError(
+        "Nenhuma forma de pagamento disponível para esta consulta. Fale com a clínica, por favor."
+      )
+      return
+    }
 
     startAgendar(async () => {
       const result = await agendarPublico({
@@ -651,6 +657,26 @@ export function CadastroWizard() {
   const tipoConsultaPreco = tipoConsultaInfo?.price ?? 0
   const medicoNome =
     agenda?.doctors.find((d) => d.id === selectedDoctorId)?.name ?? ""
+
+  // Meios de pagamento liberados para o cliente (admin + gateways).
+  // Dinheiro só vale para presencial/domiciliar (pago no atendimento).
+  const metodosDisponiveis: ("PIX" | "CARTAO" | "APPLE_PAY" | "DINHEIRO")[] =
+    []
+  if (agenda?.paymentMethods.pix) metodosDisponiveis.push("PIX")
+  if (agenda?.paymentMethods.cartao) metodosDisponiveis.push("CARTAO")
+  if (agenda?.paymentMethods.applePay) metodosDisponiveis.push("APPLE_PAY")
+  if (agenda?.paymentMethods.dinheiro && tipoConsulta !== "TELECONSULTA") {
+    metodosDisponiveis.push("DINHEIRO")
+  }
+
+  // Se o meio selecionado foi desativado pelo admin (ou a modalidade
+  // mudou), volta automaticamente para o primeiro disponível.
+  useEffect(() => {
+    if (metodosDisponiveis.length === 0) return
+    if (!metodosDisponiveis.includes(metodoPagamento)) {
+      setMetodoPagamento(metodosDisponiveis[0])
+    }
+  }, [metodosDisponiveis, metodoPagamento])
 
   // ── Tela: sem horários disponíveis ──────────────────────────────────────
   if (phase === "sem-vagas") {
@@ -1654,52 +1680,57 @@ export function CadastroWizard() {
                   <div className="flex flex-col gap-2">
                     <p className="text-base font-medium">Como prefere pagar?</p>
                     <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setMetodoPagamento("PIX")}
-                        className={cn(
-                          "flex h-16 items-center justify-center gap-2 rounded-xl border-2 text-lg font-semibold transition-colors",
-                          metodoPagamento === "PIX"
-                            ? "border-primary bg-primary/5 text-primary"
-                            : "border-border hover:bg-muted"
-                        )}
-                      >
-                        <QrCode className="h-5 w-5" />
-                        PIX
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setMetodoPagamento("CARTAO")}
-                        className={cn(
-                          "flex h-16 items-center justify-center gap-2 rounded-xl border-2 text-lg font-semibold transition-colors",
-                          metodoPagamento === "CARTAO"
-                            ? "border-primary bg-primary/5 text-primary"
-                            : "border-border hover:bg-muted"
-                        )}
-                      >
-                        <CreditCard className="h-5 w-5" />
-                        Cartão
-                      </button>
-                      {/* Dinheiro: só para consultas no local (presencial/domiciliar),
-                          o pagamento acontece no momento do atendimento. */}
-                      {tipoConsulta !== "TELECONSULTA" && (
+                      {agenda?.paymentMethods.pix && (
                         <button
                           type="button"
-                          onClick={() => setMetodoPagamento("DINHEIRO")}
+                          onClick={() => setMetodoPagamento("PIX")}
                           className={cn(
                             "flex h-16 items-center justify-center gap-2 rounded-xl border-2 text-lg font-semibold transition-colors",
-                            metodoPagamento === "DINHEIRO"
+                            metodoPagamento === "PIX"
                               ? "border-primary bg-primary/5 text-primary"
                               : "border-border hover:bg-muted"
                           )}
                         >
-                          <Banknote className="h-5 w-5" />
-                          Dinheiro
+                          <QrCode className="h-5 w-5" />
+                          PIX
                         </button>
                       )}
-                      {/* Apple Pay só com o Stripe configurado — no modo teste
-                          (sem chave) a opção fica oculta. */}
-                      {agenda?.applePayEnabled && (
+                      {agenda?.paymentMethods.cartao && (
+                        <button
+                          type="button"
+                          onClick={() => setMetodoPagamento("CARTAO")}
+                          className={cn(
+                            "flex h-16 items-center justify-center gap-2 rounded-xl border-2 text-lg font-semibold transition-colors",
+                            metodoPagamento === "CARTAO"
+                              ? "border-primary bg-primary/5 text-primary"
+                              : "border-border hover:bg-muted"
+                          )}
+                        >
+                          <CreditCard className="h-5 w-5" />
+                          Cartão
+                        </button>
+                      )}
+                      {/* Dinheiro: só para consultas no local (presencial/domiciliar),
+                          o pagamento acontece no momento do atendimento. */}
+                      {tipoConsulta !== "TELECONSULTA" &&
+                        agenda?.paymentMethods.dinheiro && (
+                          <button
+                            type="button"
+                            onClick={() => setMetodoPagamento("DINHEIRO")}
+                            className={cn(
+                              "flex h-16 items-center justify-center gap-2 rounded-xl border-2 text-lg font-semibold transition-colors",
+                              metodoPagamento === "DINHEIRO"
+                                ? "border-primary bg-primary/5 text-primary"
+                                : "border-border hover:bg-muted"
+                            )}
+                          >
+                            <Banknote className="h-5 w-5" />
+                            Dinheiro
+                          </button>
+                        )}
+                      {/* Apple Pay só com o Stripe configurado e liberado
+                          pelo admin — sem chave a opção fica oculta. */}
+                      {agenda?.paymentMethods.applePay && (
                         <button
                           type="button"
                           onClick={() => setMetodoPagamento("APPLE_PAY")}

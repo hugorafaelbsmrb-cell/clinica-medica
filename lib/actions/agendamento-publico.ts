@@ -127,10 +127,15 @@ export type PublicAgendaResult = {
   /** Valor da consulta presencial (0 = agendamento sem cobrança). */
   consultaPreco: number
   /**
-   * true = Stripe configurado → o wizard pode oferecer Apple Pay.
-   * Sem chave do Stripe (modo teste/MOCK) o Apple Pay fica oculto.
+   * Formas de pagamento liberadas pelo admin para o cliente escolher.
+   * Apple Pay exige também o Stripe configurado (chave presente).
    */
-  applePayEnabled: boolean
+  paymentMethods: {
+    pix: boolean
+    cartao: boolean
+    applePay: boolean
+    dinheiro: boolean
+  }
 }
 
 /**
@@ -215,7 +220,14 @@ export async function getPublicAgenda(
       doctors,
       modalities,
       consultaPreco: paymentSettings.consultaPrecoPresencial,
-      applePayEnabled: Boolean(paymentSettings.stripeSecretKey),
+      paymentMethods: {
+        pix: paymentSettings.pixEnabled,
+        cartao: paymentSettings.cartaoEnabled,
+        applePay:
+          paymentSettings.applePayEnabled &&
+          Boolean(paymentSettings.stripeSecretKey),
+        dinheiro: paymentSettings.dinheiroEnabled,
+      },
     }
   }
 
@@ -230,7 +242,14 @@ export async function getPublicAgenda(
       doctors,
       modalities,
       consultaPreco: paymentSettings.consultaPrecoPresencial,
-      applePayEnabled: Boolean(paymentSettings.stripeSecretKey),
+      paymentMethods: {
+        pix: paymentSettings.pixEnabled,
+        cartao: paymentSettings.cartaoEnabled,
+        applePay:
+          paymentSettings.applePayEnabled &&
+          Boolean(paymentSettings.stripeSecretKey),
+        dinheiro: paymentSettings.dinheiroEnabled,
+      },
     }
   }
 
@@ -257,7 +276,14 @@ export async function getPublicAgenda(
     doctors,
     modalities,
     consultaPreco: paymentSettings.consultaPrecoPresencial,
-    applePayEnabled: Boolean(paymentSettings.stripeSecretKey),
+    paymentMethods: {
+      pix: paymentSettings.pixEnabled,
+      cartao: paymentSettings.cartaoEnabled,
+      applePay:
+        paymentSettings.applePayEnabled &&
+        Boolean(paymentSettings.stripeSecretKey),
+      dinheiro: paymentSettings.dinheiroEnabled,
+    },
   }
 }
 
@@ -429,6 +455,27 @@ export async function agendarPublico(
   // Com dinheiro não há cobrança antecipada: o valor fica registrado no
   // atendimento para recebimento no ato (o médico confirma depois).
   const cobrar = price > 0 && !isCash
+
+  // A forma de pagamento escolhida precisa continuar liberada pelo admin.
+  // Sem cobrança (preço zero) o meio é irrelevante — nada é cobrado online.
+  if (cobrar || isCash) {
+    const methodEnabled =
+      methodInput === "PIX"
+        ? paymentSettings.pixEnabled
+        : methodInput === "CARTAO"
+          ? paymentSettings.cartaoEnabled
+          : methodInput === "APPLE_PAY"
+            ? paymentSettings.applePayEnabled &&
+              Boolean(paymentSettings.stripeSecretKey)
+            : paymentSettings.dinheiroEnabled
+    if (!methodEnabled) {
+      return {
+        success: false,
+        message:
+          "Esta forma de pagamento não está mais disponível. Escolha outra, por favor.",
+      }
+    }
+  }
 
   try {
     // Re-checa se o horário continua livre antes de confirmar

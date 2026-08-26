@@ -27,6 +27,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Field, FieldLabel } from "@/components/ui/field"
+import { Switch } from "@/components/ui/switch"
 import {
   savePaymentSettings,
   testPaymentGateway,
@@ -47,9 +48,41 @@ export type PaymentInitialData = {
   acompValorMedia: number | null
   acompValorAlta: number | null
   jurosParcelamento: number | null
+  pixEnabled: boolean
+  cartaoEnabled: boolean
+  applePayEnabled: boolean
+  dinheiroEnabled: boolean
 }
 
 type TestResult = { success: boolean; message: string } | null
+
+/** Linha de toggle de forma de pagamento liberada no agendamento online. */
+function PaymentMethodToggle({
+  label,
+  description,
+  checked,
+  onChange,
+  inputName,
+}: {
+  label: string
+  description: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+  inputName: string
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b pb-3 last:border-b-0 last:pb-0">
+      <div className="flex flex-col gap-0.5">
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        <Switch checked={checked} onCheckedChange={onChange} aria-label={label} />
+        <input type="hidden" name={inputName} value={checked ? "on" : ""} />
+      </div>
+    </div>
+  )
+}
 
 async function copyText(text: string): Promise<boolean> {
   // Fallback para navegadores sem Clipboard API em contexto não seguro (HTTP).
@@ -135,6 +168,15 @@ export function PagamentosForm({
       : ""
   )
 
+  const [pixEnabled, setPixEnabled] = useState(initial.pixEnabled)
+  const [cartaoEnabled, setCartaoEnabled] = useState(initial.cartaoEnabled)
+  const [applePayEnabled, setApplePayEnabled] = useState(
+    initial.applePayEnabled
+  )
+  const [dinheiroEnabled, setDinheiroEnabled] = useState(
+    initial.dinheiroEnabled
+  )
+
   const [showAsaas, setShowAsaas] = useState(false)
   const [showStripe, setShowStripe] = useState(false)
   const [showStripeWebhook, setShowStripeWebhook] = useState(false)
@@ -217,6 +259,49 @@ export function PagamentosForm({
       </CardHeader>
       <CardContent>
         <form action={formAction} className="flex flex-col gap-6">
+          {/* Formas de pagamento liberadas no agendamento online */}
+          <div className="flex flex-col gap-3 rounded-lg border p-4">
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-2 font-medium">
+                <Wallet className="h-4 w-4 text-primary" />
+                Formas de pagamento do agendamento online
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Quais meios o cliente pode escolher ao agendar com pagamento
+                antecipado. A equipe continua podendo cobrar por qualquer
+                meio internamente (Financeiro).
+              </p>
+            </div>
+            <PaymentMethodToggle
+              label="PIX"
+              description="QR code + copia-e-cola gerados na hora pelo Asaas."
+              checked={pixEnabled}
+              onChange={setPixEnabled}
+              inputName="pixEnabled"
+            />
+            <PaymentMethodToggle
+              label="Cartão de crédito"
+              description="Link de pagamento do Asaas com checkout do cartão."
+              checked={cartaoEnabled}
+              onChange={setCartaoEnabled}
+              inputName="cartaoEnabled"
+            />
+            <PaymentMethodToggle
+              label="Apple Pay"
+              description="Checkout do Stripe — só aparece ao cliente com a chave do Stripe configurada abaixo."
+              checked={applePayEnabled}
+              onChange={setApplePayEnabled}
+              inputName="applePayEnabled"
+            />
+            <PaymentMethodToggle
+              label="Dinheiro"
+              description="Só presencial/domiciliar — o cliente paga para o médico no momento do atendimento."
+              checked={dinheiroEnabled}
+              onChange={setDinheiroEnabled}
+              inputName="dinheiroEnabled"
+            />
+          </div>
+
           {/* Preços das consultas */}
           <div className="flex flex-col gap-4 rounded-lg border p-4">
             <div className="flex items-center gap-2 font-medium">

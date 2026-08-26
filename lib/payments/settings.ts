@@ -17,6 +17,11 @@ export type PaymentSettings = {
   consultaPrecoDomiciliar: number
   /** Preço da teleconsulta (vídeo chamada). */
   consultaPrecoTeleconsulta: number
+  /** Formas de pagamento liberadas para o cliente no agendamento online. */
+  pixEnabled: boolean
+  cartaoEnabled: boolean
+  applePayEnabled: boolean
+  dinheiroEnabled: boolean
   /** Valores sugeridos por complexidade no acompanhamento. */
   acompValorBaixa: number
   acompValorMedia: number
@@ -43,6 +48,10 @@ export async function getPaymentSettings(): Promise<PaymentSettings> {
     consultaPrecoTeleconsulta: Number(
       settings?.consultaPrecoTeleconsulta ?? 0
     ),
+    pixEnabled: settings?.pixEnabled ?? true,
+    cartaoEnabled: settings?.cartaoEnabled ?? true,
+    applePayEnabled: settings?.applePayEnabled ?? true,
+    dinheiroEnabled: settings?.dinheiroEnabled ?? true,
     acompValorBaixa: Number(settings?.acompValorBaixa ?? 0),
     acompValorMedia: Number(settings?.acompValorMedia ?? 0),
     acompValorAlta: Number(settings?.acompValorAlta ?? 0),

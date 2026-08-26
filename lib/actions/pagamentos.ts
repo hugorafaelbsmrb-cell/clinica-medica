@@ -100,6 +100,10 @@ export async function savePaymentSettings(
       asaasApiKey: data.asaasApiKey?.trim() || null,
       stripeSecretKey: data.stripeSecretKey?.trim() || null,
       stripeWebhookSecret: data.stripeWebhookSecret?.trim() || null,
+      pixEnabled: formData.get("pixEnabled") === "on",
+      cartaoEnabled: formData.get("cartaoEnabled") === "on",
+      applePayEnabled: formData.get("applePayEnabled") === "on",
+      dinheiroEnabled: formData.get("dinheiroEnabled") === "on",
       consultaPrecoPresencial: parsePrice(
         formData.get("consultaPrecoPresencial")
       ),
@@ -123,6 +127,10 @@ export async function savePaymentSettings(
       asaasApiKey: data.asaasApiKey?.trim() || null,
       stripeSecretKey: data.stripeSecretKey?.trim() || null,
       stripeWebhookSecret: data.stripeWebhookSecret?.trim() || null,
+      pixEnabled: formData.get("pixEnabled") === "on",
+      cartaoEnabled: formData.get("cartaoEnabled") === "on",
+      applePayEnabled: formData.get("applePayEnabled") === "on",
+      dinheiroEnabled: formData.get("dinheiroEnabled") === "on",
       consultaPrecoPresencial: parsePrice(
         formData.get("consultaPrecoPresencial")
       ),

@@ -64,6 +64,10 @@ export default async function ConfiguracoesPage() {
           acompValorMedia: clinic.acompValorMedia ?? null,
           acompValorAlta: clinic.acompValorAlta ?? null,
           jurosParcelamento: clinic.jurosParcelamento ?? null,
+          pixEnabled: payments.pixEnabled,
+          cartaoEnabled: payments.cartaoEnabled,
+          applePayEnabled: payments.applePayEnabled,
+          dinheiroEnabled: payments.dinheiroEnabled,
         }}
         enabledModalities={{
           presencial: clinic.consultaPresencialEnabled ?? true,

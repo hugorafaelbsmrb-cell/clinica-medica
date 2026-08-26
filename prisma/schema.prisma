@@ -198,6 +198,13 @@ model ClinicSettings {
   stripeSecretKey     String? // chave secreta do Stripe (Dashboard → Developers → API keys)
   stripeWebhookSecret String? // segredo do webhook do Stripe (para validar a assinatura)
 
+  // Formas de pagamento liberadas para o cliente no agendamento online
+  // (o admin liga/desliga em Configurações → Pagamentos).
+  pixEnabled        Boolean @default(true)
+  cartaoEnabled     Boolean @default(true)
+  applePayEnabled   Boolean @default(true)
+  dinheiroEnabled   Boolean @default(true)
+
   // Preços das consultas (usados no agendamento online com pagamento antecipado)
   // Vazio = agendamento online sem cobrança (confirmado na hora).
   consultaPrecoPresencial   Decimal? @db.Decimal(10, 2) // valor da consulta presencial
