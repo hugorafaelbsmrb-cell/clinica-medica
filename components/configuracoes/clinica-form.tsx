@@ -9,8 +9,11 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldLabel } from "@/components/ui/field"
+import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
 import {
   saveClinicSettings,
+  getSignerStatus,
   type ActionState,
 } from "@/lib/actions/configuracoes"
 
@@ -22,6 +25,7 @@ export type ClinicInitialData = {
   cnpj?: string | null
   horarioAtendimento?: string | null
   logoDataUrl?: string | null
+  enableDigitalSignature?: boolean
 }
 
 const MAX_LOGO_BYTES = 1024 * 1024 // 1 MB
@@ -30,6 +34,16 @@ export function ClinicaForm({ initial }: { initial: ClinicInitialData }) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [logo, setLogo] = useState(initial.logoDataUrl ?? "")
+  const [digitalSignature, setDigitalSignature] = useState(
+    initial.enableDigitalSignature ?? false
+  )
+  const [signerOk, setSignerOk] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    getSignerStatus()
+      .then((status) => setSignerOk(status.ok))
+      .catch(() => setSignerOk(false))
+  }, [])
 
   const [state, formAction, pending] = useActionState<ActionState | null, FormData>(
     saveClinicSettings,
@@ -193,6 +207,48 @@ export function ClinicaForm({ initial }: { initial: ClinicInitialData }) {
               perguntam o horário de funcionamento.
             </p>
           </Field>
+
+          {/* Assinatura digital ICP-Brasil */}
+          <div className="flex items-start justify-between gap-3 rounded-md border p-3">
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-medium">Assinatura digital ICP-Brasil</p>
+              <p className="text-xs text-muted-foreground">
+                Assina prescrições e planos terapêuticos com o certificado
+                digital A1 do médico (padrão PAdES, validade jurídica). O
+                médico cadastra o certificado em "Minha assinatura".
+              </p>
+              {digitalSignature && (
+                <div className="mt-1">
+                  {signerOk === null ? (
+                    <Badge variant="outline">Verificando serviço de assinatura…</Badge>
+                  ) : signerOk ? (
+                    <Badge variant="secondary">Serviço de assinatura online</Badge>
+                  ) : (
+                    <Badge variant="destructive">
+                      Serviço de assinatura indisponível
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
+            <Switch
+              checked={digitalSignature}
+              onCheckedChange={(checked) => {
+                setDigitalSignature(checked)
+                if (checked && signerOk === null) {
+                  getSignerStatus()
+                    .then((status) => setSignerOk(status.ok))
+                    .catch(() => setSignerOk(false))
+                }
+              }}
+              aria-label="Assinatura digital ICP-Brasil"
+            />
+            <input
+              type="hidden"
+              name="enableDigitalSignature"
+              value={digitalSignature ? "on" : ""}
+            />
+          </div>
 
           <div className="flex gap-3">
             <Button type="submit" disabled={pending}>

@@ -47,6 +47,7 @@ export type ClinicInfo = {
   autoPagamentoLembreteMsg?: string | null
   autoPagamentoConfirmadoEnabled?: boolean
   autoPagamentoConfirmadoMsg?: string | null
+  enableDigitalSignature?: boolean
 }
 
 const DEFAULTS: ClinicInfo = {
@@ -118,6 +119,7 @@ export async function getClinicSettings(): Promise<ClinicInfo> {
         autoPagamentoConfirmadoEnabled:
           settings.autoPagamentoConfirmadoEnabled,
         autoPagamentoConfirmadoMsg: settings.autoPagamentoConfirmadoMsg,
+        enableDigitalSignature: settings.enableDigitalSignature,
       }
     : DEFAULTS
 }

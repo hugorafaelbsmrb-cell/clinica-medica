@@ -10,6 +10,10 @@ services:
     environment:
       # Agenda, lembretes e mensagens no fuso da clínica (Brasília).
       TZ: America/Sao_Paulo
+      # Microserviço de assinatura PAdES (rede interna do compose).
+      SIGNER_URL: http://signer:8000
+    depends_on:
+      - signer
     ports:
       - "8080:3000"
     healthcheck:
@@ -17,6 +21,22 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # Microserviço de assinatura digital ICP-Brasil (pyhanko + Flask).
+  # Sem porta externa: só a aplicação Node o acessa, na rede interna.
+  signer:
+    build:
+      context: ./signer
+    container_name: clinica-medica-signer
+    restart: unless-stopped
+    environment:
+      TZ: America/Sao_Paulo
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # Cron interno (WhatsApp): chama a rota /api/cron a cada 10 minutos.
   # O segredo é gravado no crontab na inicialização do container.

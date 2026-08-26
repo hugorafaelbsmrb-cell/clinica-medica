@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { checkSignerHealth } from "@/lib/signing/signer-client"
 
 export type ActionState = {
   success: boolean
@@ -42,6 +43,7 @@ export async function saveClinicSettings(
   }
 
   const logoDataUrl = formData.get("logoDataUrl")?.toString() ?? ""
+  const enableDigitalSignature = formData.get("enableDigitalSignature") === "on"
 
   if (logoDataUrl) {
     const isImage = /^data:image\/(png|jpe?g);base64,/.test(logoDataUrl)
@@ -89,6 +91,7 @@ export async function saveClinicSettings(
       cnpj: data.cnpj || null,
       horarioAtendimento: data.horarioAtendimento || null,
       logoDataUrl: data.logoDataUrl || null,
+      enableDigitalSignature,
     },
     create: {
       id: 1,
@@ -99,6 +102,7 @@ export async function saveClinicSettings(
       cnpj: data.cnpj || null,
       horarioAtendimento: data.horarioAtendimento || null,
       logoDataUrl: data.logoDataUrl || null,
+      enableDigitalSignature,
     },
   })
 
@@ -113,6 +117,11 @@ export async function saveClinicSettings(
 
   revalidatePath("/", "layout")
   return { success: true, message: "Configurações salvas" }
+}
+
+/** Saúde do microserviço de assinatura (exibida em Configurações). */
+export async function getSignerStatus(): Promise<{ ok: boolean }> {
+  return { ok: await checkSignerHealth() }
 }
 
 /**

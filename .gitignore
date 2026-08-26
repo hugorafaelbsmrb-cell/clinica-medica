@@ -33,6 +33,11 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# signer local (testes)
+.venv-signer/
+signer/__pycache__/
+signer/test-*
+
 # vercel
 .vercel
 

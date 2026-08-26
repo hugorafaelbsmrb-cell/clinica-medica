@@ -8,6 +8,7 @@ import { auth } from "@/lib/auth"
 import { getClinicSettings } from "@/lib/clinic"
 import { resolveDoctorId } from "@/lib/doctor"
 import { generatePrescriptionPdf } from "@/lib/pdf/prescription-pdf"
+import { signPdfIfEnabled } from "@/lib/signing/certificate"
 import { sendDocumentMessage } from "@/lib/whatsapp/message-service"
 
 export type ActionState = {
@@ -104,7 +105,7 @@ export async function createPrescription(
     if (patient.phone && patient.whatsappEnabled && patient.lgpdConsent) {
       try {
         const clinic = await getClinicSettings()
-        const pdf = await generatePrescriptionPdf({
+        const generated = await generatePrescriptionPdf({
           patientName: patient.name,
           patientBirthDate: patient.birthDate,
           patientPhone: patient.phone,
@@ -117,6 +118,16 @@ export async function createPrescription(
           issuedAt: prescription.createdAt,
           items: full.items,
         })
+        // Assinatura digital ICP-Brasil (PAdES) quando habilitada e com certificado válido
+        const { signed, pdf } = await signPdfIfEnabled({
+          doctorId: full.doctorId,
+          doctorName: full.doctor?.name,
+          documentType: "Prescription",
+          documentId: prescription.id,
+          patientId,
+          actorId: session.user.id,
+          pdf: generated,
+        })
         const sent = await sendDocumentMessage(
           patientId,
           `Olá ${patient.name.split(" ")[0]}! Segue sua prescrição médica em PDF. Qualquer dúvida, estamos à disposição.`,
@@ -124,7 +135,7 @@ export async function createPrescription(
           `prescricao-${format(new Date(), "dd-MM-yyyy")}.pdf`
         )
         whatsappNote = sent.ok
-          ? " e enviada por WhatsApp"
+          ? ` e enviada por WhatsApp${signed ? " com assinatura digital" : ""}`
           : ` (WhatsApp: ${sent.message})`
       } catch (error) {
         console.error("[Prescrição] Falha ao enviar PDF por WhatsApp:", error)

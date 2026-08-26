@@ -3,10 +3,12 @@ import { notFound } from "next/navigation"
 import type { Metadata } from "next"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { Printer, ArrowLeft } from "lucide-react"
+import { Printer, ArrowLeft, Download } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
+import { getClinicSettings } from "@/lib/clinic"
+import { getActiveCertificate } from "@/lib/signing/certificate"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -43,6 +45,14 @@ export default async function PrescricaoDetalhePage({
 
   if (!prescription) notFound()
 
+  // Download assinado disponível quando a clínica habilitou a assinatura
+  // digital e o médico tem certificado A1 válido.
+  const [clinic, certificate] = await Promise.all([
+    getClinicSettings(),
+    getActiveCertificate(prescription.doctorId),
+  ])
+  const canSign = (clinic.enableDigitalSignature ?? false) && Boolean(certificate)
+
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -65,15 +75,27 @@ export default async function PrescricaoDetalhePage({
             </p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          render={
-            <Link href={`/prescricoes/${prescription.id}/imprimir`} />
-          }
-        >
-          <Printer className="h-4 w-4" />
-          Imprimir / PDF
-        </Button>
+        <div className="flex gap-2">
+          {canSign && (
+            <Button
+              render={
+                <a href={`/api/prescricoes/${prescription.id}/pdf`} />
+              }
+            >
+              <Download className="h-4 w-4" />
+              Baixar PDF assinado
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            render={
+              <Link href={`/prescricoes/${prescription.id}/imprimir`} />
+            }
+          >
+            <Printer className="h-4 w-4" />
+            Imprimir / PDF
+          </Button>
+        </div>
       </div>
 
       <Card>

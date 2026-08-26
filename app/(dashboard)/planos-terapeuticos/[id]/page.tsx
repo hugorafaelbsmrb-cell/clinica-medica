@@ -3,10 +3,12 @@ import { notFound } from "next/navigation"
 import type { Metadata } from "next"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { ArrowLeft, Pencil, Sparkles } from "lucide-react"
+import { ArrowLeft, Pencil, Sparkles, Download } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
+import { getClinicSettings } from "@/lib/clinic"
+import { getActiveCertificate } from "@/lib/signing/certificate"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -37,6 +39,14 @@ export default async function PlanoDetalhePage({
 
   if (!plan) notFound()
 
+  // Download assinado disponível quando a clínica habilitou a assinatura
+  // digital e o médico tem certificado A1 válido.
+  const [clinic, certificate] = await Promise.all([
+    getClinicSettings(),
+    getActiveCertificate(plan.doctorId),
+  ])
+  const canSign = (clinic.enableDigitalSignature ?? false) && Boolean(certificate)
+
   const canApprove = Boolean(plan.summary) && plan.status !== "APROVADO"
 
   return (
@@ -61,6 +71,14 @@ export default async function PlanoDetalhePage({
           </div>
         </div>
         <div className="flex gap-2">
+          {canSign && (
+            <Button
+              render={<a href={`/api/planos/${plan.id}/pdf`} />}
+            >
+              <Download className="h-4 w-4" />
+              Baixar PDF assinado
+            </Button>
+          )}
           <Button
             variant="outline"
             render={<Link href={`/planos-terapeuticos/${plan.id}/editar`} />}

@@ -145,6 +145,7 @@ model User {
   followUpPrograms    FollowUpProgram[]
   pushSubscriptions   PushSubscription[]
   followUpEvaluations FollowUpEvaluation[]
+  certificates        MedicalCertificate[]
 }
 
 /**
@@ -215,6 +216,9 @@ model ClinicSettings {
   autoPagamentoLembreteMsg          String?  @db.Text
   autoPagamentoConfirmadoEnabled    Boolean  @default(true) // aviso de pagamento confirmado
   autoPagamentoConfirmadoMsg        String?  @db.Text
+
+  // Assinatura digital ICP-Brasil: liga/desliga a assinatura PAdES nos PDFs
+  enableDigitalSignature            Boolean  @default(false)
   updatedAt                         DateTime @updatedAt
 }
 
@@ -621,6 +625,29 @@ model AuditLog {
   patient   Patient? @relation("AuditLogPatient", fields: [patientId], references: [id], onDelete: SetNull)
   details   Json?
   createdAt DateTime @default(now())
+}
+
+/**
+ * Certificado digital A1 (ICP-Brasil) do médico para assinatura PAdES.
+ * O arquivo .pfx/.p12 e a senha são armazenados criptografados com
+ * AES-256-GCM usando CERT_ENCRYPTION_KEY (fora do banco).
+ */
+model MedicalCertificate {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  encryptedPfx      String   @db.Text // base64: iv.tag.cipher
+  encryptedPassword String   @db.Text // base64: iv.tag.cipher
+  subject           String
+  issuer            String
+  serialNumber      String?
+  validFrom         DateTime
+  validTo           DateTime
+  status            String   @default("ACTIVE") // ACTIVE | REVOKED (desativado ao trocar)
+  uploadedAt        DateTime @default(now())
+
+  @@index([userId])
+  @@index([status])
 }
 
 // Trava simples de concorrência do cron: uma linha por job com início/fim.

@@ -8,3 +8,6 @@ node_modules
 next-env.d.ts
 Dockerfile
 docker-compose.yml
+.venv-signer
+signer/test-*
+signer/__pycache__

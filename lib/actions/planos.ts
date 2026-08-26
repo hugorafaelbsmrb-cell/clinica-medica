@@ -10,6 +10,7 @@ import { resolveDoctorId } from "@/lib/doctor"
 import { generatePlanSummary } from "@/lib/ai/therapeutic-plan"
 import { isAIEnabled } from "@/lib/ai/provider"
 import { generatePlanPdf } from "@/lib/pdf/plan-pdf"
+import { signPdfIfEnabled } from "@/lib/signing/certificate"
 import { sendDocumentMessage } from "@/lib/whatsapp/message-service"
 
 export type ActionState = {
@@ -167,7 +168,7 @@ export async function approvePlan(planId: string): Promise<ActionState> {
   ) {
     try {
       const clinic = await getClinicSettings()
-      const pdf = await generatePlanPdf({
+      const generated = await generatePlanPdf({
         patientName: plan.patient.name,
         doctorName: plan.doctor?.name,
         doctorCrm: plan.doctor?.crm,
@@ -180,6 +181,16 @@ export async function approvePlan(planId: string): Promise<ActionState> {
         guidelines: plan.guidelines,
         summary: plan.summary,
       })
+      // Assinatura digital ICP-Brasil (PAdES) quando habilitada e com certificado válido
+      const { signed, pdf } = await signPdfIfEnabled({
+        doctorId: plan.doctorId,
+        doctorName: plan.doctor?.name,
+        documentType: "TherapeuticPlan",
+        documentId: plan.id,
+        patientId: plan.patientId,
+        actorId: session.user.id,
+        pdf: generated,
+      })
       const sent = await sendDocumentMessage(
         plan.patientId,
         `Olá ${plan.patient.name.split(" ")[0]}! 💙 Seu plano terapêutico foi finalizado. Aqui está o seu resumo:\n\n${plan.summary}\n\n📄 O plano completo segue no PDF anexo. Qualquer dúvida, fale com a clínica. 😊`,
@@ -187,7 +198,7 @@ export async function approvePlan(planId: string): Promise<ActionState> {
         `plano-terapeutico-${format(new Date(), "dd-MM-yyyy")}.pdf`
       )
       whatsappNote = sent.ok
-        ? " e enviado por WhatsApp"
+        ? ` e enviado por WhatsApp${signed ? " com assinatura digital" : ""}`
         : ` (WhatsApp: ${sent.message})`
     } catch (error) {
       console.error("[Plano] Falha ao enviar PDF por WhatsApp:", error)
