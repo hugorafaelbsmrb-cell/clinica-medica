@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ROLE_LABELS, type Role } from "@/lib/rbac"
+import { clearCredentials } from "@/lib/auth-storage"
 
 export function UserMenu({
   name,
@@ -59,7 +60,10 @@ export function UserMenu({
         <DropdownMenuSeparator />
         <DropdownMenuItem
           variant="destructive"
-          onClick={() => signOut({ callbackUrl: "/login" })}
+          onClick={() => {
+            clearCredentials()
+            signOut({ callbackUrl: "/login" })
+          }}
         >
           <LogOut className="h-4 w-4" />
           Sair

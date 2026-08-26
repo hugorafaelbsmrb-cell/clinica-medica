@@ -27,6 +27,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { hasPermission, ROLE_LABELS, type Role } from "@/lib/rbac"
+import { clearCredentials } from "@/lib/auth-storage"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
@@ -146,7 +147,10 @@ export function Sidebar({
         </Button>
         <Button
           variant="ghost"
-          onClick={() => signOut({ callbackUrl: "/login" })}
+          onClick={() => {
+            clearCredentials()
+            signOut({ callbackUrl: "/login" })
+          }}
           title="Sair"
           className={cn(
             "w-full justify-start gap-3 px-2 text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive",
@@ -233,7 +237,10 @@ export function MobileSidebar({
           </p>
           <Button
             variant="ghost"
-            onClick={() => signOut({ callbackUrl: "/login" })}
+            onClick={() => {
+              clearCredentials()
+              signOut({ callbackUrl: "/login" })
+            }}
             className="w-full justify-start gap-3 px-2 text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive"
           >
             <LogOut className="h-4 w-4" />
