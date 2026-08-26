@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { FileText, MapPinned, Stethoscope, type LucideIcon } from "lucide-react"
+import { ClipboardList, MapPinned, Stethoscope, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { hasPermission, type Role } from "@/lib/rbac"
 import { NotificationBell } from "@/components/layout/notification-bell"
@@ -30,10 +30,10 @@ const NAV_ITEMS: BottomNavItem[] = [
     area: "atendimentos",
   },
   {
-    href: "/prescricoes",
-    label: "Prescrições",
-    icon: FileText,
-    area: "prescricoes",
+    href: "/planos-terapeuticos",
+    label: "Planos Terapêuticos",
+    icon: ClipboardList,
+    area: "planos",
   },
 ]
 
@@ -82,7 +82,9 @@ export function BottomNav({ role }: { role: Role }) {
               )}
             >
               <Icon className="h-5 w-5" />
-              <span className="text-[10px] font-medium">{label}</span>
+              <span className="max-w-20 text-center text-[10px] font-medium leading-tight">
+                {label}
+              </span>
             </Link>
           )
         })}
