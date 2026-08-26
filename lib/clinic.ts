@@ -48,12 +48,18 @@ export type ClinicInfo = {
   autoPagamentoConfirmadoEnabled?: boolean
   autoPagamentoConfirmadoMsg?: string | null
   enableDigitalSignature?: boolean
+  consultaPresencialEnabled?: boolean
+  consultaDomiciliarEnabled?: boolean
+  consultaTeleconsultaEnabled?: boolean
 }
 
 const DEFAULTS: ClinicInfo = {
   name: "Médico em Domicílio",
   botEnabled: true,
   autoACaminhoEnabled: true,
+  consultaPresencialEnabled: true,
+  consultaDomiciliarEnabled: true,
+  consultaTeleconsultaEnabled: true,
 }
 
 /** Carrega as configurações da clínica, com fallback para o padrão. */
@@ -120,6 +126,9 @@ export async function getClinicSettings(): Promise<ClinicInfo> {
           settings.autoPagamentoConfirmadoEnabled,
         autoPagamentoConfirmadoMsg: settings.autoPagamentoConfirmadoMsg,
         enableDigitalSignature: settings.enableDigitalSignature,
+        consultaPresencialEnabled: settings.consultaPresencialEnabled,
+        consultaDomiciliarEnabled: settings.consultaDomiciliarEnabled,
+        consultaTeleconsultaEnabled: settings.consultaTeleconsultaEnabled,
       }
     : DEFAULTS
 }

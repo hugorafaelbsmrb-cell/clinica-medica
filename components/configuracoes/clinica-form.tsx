@@ -26,9 +26,40 @@ export type ClinicInitialData = {
   horarioAtendimento?: string | null
   logoDataUrl?: string | null
   enableDigitalSignature?: boolean
+  consultaPresencialEnabled?: boolean
+  consultaDomiciliarEnabled?: boolean
+  consultaTeleconsultaEnabled?: boolean
 }
 
 const MAX_LOGO_BYTES = 1024 * 1024 // 1 MB
+
+/** Linha de toggle dos métodos de consulta oferecidos no agendamento online. */
+function MethodToggle({
+  label,
+  description,
+  checked,
+  onChange,
+  inputName,
+}: {
+  label: string
+  description: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+  inputName: string
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b pb-3 last:border-b-0 last:pb-0">
+      <div className="flex flex-col gap-0.5">
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        <Switch checked={checked} onCheckedChange={onChange} aria-label={label} />
+        <input type="hidden" name={inputName} value={checked ? "on" : ""} />
+      </div>
+    </div>
+  )
+}
 
 export function ClinicaForm({ initial }: { initial: ClinicInitialData }) {
   const router = useRouter()
@@ -36,6 +67,15 @@ export function ClinicaForm({ initial }: { initial: ClinicInitialData }) {
   const [logo, setLogo] = useState(initial.logoDataUrl ?? "")
   const [digitalSignature, setDigitalSignature] = useState(
     initial.enableDigitalSignature ?? false
+  )
+  const [presencialEnabled, setPresencialEnabled] = useState(
+    initial.consultaPresencialEnabled ?? true
+  )
+  const [domiciliarEnabled, setDomiciliarEnabled] = useState(
+    initial.consultaDomiciliarEnabled ?? true
+  )
+  const [teleconsultaEnabled, setTeleconsultaEnabled] = useState(
+    initial.consultaTeleconsultaEnabled ?? true
   )
   const [signerOk, setSignerOk] = useState<boolean | null>(null)
 
@@ -247,6 +287,40 @@ export function ClinicaForm({ initial }: { initial: ClinicInitialData }) {
               type="hidden"
               name="enableDigitalSignature"
               value={digitalSignature ? "on" : ""}
+            />
+          </div>
+
+          {/* Métodos de consulta no agendamento online */}
+          <div className="flex flex-col gap-3 rounded-md border p-4">
+            <div className="flex flex-col gap-0.5">
+              <p className="text-sm font-semibold">Métodos de consulta</p>
+              <p className="text-xs text-muted-foreground">
+                Quais modalidades o paciente pode escolher no agendamento
+                online. A equipe continua podendo agendar qualquer tipo
+                internamente.
+              </p>
+            </div>
+            <MethodToggle
+              label="Presencial (na clínica)"
+              description="O paciente vai até a clínica no horário marcado."
+              checked={presencialEnabled}
+              onChange={setPresencialEnabled}
+              inputName="consultaPresencialEnabled"
+            />
+            <MethodToggle
+              label="Domiciliar (home care)"
+              description="O médico atende na casa do paciente."
+              checked={domiciliarEnabled}
+              onChange={setDomiciliarEnabled}
+              inputName="consultaDomiciliarEnabled"
+            />
+            <MethodToggle
+              label="Teleconsulta (vídeo)"
+              description="Consulta por videochamada — o link do Google Meet é
+              enviado ao paciente na confirmação e no lembrete do dia."
+              checked={teleconsultaEnabled}
+              onChange={setTeleconsultaEnabled}
+              inputName="consultaTeleconsultaEnabled"
             />
           </div>
 

@@ -20,6 +20,8 @@ import { getAppointmentSettings } from "@/lib/agenda/service"
 import { createCharge, simulatePaymentPaid } from "@/lib/payments/router"
 import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
 import { getPaymentSettings } from "@/lib/payments/settings"
+import { getClinicSettings } from "@/lib/clinic"
+import { listActiveDoctors } from "@/lib/doctor"
 import { notifyNewAppointment } from "@/lib/notifications"
 import type { PaymentMethodType } from "@/lib/payments/types"
 
@@ -98,10 +100,20 @@ export type PublicAgendaDay = {
   slots: { iso: string; time: string }[]
 }
 
+export type PublicAgendaModality = {
+  id: "PRESENCIAL" | "DOMICILIAR" | "TELECONSULTA"
+  label: string
+  price: number
+}
+
 export type PublicAgendaResult = {
   available: boolean
   message: string
   days: PublicAgendaDay[]
+  /** Médicos ativos disponíveis para escolha no wizard. */
+  doctors: { id: string; name: string; crm: string | null }[]
+  /** Modalidades habilitadas pela clínica, com o preço de cada uma. */
+  modalities: PublicAgendaModality[]
   /** Valor da consulta presencial (0 = agendamento sem cobrança). */
   consultaPreco: number
   /**
@@ -111,16 +123,63 @@ export type PublicAgendaResult = {
   applePayEnabled: boolean
 }
 
-/** Lista os dias com vagas livres dentro do horizonte de agendamento. */
-export async function getPublicAgenda(): Promise<PublicAgendaResult> {
+/**
+ * Lista os dias com vagas livres dentro do horizonte de agendamento.
+ * Com `doctorId`, devolve a agenda daquele médico (grade própria ou
+ * grade geral como fallback); sem `doctorId`, devolve a grade geral.
+ */
+export async function getPublicAgenda(
+  doctorId?: string
+): Promise<PublicAgendaResult> {
   const settings = await getAppointmentSettings()
   const paymentSettings = await getPaymentSettings()
+  const clinic = await getClinicSettings()
   const now = new Date()
   const from = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const to = new Date(from)
   to.setDate(to.getDate() + settings.maxAdvanceDays)
 
-  const { slots } = await getAvailableSlots(from, to)
+  const doctors = await listActiveDoctors()
+
+  // Modalidades habilitadas pelo admin, com o preço de cada uma.
+  const modalities: PublicAgendaModality[] = []
+  if (clinic.consultaPresencialEnabled) {
+    modalities.push({
+      id: "PRESENCIAL",
+      label: "Presencial",
+      price: paymentSettings.consultaPrecoPresencial,
+    })
+  }
+  if (clinic.consultaDomiciliarEnabled) {
+    modalities.push({
+      id: "DOMICILIAR",
+      label: "Domiciliar",
+      price: paymentSettings.consultaPrecoDomiciliar,
+    })
+  }
+  if (clinic.consultaTeleconsultaEnabled) {
+    modalities.push({
+      id: "TELECONSULTA",
+      label: "Teleconsulta",
+      price: paymentSettings.consultaPrecoTeleconsulta,
+    })
+  }
+
+  // O médico escolhido no passo anterior precisa continuar ativo.
+  if (doctorId && !doctors.some((d) => d.id === doctorId)) {
+    return {
+      available: false,
+      message:
+        "O médico escolhido não está mais disponível. Volte e escolha outro médico, por favor.",
+      days: [],
+      doctors,
+      modalities,
+      consultaPreco: paymentSettings.consultaPrecoPresencial,
+      applePayEnabled: Boolean(paymentSettings.stripeSecretKey),
+    }
+  }
+
+  const { slots } = await getAvailableSlots(from, to, doctorId)
 
   if (slots.length === 0) {
     return {
@@ -128,6 +187,8 @@ export async function getPublicAgenda(): Promise<PublicAgendaResult> {
       message:
         "A clínica ainda não liberou horários. Fique tranquilo: sua equipe entrará em contato para agendar.",
       days: [],
+      doctors,
+      modalities,
       consultaPreco: paymentSettings.consultaPrecoPresencial,
       applePayEnabled: Boolean(paymentSettings.stripeSecretKey),
     }
@@ -153,6 +214,8 @@ export async function getPublicAgenda(): Promise<PublicAgendaResult> {
     available: true,
     message: "",
     days,
+    doctors,
+    modalities,
     consultaPreco: paymentSettings.consultaPrecoPresencial,
     applePayEnabled: Boolean(paymentSettings.stripeSecretKey),
   }
@@ -167,6 +230,13 @@ const agendarSchema = z.object({
     .min(5, "Conte brevemente o motivo da sua consulta"),
   lgpdConsent: z.boolean().optional(),
   method: z.enum(["PIX", "CARTAO", "APPLE_PAY"]).optional().default("PIX"),
+  /** Modalidade escolhida pelo paciente no wizard. */
+  type: z
+    .enum(["PRESENCIAL", "DOMICILIAR", "TELECONSULTA"])
+    .optional()
+    .default("PRESENCIAL"),
+  /** Médico escolhido pelo paciente no wizard. */
+  doctorId: z.string().min(1).optional(),
 })
 
 export type AgendarState = {
@@ -210,11 +280,44 @@ export async function agendarPublico(
     scheduledAt: scheduledAtIso,
     reason,
     method: methodInput,
+    type: typeInput,
+    doctorId,
   } = parsed.data
   const method: PaymentMethodType = methodInput ?? "PIX"
   const scheduledAt = new Date(scheduledAtIso)
   if (Number.isNaN(scheduledAt.getTime())) {
     return { success: false, message: "Data e horário inválidos." }
+  }
+
+  // Modalidade precisa continuar habilitada no agendamento online.
+  const clinic = await getClinicSettings()
+  const modalityEnabled =
+    typeInput === "PRESENCIAL"
+      ? clinic.consultaPresencialEnabled
+      : typeInput === "DOMICILIAR"
+        ? clinic.consultaDomiciliarEnabled
+        : clinic.consultaTeleconsultaEnabled
+  if (!modalityEnabled) {
+    return {
+      success: false,
+      message:
+        "Esta modalidade de consulta não está mais disponível no agendamento online. Escolha outra, por favor.",
+    }
+  }
+
+  // Médico escolhido precisa continuar ativo.
+  if (doctorId) {
+    const doctor = await prisma.user.findFirst({
+      where: { id: doctorId, role: "MEDICO", active: true },
+      select: { id: true },
+    })
+    if (!doctor) {
+      return {
+        success: false,
+        message:
+          "O médico escolhido não está mais disponível. Refaça o agendamento, por favor.",
+      }
+    }
   }
 
   const patient = await prisma.patient.findUnique({ where: { id: patientId } })
@@ -229,12 +332,17 @@ export async function agendarPublico(
   // Preço configurado = agendamento exige pagamento antes de confirmar.
   // Sem chave no gateway, a cobrança sai em modo teste (MOCK) — ver router.
   const paymentSettings = await getPaymentSettings()
-  const price = paymentSettings.consultaPrecoPresencial
+  const price =
+    typeInput === "DOMICILIAR"
+      ? paymentSettings.consultaPrecoDomiciliar
+      : typeInput === "TELECONSULTA"
+        ? paymentSettings.consultaPrecoTeleconsulta
+        : paymentSettings.consultaPrecoPresencial
   const cobrar = price > 0
 
   try {
     // Re-checa se o horário continua livre antes de confirmar
-    const free = await isSlotFree(scheduledAt)
+    const free = await isSlotFree(scheduledAt, doctorId)
     if (!free) {
       return {
         success: false,
@@ -244,9 +352,15 @@ export async function agendarPublico(
     }
 
     const attendance = await prisma.$transaction(async (tx) => {
-      // Proteção contra corrida: re-checagem dentro da transação
+      // Proteção contra corrida: re-checagem dentro da transação.
+      // Com médico escolhido, só conflita com horários dele ou sem médico
+      // (legado); sem médico, qualquer ocupação no horário conflita.
       const conflict = await tx.attendance.findFirst({
-        where: { scheduledAt, status: { not: "CANCELADO" } },
+        where: {
+          scheduledAt,
+          status: { not: "CANCELADO" },
+          ...(doctorId ? { OR: [{ doctorId }, { doctorId: null }] } : {}),
+        },
       })
       if (conflict) return null
 
@@ -256,7 +370,8 @@ export async function agendarPublico(
           scheduledAt,
           // Sem cobrança → confirma na hora; com cobrança → aguarda pagar
           status: cobrar ? "AGUARDANDO_PAGAMENTO" : "AGENDADO",
-          type: "PRESENCIAL",
+          type: typeInput,
+          doctorId: doctorId ?? null,
           origin: "ONLINE",
           slotNote: reason,
           cancelToken: crypto.randomUUID().replaceAll("-", ""),
@@ -268,6 +383,14 @@ export async function agendarPublico(
         await tx.patient.update({
           where: { id: patientId },
           data: { consultationReason: reason },
+        })
+      }
+
+      // Primeira consulta define o médico responsável pelo paciente
+      if (doctorId && !patient.doctorId) {
+        await tx.patient.update({
+          where: { id: patientId },
+          data: { doctorId },
         })
       }
 
@@ -288,6 +411,8 @@ export async function agendarPublico(
           details: {
             origem: "agendamento online",
             data: scheduledAt.toISOString(),
+            modalidade: typeInput,
+            medicoId: doctorId ?? null,
             cobranca: cobrar ? "pagamento antecipado" : "sem cobrança",
           },
         },
@@ -312,7 +437,12 @@ export async function agendarPublico(
       const entry = await prisma.financialEntry.create({
         data: {
           type: "RECEITA",
-          category: "CONSULTA_PRESENCIAL",
+          category:
+            typeInput === "DOMICILIAR"
+              ? "CONSULTA_DOMICILIAR"
+              : typeInput === "TELECONSULTA"
+                ? "TELECONSULTA"
+                : "CONSULTA_PRESENCIAL",
           description: `Consulta — ${patient.name}`,
           value: price,
           dueDate: new Date(),
@@ -635,7 +765,8 @@ export async function remarcarConsultaPublica(
 
   try {
     // isSlotFree valida regras, exceções, antecedência e horários ocupados
-    const free = await isSlotFree(newSlot)
+    // (agenda do médico da consulta)
+    const free = await isSlotFree(newSlot, attendance.doctorId)
     if (!free) {
       return {
         success: false,
@@ -647,7 +778,13 @@ export async function remarcarConsultaPublica(
     const conflict = await prisma.$transaction(async (tx) => {
       // Proteção contra corrida: re-checagem dentro da transação
       const ocupado = await tx.attendance.findFirst({
-        where: { scheduledAt: newSlot, status: { not: "CANCELADO" } },
+        where: {
+          scheduledAt: newSlot,
+          status: { not: "CANCELADO" },
+          ...(attendance.doctorId
+            ? { OR: [{ doctorId: attendance.doctorId }, { doctorId: null }] }
+            : {}),
+        },
       })
       if (ocupado) return true
 

@@ -18,6 +18,7 @@ export default async function MinhaAssinaturaPage() {
       select: {
         name: true,
         crm: true,
+        meetLink: true,
         signatureText: true,
         signatureImage: true,
       },
@@ -47,6 +48,7 @@ export default async function MinhaAssinaturaPage() {
         initial={{
           name: user.name,
           crm: user.crm,
+          meetLink: user.meetLink,
           signatureText: user.signatureText,
           signatureImage: user.signatureImage,
         }}

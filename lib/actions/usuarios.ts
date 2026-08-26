@@ -19,6 +19,12 @@ const userSchema = z.object({
     error: "Selecione o perfil",
   }),
   crm: z.string().optional(),
+  meetLink: z
+    .string()
+    .trim()
+    .url("Link do Meet inválido (use uma URL https)")
+    .optional()
+    .or(z.literal("")),
   signatureText: z.string().optional(),
   signatureImage: z
     .string()
@@ -41,6 +47,7 @@ export async function createUser(
     email: formData.get("email"),
     role: formData.get("role"),
     crm: formData.get("crm"),
+    meetLink: formData.get("meetLink"),
     signatureText: formData.get("signatureText"),
     signatureImage: formData.get("signatureImage") || undefined,
   })
@@ -71,6 +78,7 @@ export async function createUser(
       password: hashed,
       role: parsed.data.role,
       crm: parsed.data.crm || null,
+      meetLink: parsed.data.meetLink?.trim() || null,
       signatureText: parsed.data.signatureText || null,
       signatureImage: parsed.data.signatureImage || null,
     },
@@ -106,6 +114,7 @@ export async function updateUser(
     email: formData.get("email"),
     role: formData.get("role"),
     crm: formData.get("crm"),
+    meetLink: formData.get("meetLink"),
     signatureText: formData.get("signatureText"),
     signatureImage: formData.get("signatureImage") || undefined,
   })
@@ -138,6 +147,7 @@ export async function updateUser(
       email: parsed.data.email,
       role: parsed.data.role,
       crm: parsed.data.crm || null,
+      meetLink: parsed.data.meetLink?.trim() || null,
       signatureText: parsed.data.signatureText || null,
       signatureImage: parsed.data.signatureImage || null,
       ...(newPassword ? { password: await bcrypt.hash(newPassword, 10) } : {}),
@@ -215,6 +225,12 @@ export async function updateMySignature(
   const parsed = z
     .object({
       crm: z.string().optional(),
+      meetLink: z
+        .string()
+        .trim()
+        .url("Link do Meet inválido (use uma URL https)")
+        .optional()
+        .or(z.literal("")),
       signatureText: z.string().optional(),
       signatureImage: z
         .string()
@@ -223,6 +239,7 @@ export async function updateMySignature(
     })
     .safeParse({
       crm: formData.get("crm"),
+      meetLink: formData.get("meetLink"),
       signatureText: formData.get("signatureText"),
       signatureImage: formData.get("signatureImage") || undefined,
     })
@@ -238,6 +255,7 @@ export async function updateMySignature(
     where: { id: session.user.id },
     data: {
       crm: parsed.data.crm?.trim() || null,
+      meetLink: parsed.data.meetLink?.trim() || null,
       signatureText: parsed.data.signatureText?.trim() || null,
       signatureImage: parsed.data.signatureImage || null,
     },

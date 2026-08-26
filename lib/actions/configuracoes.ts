@@ -44,6 +44,9 @@ export async function saveClinicSettings(
 
   const logoDataUrl = formData.get("logoDataUrl")?.toString() ?? ""
   const enableDigitalSignature = formData.get("enableDigitalSignature") === "on"
+  const consultaPresencialEnabled = formData.get("consultaPresencialEnabled") === "on"
+  const consultaDomiciliarEnabled = formData.get("consultaDomiciliarEnabled") === "on"
+  const consultaTeleconsultaEnabled = formData.get("consultaTeleconsultaEnabled") === "on"
 
   if (logoDataUrl) {
     const isImage = /^data:image\/(png|jpe?g);base64,/.test(logoDataUrl)
@@ -92,6 +95,9 @@ export async function saveClinicSettings(
       horarioAtendimento: data.horarioAtendimento || null,
       logoDataUrl: data.logoDataUrl || null,
       enableDigitalSignature,
+      consultaPresencialEnabled,
+      consultaDomiciliarEnabled,
+      consultaTeleconsultaEnabled,
     },
     create: {
       id: 1,
@@ -103,6 +109,9 @@ export async function saveClinicSettings(
       horarioAtendimento: data.horarioAtendimento || null,
       logoDataUrl: data.logoDataUrl || null,
       enableDigitalSignature,
+      consultaPresencialEnabled,
+      consultaDomiciliarEnabled,
+      consultaTeleconsultaEnabled,
     },
   })
 

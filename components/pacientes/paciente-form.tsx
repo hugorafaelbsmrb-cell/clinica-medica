@@ -33,6 +33,7 @@ type PatientFormData = {
   insurance?: string | null
   notes?: string | null
   consultationReason?: string | null
+  doctorId?: string | null
   latitude?: number | null
   longitude?: number | null
   locationSource?: string | null
@@ -42,8 +43,12 @@ type PatientFormData = {
 
 export function PatientForm({
   patient,
+  doctors,
+  isAdmin,
 }: {
   patient?: PatientFormData | null
+  doctors: { id: string; name: string }[]
+  isAdmin: boolean
 }) {
   const router = useRouter()
   const isEdit = !!patient?.id
@@ -123,6 +128,23 @@ export function PatientForm({
                 placeholder="Ex.: Unimed"
               />
             </Field>
+            {isAdmin && (
+              <Field>
+                <FieldLabel>Médico responsável</FieldLabel>
+                <select
+                  name="doctorId"
+                  defaultValue={patient?.doctorId ?? ""}
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                >
+                  <option value="">Sem médico definido</option>
+                  {doctors.map((doctor) => (
+                    <option key={doctor.id} value={doctor.id}>
+                      {doctor.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
           </section>
 
           <section className="grid gap-4 md:grid-cols-2">

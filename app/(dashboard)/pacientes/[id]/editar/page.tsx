@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
+import { listActiveDoctors } from "@/lib/doctor"
 import { PatientForm } from "@/components/pacientes/paciente-form"
 
 export const metadata: Metadata = { title: "Editar paciente" }
@@ -12,11 +13,13 @@ export default async function EditarPacientePage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  const session = await auth()
-  requireRole(session, ["ADMIN", "MEDICO", "SECRETARIA"])
+  const session = requireRole(await auth(), ["ADMIN", "MEDICO", "SECRETARIA"])
 
   const { id } = await params
-  const patient = await prisma.patient.findUnique({ where: { id } })
+  const [patient, doctors] = await Promise.all([
+    prisma.patient.findUnique({ where: { id } }),
+    listActiveDoctors(),
+  ])
 
   if (!patient) notFound()
 
@@ -44,12 +47,15 @@ export default async function EditarPacientePage({
           insurance: patient.insurance,
           notes: patient.notes,
           consultationReason: patient.consultationReason,
+          doctorId: patient.doctorId,
           latitude: patient.latitude,
           longitude: patient.longitude,
           locationSource: patient.locationSource,
           lgpdConsent: patient.lgpdConsent,
           whatsappEnabled: patient.whatsappEnabled,
         }}
+        doctors={doctors}
+        isAdmin={session.user.role === "ADMIN"}
       />
     </div>
   )

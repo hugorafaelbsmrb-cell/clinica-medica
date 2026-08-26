@@ -4,6 +4,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
+import { listActiveDoctors } from "@/lib/doctor"
 import { Button } from "@/components/ui/button"
 import { generateSlots } from "@/lib/agenda/slots"
 import {
@@ -43,14 +44,25 @@ function mondayOf(date: Date): Date {
 export default async function AgendaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ semana?: string }>
+  searchParams: Promise<{ semana?: string; medico?: string }>
 }) {
   const session = await auth()
   const authed = requireRole(session, ["ADMIN", "MEDICO", "SECRETARIA"])
   const canEdit =
     authed.user.role === "ADMIN" || authed.user.role === "MEDICO"
 
-  const { semana } = await searchParams
+  const { semana, medico } = await searchParams
+
+  const doctors = await listActiveDoctors()
+
+  // Filtro de médico da visão semanal: MEDICO sempre vê a própria agenda;
+  // ADMIN/SECRETARIA escolhem nos chips (sem filtro = todos os médicos).
+  let selectedDoctorId = ""
+  if (authed.user.role === "MEDICO") {
+    selectedDoctorId = authed.user.id
+  } else if (medico && doctors.some((d) => d.id === medico)) {
+    selectedDoctorId = medico
+  }
 
   const today = new Date()
   let weekStart = mondayOf(today)
@@ -80,9 +92,28 @@ export default async function AgendaPage({
         status: { not: "CANCELADO" },
         scheduledAt: { gte: weekStart, lte: weekEnd },
       },
-      include: { patient: { select: { name: true, consultationReason: true } } },
+      include: {
+        patient: { select: { name: true, consultationReason: true } },
+        doctor: { select: { name: true } },
+      },
     }),
   ])
+
+  // Regras e ocupação da visão: médico selecionado mostra a própria grade
+  // (fallback para a geral) e os atendimentos dele + os sem médico; sem
+  // filtro mostra a união das grades e todos os atendimentos.
+  let viewRules = rules
+  let viewAttendances = attendances
+  if (selectedDoctorId) {
+    const ownRules = rules.filter((r) => r.doctorId === selectedDoctorId)
+    viewRules =
+      ownRules.length > 0
+        ? ownRules
+        : rules.filter((r) => r.doctorId === null)
+    viewAttendances = attendances.filter(
+      (a) => a.doctorId === selectedDoctorId || a.doctorId === null
+    )
+  }
 
   // Dados da semana: slots por dia (visão do admin ignora o aviso mínimo)
   const days: WeekDayData[] = []
@@ -101,13 +132,13 @@ export default async function AgendaPage({
       (e) => e.type === "BLOQUEADO" && !e.startTime
     )
 
-    const dayRule = rules.find(
+    const dayRule = viewRules.find(
       (r) => r.active && r.weekday === day.getDay()
     )
     const duration = dayRule?.slotDurationMin ?? 60
 
     const slots = generateSlots({
-      rules: rules.map((r) => ({
+      rules: viewRules.map((r) => ({
         weekday: r.weekday,
         startTime: r.startTime,
         endTime: r.endTime,
@@ -126,7 +157,7 @@ export default async function AgendaPage({
         endTime: e.endTime,
       })),
       config: { minAdvanceHours: 0, maxAdvanceDays: 0 },
-      occupied: attendances.map((a) => a.scheduledAt),
+      occupied: viewAttendances.map((a) => a.scheduledAt),
       from: day,
       to: day,
       now: new Date(
@@ -145,7 +176,7 @@ export default async function AgendaPage({
       blockedAllDay,
       slots: slots.map((slot) => {
         const attendance =
-          attendances.find(
+          viewAttendances.find(
             (a) => a.scheduledAt.getTime() === slot.getTime()
           ) ?? null
         const end = new Date(slot.getTime() + duration * 60 * 1000)
@@ -156,6 +187,7 @@ export default async function AgendaPage({
             ? {
                 id: attendance.id,
                 patientName: attendance.patient.name,
+                doctorName: attendance.doctor?.name ?? null,
                 reason:
                   attendance.slotNote ??
                   attendance.patient.consultationReason,
@@ -173,6 +205,7 @@ export default async function AgendaPage({
 
   const initialRules: InitialRule[] = rules.map((r) => ({
     weekday: r.weekday,
+    doctorId: r.doctorId,
     startTime: r.startTime,
     endTime: r.endTime,
     slotDurationMin: r.slotDurationMin,
@@ -239,12 +272,44 @@ export default async function AgendaPage({
           rules={initialRules}
           settings={initialSettings}
           exceptions={initialExceptions}
+          doctors={doctors}
+          initialDoctorId={authed.user.role === "MEDICO" ? authed.user.id : ""}
+          canPickDoctor={authed.user.role === "ADMIN"}
         />
       ) : (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <CalendarDays className="h-4 w-4" />
           A disponibilidade é configurada por administradores e médicos.
         </p>
+      )}
+
+      {authed.user.role !== "MEDICO" && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-muted-foreground">
+            Médico:
+          </span>
+          <Button
+            variant={selectedDoctorId === "" ? "default" : "outline"}
+            size="sm"
+            render={<Link href={`/agenda?semana=${toDateKey(weekStart)}`} />}
+          >
+            Todos
+          </Button>
+          {doctors.map((doctor) => (
+            <Button
+              key={doctor.id}
+              variant={selectedDoctorId === doctor.id ? "default" : "outline"}
+              size="sm"
+              render={
+                <Link
+                  href={`/agenda?semana=${toDateKey(weekStart)}&medico=${doctor.id}`}
+                />
+              }
+            >
+              {doctor.name}
+            </Button>
+          ))}
+        </div>
       )}
 
       <AgendaSemana days={days} canEdit={canEdit} />

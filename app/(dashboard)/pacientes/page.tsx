@@ -4,6 +4,7 @@ import { Eye, Pencil, Plus, Search, Users } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
+import { listActiveDoctors } from "@/lib/doctor"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -24,12 +25,12 @@ export const metadata: Metadata = { title: "Pacientes" }
 export default async function PacientesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; bairro?: string }>
+  searchParams: Promise<{ q?: string; bairro?: string; medico?: string }>
 }) {
   const session = await auth()
   requireRole(session, ["ADMIN", "MEDICO", "SECRETARIA"])
 
-  const { q, bairro } = await searchParams
+  const { q, bairro, medico } = await searchParams
 
   const where = {
     ...(q
@@ -43,13 +44,15 @@ export default async function PacientesPage({
     ...(bairro
       ? { neighborhood: { contains: bairro, mode: "insensitive" as const } }
       : {}),
+    ...(medico ? { doctorId: medico } : {}),
   }
 
-  const [patients, total, neighborhoods] = await Promise.all([
+  const [patients, total, neighborhoods, doctors] = await Promise.all([
     prisma.patient.findMany({
       where,
       orderBy: { name: "asc" },
       take: 100,
+      include: { doctor: { select: { name: true } } },
     }),
     prisma.patient.count(),
     prisma.patient.groupBy({
@@ -59,6 +62,7 @@ export default async function PacientesPage({
       orderBy: { _count: { neighborhood: "desc" } },
       take: 15,
     }),
+    listActiveDoctors(),
   ])
 
   return (
@@ -99,11 +103,23 @@ export default async function PacientesPage({
               </option>
             ))}
           </select>
+          <select
+            name="medico"
+            defaultValue={medico ?? ""}
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+          >
+            <option value="">Todos os médicos</option>
+            {doctors.map((doctor) => (
+              <option key={doctor.id} value={doctor.id}>
+                {doctor.name}
+              </option>
+            ))}
+          </select>
           <Button type="submit" variant="outline">
             Filtrar
           </Button>
         </form>
-        {(q || bairro) && (
+        {(q || bairro || medico) && (
           <Button variant="link" render={<Link href="/pacientes" />}>
             Limpar filtros
           </Button>
@@ -128,6 +144,7 @@ export default async function PacientesPage({
                   <TableHead className="hidden lg:table-cell">CPF</TableHead>
                   <TableHead className="hidden md:table-cell">Telefone</TableHead>
                   <TableHead className="hidden lg:table-cell">Bairro</TableHead>
+                  <TableHead className="hidden lg:table-cell">Médico</TableHead>
                   <TableHead>WhatsApp</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
@@ -156,6 +173,9 @@ export default async function PacientesPage({
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       {patient.neighborhood ?? "—"}
+                    </TableCell>
+                    <TableCell className="hidden text-muted-foreground lg:table-cell">
+                      {patient.doctor?.name ?? "—"}
                     </TableCell>
                     <TableCell>
                       {patient.whatsappEnabled ? (

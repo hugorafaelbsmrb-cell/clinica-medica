@@ -41,11 +41,13 @@ export function AttendanceForm({
   doctors,
   showDoctorSelect,
   preselectedPatientId,
+  publicDisabledTypes = [],
 }: {
   patients: PatientOption[]
   doctors: DoctorOption[]
   showDoctorSelect: boolean
   preselectedPatientId?: string
+  publicDisabledTypes?: ("PRESENCIAL" | "DOMICILIAR" | "TELECONSULTA")[]
 }) {
   const router = useRouter()
   // Home care é o modelo do sistema: domiciliar como padrão.
@@ -235,6 +237,11 @@ export function AttendanceForm({
                   onChange={() => setType("DOMICILIAR")}
                 />
                 Domiciliar
+                {publicDisabledTypes.includes("DOMICILIAR") && (
+                  <span className="text-xs text-muted-foreground">
+                    (desabilitado no agendamento público)
+                  </span>
+                )}
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -245,6 +252,11 @@ export function AttendanceForm({
                   onChange={() => setType("PRESENCIAL")}
                 />
                 Presencial (na clínica)
+                {publicDisabledTypes.includes("PRESENCIAL") && (
+                  <span className="text-xs text-muted-foreground">
+                    (desabilitado no agendamento público)
+                  </span>
+                )}
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -255,6 +267,11 @@ export function AttendanceForm({
                   onChange={() => setType("TELECONSULTA")}
                 />
                 Teleconsulta (vídeo chamada)
+                {publicDisabledTypes.includes("TELECONSULTA") && (
+                  <span className="text-xs text-muted-foreground">
+                    (desabilitado no agendamento público)
+                  </span>
+                )}
               </label>
             </div>
           </Field>

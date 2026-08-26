@@ -96,6 +96,16 @@ async function main() {
       type: "ACOMPANHAMENTO" as const,
       body: "Olá {{nome}}, tudo bem? Como você está se sentindo? Passando para saber como anda a sua saúde. Se precisar de algo, é só nos chamar!",
     },
+    {
+      name: "Confirmação de agendamento",
+      type: "CONFIRMACAO_AGENDAMENTO" as const,
+      body: "Olá {{nome}}! Sua consulta está confirmada para {{data}} às {{hora}}. Se precisar remarcar, acesse: {{link}}\nSua teleconsulta será por videochamada: {{meet}}",
+    },
+    {
+      name: "Lembrete de consulta",
+      type: "LEMBRETE_CONSULTA" as const,
+      body: "Olá {{nome}}! Lembrete: sua consulta é hoje, {{data}} às {{hora}}.\nSua teleconsulta será por videochamada: {{meet}}",
+    },
   ]
 
   for (const template of templates) {

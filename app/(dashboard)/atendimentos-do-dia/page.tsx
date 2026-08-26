@@ -14,6 +14,7 @@ import { ptBR } from "date-fns/locale"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
+import { listActiveDoctors } from "@/lib/doctor"
 import { buildAddress } from "@/lib/geo"
 import { Button } from "@/components/ui/button"
 import {
@@ -42,12 +43,11 @@ function truncate(text: string, max: number): string {
 export default async function AtendimentosDoDiaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string }>
+  searchParams: Promise<{ date?: string; medico?: string }>
 }) {
-  const session = await auth()
-  requireRole(session, ["ADMIN", "MEDICO"])
+  const authed = requireRole(await auth(), ["ADMIN", "MEDICO"])
 
-  const { date: dateParam } = await searchParams
+  const { date: dateParam, medico: medicoParam } = await searchParams
 
   // Dia selecionado (padrão: hoje). A navegação usa ?date=yyyy-MM-dd.
   const today = startOfDay(new Date())
@@ -57,15 +57,28 @@ export default async function AtendimentosDoDiaPage({
 
   // Somente os atendimentos do dia selecionado. Atrasados de dias
   // anteriores continuam visíveis navegando para o dia deles.
+  const doctors = await listActiveDoctors()
+
+  // Filtro por médico: MEDICO vê apenas os próprios atendimentos;
+  // ADMIN filtra opcionalmente ou vê todos com o nome do médico no cartão.
+  const selectedDoctorId =
+    authed.user.role === "MEDICO"
+      ? authed.user.id
+      : doctors.some((doctor) => doctor.id === medicoParam)
+        ? (medicoParam ?? null)
+        : null
+
   const attendances = await prisma.attendance.findMany({
     where: {
       status: { in: ["AGENDADO", "EM_ATENDIMENTO", "REALIZADO"] },
+      ...(selectedDoctorId ? { doctorId: selectedDoctorId } : {}),
       scheduledAt: {
         gte: startOfDay(selectedDay),
         lte: endOfDay(selectedDay),
       },
     },
     include: {
+      doctor: { select: { name: true } },
       patient: {
         include: {
           prescriptions: {
@@ -118,6 +131,7 @@ export default async function AtendimentosDoDiaPage({
       type: attendance.type,
       patientId: patient.id,
       patientName: patient.name,
+      doctorName: attendance.doctor?.name ?? null,
       age: ageFrom(patient.birthDate),
       reason: attendance.slotNote ?? patient.consultationReason,
       address,
@@ -134,6 +148,8 @@ export default async function AtendimentosDoDiaPage({
 
   const prevDate = addDays(selectedDay, -1)
   const nextDate = addDays(selectedDay, 1)
+  const medicoQuery =
+    authed.user.role === "ADMIN" && medicoParam ? `&medico=${medicoParam}` : ""
   const dayLabel = format(
     selectedDay,
     selectedDay.getFullYear() === today.getFullYear()
@@ -176,7 +192,7 @@ export default async function AtendimentosDoDiaPage({
             aria-label="Dia anterior"
             render={
               <Link
-                href={`/atendimentos-do-dia?date=${format(prevDate, "yyyy-MM-dd")}`}
+                href={`/atendimentos-do-dia?date=${format(prevDate, "yyyy-MM-dd")}${medicoQuery}`}
               />
             }
           >
@@ -191,7 +207,7 @@ export default async function AtendimentosDoDiaPage({
             aria-label="Próximo dia"
             render={
               <Link
-                href={`/atendimentos-do-dia?date=${format(nextDate, "yyyy-MM-dd")}`}
+                href={`/atendimentos-do-dia?date=${format(nextDate, "yyyy-MM-dd")}${medicoQuery}`}
               />
             }
           >
@@ -201,13 +217,47 @@ export default async function AtendimentosDoDiaPage({
             <Button
               variant="ghost"
               size="sm"
-              render={<Link href="/atendimentos-do-dia" />}
+              render={<Link href={`/atendimentos-do-dia${medicoQuery ? `?${medicoQuery.slice(1)}` : ""}`} />}
             >
               Hoje
             </Button>
           )}
         </div>
       </div>
+
+      {authed.user.role === "ADMIN" && (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant={!medicoParam ? "default" : "outline"}
+            size="sm"
+            render={
+              <Link
+                href={
+                  dateParam
+                    ? `/atendimentos-do-dia?date=${dateParam}`
+                    : "/atendimentos-do-dia"
+                }
+              />
+            }
+          >
+            Todos
+          </Button>
+          {doctors.map((doctor) => (
+            <Button
+              key={doctor.id}
+              variant={medicoParam === doctor.id ? "default" : "outline"}
+              size="sm"
+              render={
+                <Link
+                  href={`/atendimentos-do-dia?medico=${doctor.id}${dateParam ? `&date=${dateParam}` : ""}`}
+                />
+              }
+            >
+              {doctor.name}
+            </Button>
+          ))}
+        </div>
+      )}
 
       {cards.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-muted-foreground">

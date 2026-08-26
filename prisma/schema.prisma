@@ -137,6 +137,7 @@ model User {
   crm                 String? // CRM do médico (ex.: "CRM/SP 123456")
   signatureText       String? // Assinatura pré-cadastrada (ex.: "Dr. Carlos Mendes")
   signatureImage      String? // Assinatura virtual do médico (data URL de imagem PNG/JPG)
+  meetLink            String? // Link padrão do Google Meet das teleconsultas do médico
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   attendances         Attendance[]         @relation("AttendanceDoctor")
@@ -146,6 +147,7 @@ model User {
   pushSubscriptions   PushSubscription[]
   followUpEvaluations FollowUpEvaluation[]
   certificates        MedicalCertificate[]
+  patients            Patient[]            @relation("PatientDoctor")
 }
 
 /**
@@ -219,6 +221,12 @@ model ClinicSettings {
 
   // Assinatura digital ICP-Brasil: liga/desliga a assinatura PAdES nos PDFs
   enableDigitalSignature            Boolean  @default(false)
+
+  // Métodos de consulta oferecidos no agendamento online (cada um pode ser
+  // ligado/desligado pelo admin; o form interno da equipe não é limitado).
+  consultaPresencialEnabled         Boolean  @default(true)
+  consultaDomiciliarEnabled         Boolean  @default(true)
+  consultaTeleconsultaEnabled       Boolean  @default(true)
   updatedAt                         DateTime @updatedAt
 }
 
@@ -258,9 +266,12 @@ model Patient {
   followUp           FollowUpConfig?
   followUpPrograms   FollowUpProgram[]
   auditLogs          AuditLog[]        @relation("AuditLogPatient")
+  doctorId           String? // médico responsável pelo paciente (definido no 1º agendamento)
+  doctor             User?             @relation("PatientDoctor", fields: [doctorId], references: [id])
 
   @@index([name])
   @@index([neighborhood])
+  @@index([doctorId])
 }
 
 model Attendance {
@@ -578,6 +589,7 @@ model PaymentWebhookEvent {
 model AvailabilityRule {
   id              String   @id @default(cuid())
   weekday         Int // 0 = domingo ... 6 = sábado
+  doctorId        String? // null = grade geral (fallback para médicos sem grade própria)
   startTime       String // "08:00"
   endTime         String // "17:30"
   slotDurationMin Int      @default(60)
@@ -586,7 +598,7 @@ model AvailabilityRule {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  @@unique([weekday])
+  @@index([doctorId, weekday])
 }
 
 enum ExceptionType {

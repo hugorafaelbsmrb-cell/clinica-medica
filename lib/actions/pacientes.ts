@@ -23,6 +23,7 @@ const pacienteSchema = z.object({
   insurance: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   consultationReason: z.string().optional().nullable(),
+  doctorId: z.string().optional().nullable(),
   latitude: z
     .string()
     .optional()
@@ -83,6 +84,22 @@ export async function createPatient(
 
   const data = parsed.data
 
+  // Médico responsável: apenas ADMIN define; valida médico ativo.
+  let doctorId: string | null = null
+  if (session.user.role === "ADMIN") {
+    const rawDoctorId = String(formData.get("doctorId") ?? "").trim()
+    if (rawDoctorId) {
+      const doctor = await prisma.user.findFirst({
+        where: { id: rawDoctorId, role: "MEDICO", active: true },
+        select: { id: true },
+      })
+      if (!doctor) {
+        return { success: false, message: "Médico responsável inválido" }
+      }
+      doctorId = doctor.id
+    }
+  }
+
   // CPF duplicado?
   if (data.cpf) {
     const existing = await prisma.patient.findUnique({ where: { cpf: data.cpf } })
@@ -108,6 +125,7 @@ export async function createPatient(
       insurance: data.insurance || null,
       notes: data.notes || null,
       consultationReason: data.consultationReason || null,
+      doctorId,
       latitude: data.latitude ?? null,
       longitude: data.longitude ?? null,
       locationSource: data.locationSource ?? null,
@@ -174,6 +192,24 @@ export async function updatePatient(
 
   const previous = await prisma.patient.findUnique({ where: { id } })
 
+  // Médico responsável: apenas ADMIN altera; demais papéis preservam o vínculo.
+  let doctorId = previous?.doctorId ?? null
+  if (session.user.role === "ADMIN") {
+    const rawDoctorId = String(formData.get("doctorId") ?? "").trim()
+    if (rawDoctorId) {
+      const doctor = await prisma.user.findFirst({
+        where: { id: rawDoctorId, role: "MEDICO", active: true },
+        select: { id: true },
+      })
+      if (!doctor) {
+        return { success: false, message: "Médico responsável inválido" }
+      }
+      doctorId = doctor.id
+    } else {
+      doctorId = null
+    }
+  }
+
   await prisma.patient.update({
     where: { id },
     data: {
@@ -192,6 +228,7 @@ export async function updatePatient(
       insurance: data.insurance || null,
       notes: data.notes || null,
       consultationReason: data.consultationReason || null,
+      doctorId,
       latitude: data.latitude ?? null,
       longitude: data.longitude ?? null,
       locationSource: data.locationSource ?? null,

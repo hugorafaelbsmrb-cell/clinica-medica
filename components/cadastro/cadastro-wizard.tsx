@@ -17,9 +17,12 @@ import {
   CreditCard,
   FlaskConical,
   History,
+  Home,
   Loader2,
   LocateFixed,
   QrCode,
+  Stethoscope,
+  Video,
   Wallet,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -50,7 +53,14 @@ import {
 } from "@/lib/actions/agendamento-publico"
 
 const CAD_STEPS = ["Seus dados", "Seu contato", "Seu endereço", "Confirmação"]
-const AG_STEPS = ["Motivo", "Escolha o dia", "Escolha o horário", "Confirmação"]
+const AG_STEPS = [
+  "Motivo",
+  "Tipo de consulta",
+  "Médico",
+  "Escolha o dia",
+  "Escolha o horário",
+  "Confirmação",
+]
 
 const STATUS_LABEL: Record<string, string> = {
   AGUARDANDO_PAGAMENTO: "Aguardando pagamento",
@@ -137,7 +147,8 @@ type ExistingPatient = {
 /**
  * Wizard público de cadastro + agendamento em duas fases:
  *  1. Cadastro (pacientes novos): dados → contato → endereço → confirmação;
- *  2. Agendamento (todos): motivo → dia → horário → confirmação.
+ *  2. Agendamento (todos): motivo → tipo de consulta → médico → dia →
+ *     horário → confirmação (passos pulados quando há uma única opção).
  * Pacientes já cadastrados informam o CPF no primeiro passo e pulam
  * direto para a fase de agendamento.
  */
@@ -191,6 +202,10 @@ export function CadastroWizard() {
   // Fase de agendamento
   const [agStep, setAgStep] = useState(0)
   const [motivo, setMotivo] = useState("")
+  const [tipoConsulta, setTipoConsulta] = useState<
+    "" | "PRESENCIAL" | "DOMICILIAR" | "TELECONSULTA"
+  >("")
+  const [selectedDoctorId, setSelectedDoctorId] = useState("")
   const [agenda, setAgenda] = useState<PublicAgendaResult | null>(null)
   const [loadingAgenda, startLoadingAgenda] = useTransition()
   const [selectedDay, setSelectedDay] = useState("")
@@ -392,7 +407,47 @@ export function CadastroWizard() {
     })
   }
 
-  // Fase de agendamento: carrega a agenda ao sair do passo de motivo
+  // Fase de agendamento: carrega a meta (modalidades + médicos) ao sair do
+  // motivo e a agenda do médico escolhido ao chegar no passo do dia.
+  // Passos com uma única opção são pulados automaticamente.
+  function advanceFromStep(from: number, meta: PublicAgendaResult) {
+    const modalities = meta.modalities
+    const doctors = meta.doctors
+    let next = from + 1
+    let doctorId = selectedDoctorId
+    if (next === 1 && modalities.length === 1) {
+      setTipoConsulta(modalities[0].id)
+      next = 2
+    }
+    if (next === 2 && doctors.length <= 1) {
+      if (doctors.length === 1) {
+        doctorId = doctors[0].id
+        setSelectedDoctorId(doctorId)
+      }
+      next = 3
+    }
+    if (next === 3) {
+      if (doctors.length > 0 && !doctorId) {
+        setAgendarError("Escolha o médico da consulta.")
+        return
+      }
+      setSelectedDay("")
+      setSelectedDayLabel("")
+      setSelectedSlot("")
+      startLoadingAgenda(async () => {
+        const result = await getPublicAgenda(doctorId || undefined)
+        if (!result.available) {
+          setPhase("sem-vagas")
+          return
+        }
+        setAgenda(result)
+        setAgStep(3)
+      })
+      return
+    }
+    setAgStep(next)
+  }
+
   function nextAgendamento() {
     setAgendarError("")
     if (agStep === 0) {
@@ -401,21 +456,25 @@ export function CadastroWizard() {
         return
       }
       if (agenda) {
-        setAgStep(1)
+        advanceFromStep(0, agenda)
         return
       }
       startLoadingAgenda(async () => {
         const result = await getPublicAgenda()
-        if (!result.available) {
+        if (result.modalities.length === 0) {
           setPhase("sem-vagas")
           return
         }
         setAgenda(result)
-        setAgStep(1)
+        advanceFromStep(0, result)
       })
       return
     }
-    setAgStep((current) => Math.min(current + 1, AG_STEPS.length - 1))
+    if (agenda) {
+      advanceFromStep(agStep, agenda)
+    } else {
+      setAgStep((current) => Math.min(current + 1, AG_STEPS.length - 1))
+    }
   }
 
   function backAgendamento() {
@@ -439,6 +498,14 @@ export function CadastroWizard() {
       setAgendarError("Escolha um horário antes de confirmar.")
       return
     }
+    if (!tipoConsulta) {
+      setAgendarError("Escolha o tipo de consulta antes de confirmar.")
+      return
+    }
+    if (!selectedDoctorId && (agenda?.doctors.length ?? 0) > 0) {
+      setAgendarError("Escolha o médico antes de confirmar.")
+      return
+    }
     if (existingPatient && !existingPatient.lgpdConsent && !lgpdAgend) {
       setAgendarError(
         "Para concluir, marque a autorização de uso dos seus dados."
@@ -452,6 +519,8 @@ export function CadastroWizard() {
         scheduledAt: selectedSlot,
         reason: motivo,
         method: metodoPagamento,
+        type: tipoConsulta || "PRESENCIAL",
+        doctorId: selectedDoctorId || undefined,
         lgpdConsent:
           existingPatient && !existingPatient.lgpdConsent ? lgpdAgend : true,
       })
@@ -531,6 +600,11 @@ export function CadastroWizard() {
   const currentSteps = phase === "agendamento" ? AG_STEPS : CAD_STEPS
   const currentStep = phase === "agendamento" ? agStep : cadStep
   const displayName = existingPatient?.name || name.trim().split(" ")[0]
+  const tipoConsultaInfo = agenda?.modalities.find((m) => m.id === tipoConsulta)
+  const tipoConsultaLabel = tipoConsultaInfo?.label ?? ""
+  const tipoConsultaPreco = tipoConsultaInfo?.price ?? 0
+  const medicoNome =
+    agenda?.doctors.find((d) => d.id === selectedDoctorId)?.name ?? ""
 
   // ── Tela: sem horários disponíveis ──────────────────────────────────────
   if (phase === "sem-vagas") {
@@ -1307,6 +1381,105 @@ export function CadastroWizard() {
               <div className="flex flex-col gap-6">
                 <div>
                   <h2 className="mb-1 text-xl font-semibold">
+                    Como você quer ser atendido?
+                  </h2>
+                  <p className="text-muted-foreground">
+                    Escolha o tipo de consulta.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {agenda.modalities.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setTipoConsulta(m.id)}
+                      className={cn(
+                        "flex items-center gap-4 rounded-xl border-2 p-4 text-left transition-colors",
+                        tipoConsulta === m.id
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-muted"
+                      )}
+                    >
+                      {m.id === "PRESENCIAL" ? (
+                        <Stethoscope className="h-8 w-8 shrink-0 text-primary" />
+                      ) : m.id === "DOMICILIAR" ? (
+                        <Home className="h-8 w-8 shrink-0 text-primary" />
+                      ) : (
+                        <Video className="h-8 w-8 shrink-0 text-primary" />
+                      )}
+                      <div className="flex flex-col gap-0.5">
+                        <p className="text-lg font-semibold">{m.label}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {m.id === "PRESENCIAL"
+                            ? "Atendimento presencial com o médico."
+                            : m.id === "DOMICILIAR"
+                              ? "O médico vai até a sua casa."
+                              : "Consulta por videochamada, sem sair de casa."}
+                        </p>
+                        {m.price > 0 && (
+                          <p className="text-base font-medium">
+                            R${" "}
+                            {m.price.toLocaleString("pt-BR", {
+                              minimumFractionDigits: 2,
+                            })}
+                          </p>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {agStep === 2 && agenda && (
+              <div className="flex flex-col gap-6">
+                <div>
+                  <h2 className="mb-1 text-xl font-semibold">
+                    Escolha o médico
+                  </h2>
+                  <p className="text-muted-foreground">
+                    Com qual médico você quer se consultar?
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {agenda.doctors.map((doctor) => (
+                    <button
+                      key={doctor.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedDoctorId(doctor.id)
+                        setSelectedDay("")
+                        setSelectedDayLabel("")
+                        setSelectedSlot("")
+                      }}
+                      className={cn(
+                        "flex items-center gap-4 rounded-xl border-2 p-4 text-left transition-colors",
+                        selectedDoctorId === doctor.id
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-muted"
+                      )}
+                    >
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lg font-bold text-primary">
+                        {doctor.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <p className="text-lg font-semibold">{doctor.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {doctor.crm
+                            ? `CRM ${doctor.crm}`
+                            : "CRM não informado"}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {agStep === 3 && agenda && (
+              <div className="flex flex-col gap-6">
+                <div>
+                  <h2 className="mb-1 text-xl font-semibold">
                     Escolha o dia da consulta
                   </h2>
                   <p className="text-muted-foreground">
@@ -1320,13 +1493,13 @@ export function CadastroWizard() {
                     setSelectedDay(day.date)
                     setSelectedDayLabel(day.label)
                     setSelectedSlot("")
-                    setAgStep(2)
+                    setAgStep(4)
                   }}
                 />
               </div>
             )}
 
-            {agStep === 2 && agenda && (
+            {agStep === 4 && agenda && (
               <div className="flex flex-col gap-6">
                 <div>
                   <h2 className="mb-1 text-xl font-semibold">
@@ -1345,7 +1518,7 @@ export function CadastroWizard() {
                         type="button"
                         onClick={() => {
                           setSelectedSlot(slot.iso)
-                          setAgStep(3)
+                          setAgStep(5)
                         }}
                         className="flex h-16 items-center justify-center gap-2 rounded-xl border-2 border-border text-lg font-semibold transition-colors hover:border-primary hover:bg-muted"
                       >
@@ -1357,7 +1530,7 @@ export function CadastroWizard() {
               </div>
             )}
 
-            {agStep === 3 && (
+            {agStep === 5 && (
               <div className="flex flex-col gap-6">
                 <div>
                   <h2 className="mb-1 text-xl font-semibold">
@@ -1372,6 +1545,20 @@ export function CadastroWizard() {
                     <span className="text-muted-foreground">Paciente</span>
                     <span className="text-right font-medium">{displayName}</span>
                   </div>
+                  <div className="flex justify-between gap-4 text-base">
+                    <span className="text-muted-foreground">
+                      Tipo de consulta
+                    </span>
+                    <span className="text-right font-medium">
+                      {tipoConsultaLabel}
+                    </span>
+                  </div>
+                  {medicoNome && (
+                    <div className="flex justify-between gap-4 text-base">
+                      <span className="text-muted-foreground">Médico</span>
+                      <span className="text-right font-medium">{medicoNome}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between gap-4 text-base">
                     <span className="text-muted-foreground">Dia</span>
                     <span className="text-right font-medium capitalize">
@@ -1390,11 +1577,11 @@ export function CadastroWizard() {
                       {motivo}
                     </span>
                   </div>
-                  {(agenda?.consultaPreco ?? 0) > 0 && (
+                  {tipoConsultaPreco > 0 && (
                     <div className="flex justify-between gap-4 border-t border-border pt-3 text-base">
                       <span className="text-muted-foreground">Valor</span>
                       <span className="font-medium">
-                        R${(agenda?.consultaPreco ?? 0).toLocaleString("pt-BR", {
+                        R${tipoConsultaPreco.toLocaleString("pt-BR", {
                           minimumFractionDigits: 2,
                         })}
                       </span>
@@ -1402,7 +1589,7 @@ export function CadastroWizard() {
                   )}
                 </div>
 
-                {(agenda?.consultaPreco ?? 0) > 0 && (
+                {tipoConsultaPreco > 0 && (
                   <div className="flex flex-col gap-2">
                     <p className="text-base font-medium">Como prefere pagar?</p>
                     <div className="grid grid-cols-2 gap-3">
@@ -1520,7 +1707,7 @@ export function CadastroWizard() {
                       <Loader2 className="h-5 w-5 animate-spin" />
                       Confirmando...
                     </>
-                  ) : (agenda?.consultaPreco ?? 0) > 0 ? (
+                  ) : tipoConsultaPreco > 0 ? (
                     "Reservar horário e pagar"
                   ) : (
                     "Confirmar consulta"

@@ -6,6 +6,7 @@ import { Plus, Stethoscope } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
+import { listActiveDoctors } from "@/lib/doctor"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -45,12 +46,12 @@ const STATUS_LABELS = {
 export default async function AtendimentosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>
+  searchParams: Promise<{ status?: string; medico?: string }>
 }) {
   const session = await auth()
   requireRole(session, ["ADMIN", "MEDICO", "SECRETARIA"])
 
-  const { status } = await searchParams
+  const { status, medico } = await searchParams
   const statusFilter = status
     ? (status.toUpperCase() as
         | "AGENDADO"
@@ -59,12 +60,18 @@ export default async function AtendimentosPage({
         | "CANCELADO")
     : undefined
 
-  const attendances = await prisma.attendance.findMany({
-    where: statusFilter ? { status: statusFilter } : {},
-    include: { patient: true, doctor: true },
-    orderBy: { scheduledAt: "desc" },
-    take: 100,
-  })
+  const [attendances, doctors] = await Promise.all([
+    prisma.attendance.findMany({
+      where: {
+        ...(statusFilter ? { status: statusFilter } : {}),
+        ...(medico ? { doctorId: medico } : {}),
+      },
+      include: { patient: true, doctor: true },
+      orderBy: { scheduledAt: "desc" },
+      take: 100,
+    }),
+    listActiveDoctors(),
+  ])
 
   return (
     <div className="flex flex-col gap-6">
@@ -104,6 +111,45 @@ export default async function AtendimentosPage({
             {STATUS_LABELS[s]}
           </Button>
         ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <form className="flex items-center gap-2" action="/atendimentos">
+          {statusFilter && (
+            <input type="hidden" name="status" value={statusFilter} />
+          )}
+          <select
+            name="medico"
+            defaultValue={medico ?? ""}
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+          >
+            <option value="">Todos os médicos</option>
+            {doctors.map((doctor) => (
+              <option key={doctor.id} value={doctor.id}>
+                {doctor.name}
+              </option>
+            ))}
+          </select>
+          <Button type="submit" variant="outline" size="sm">
+            Filtrar
+          </Button>
+        </form>
+        {medico && (
+          <Button
+            variant="link"
+            render={
+              <Link
+                href={
+                  statusFilter
+                    ? `/atendimentos?status=${statusFilter.toLowerCase()}`
+                    : "/atendimentos"
+                }
+              />
+            }
+          >
+            Limpar filtro
+          </Button>
+        )}
       </div>
 
       <Card>

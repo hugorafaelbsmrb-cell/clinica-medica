@@ -24,6 +24,22 @@ export function renderTemplate(
   )
 }
 
+/** Frase do Meet para teleconsultas (vazia quando não há link). */
+function meetSentenceFor(meetLink: string | null): string {
+  return meetLink
+    ? `Sua teleconsulta será por videochamada: ${meetLink}`
+    : ""
+}
+
+/**
+ * Remove a frase do Meet do conteúdo quando não há link cadastrado
+ * (o template padrão traz "Sua teleconsulta será por videochamada: {{meet}}")
+ * — assim o texto atual é mantido para consultas sem link.
+ */
+function withoutMeetSentence(content: string): string {
+  return content.replace(/Sua teleconsulta será por videochamada:\s*/, "")
+}
+
 export async function enqueueMessage(
   patientId: string,
   type:
@@ -261,21 +277,34 @@ export async function queueAppointmentConfirmation(
     where: { type: "CONFIRMACAO_AGENDAMENTO", active: true },
   })
 
+  // Link do Meet: somente teleconsulta com link padrão cadastrado pelo médico.
+  const stored = await prisma.attendance.findUnique({
+    where: { id: attendance.id },
+    select: { type: true, doctor: { select: { meetLink: true } } },
+  })
+  const meetLink =
+    stored?.type === "TELECONSULTA" ? (stored.doctor?.meetLink ?? null) : null
+
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
   const manageLink = `${baseUrl}/cancelar/${attendance.cancelToken ?? ""}`
 
+  const meetSentence = meetSentenceFor(meetLink)
+
   const content = template
-    ? renderTemplate(template.body, {
-        nome: patient.name.split(" ")[0],
-        data: format(attendance.scheduledAt, "dd/MM/yyyy", { locale: ptBR }),
-        hora: format(attendance.scheduledAt, "HH:mm", { locale: ptBR }),
-        link: manageLink,
-      })
+    ? withoutMeetSentence(
+        renderTemplate(template.body, {
+          nome: patient.name.split(" ")[0],
+          data: format(attendance.scheduledAt, "dd/MM/yyyy", { locale: ptBR }),
+          hora: format(attendance.scheduledAt, "HH:mm", { locale: ptBR }),
+          link: manageLink,
+          meet: meetLink ?? "",
+        })
+      )
     : `Olá ${patient.name.split(" ")[0]}! Sua consulta está confirmada para ${format(
         attendance.scheduledAt,
         "dd/MM/yyyy",
         { locale: ptBR }
-      )} às ${format(attendance.scheduledAt, "HH:mm", { locale: ptBR })}. Se precisar remarcar, acesse: ${manageLink}`
+      )} às ${format(attendance.scheduledAt, "HH:mm", { locale: ptBR })}. Se precisar remarcar, acesse: ${manageLink}${meetSentence ? `\n${meetSentence}` : ""}`
 
   await sendImmediateMessage(
     patientId,
@@ -303,7 +332,7 @@ export async function queueAppointmentReminders(now = new Date()): Promise<numbe
         lgpdConsent: true,
       },
     },
-    include: { patient: true },
+    include: { patient: true, doctor: { select: { meetLink: true } } },
   })
 
   const template = await prisma.messageTemplate.findFirst({
@@ -327,17 +356,27 @@ export async function queueAppointmentReminders(now = new Date()): Promise<numbe
           ? "amanhã"
           : `no dia ${format(attendance.scheduledAt, "dd/MM", { locale: ptBR })}`
 
+    // Link do Meet: somente teleconsulta com link padrão cadastrado pelo médico.
+    const meetLink =
+      attendance.type === "TELECONSULTA"
+        ? (attendance.doctor?.meetLink ?? null)
+        : null
+    const meetSentence = meetSentenceFor(meetLink)
+
     const content = template
-      ? renderTemplate(template.body, {
-          nome: attendance.patient.name.split(" ")[0],
-          data: format(attendance.scheduledAt, "dd/MM/yyyy", { locale: ptBR }),
-          hora: format(attendance.scheduledAt, "HH:mm", { locale: ptBR }),
-        })
+      ? withoutMeetSentence(
+          renderTemplate(template.body, {
+            nome: attendance.patient.name.split(" ")[0],
+            data: format(attendance.scheduledAt, "dd/MM/yyyy", { locale: ptBR }),
+            hora: format(attendance.scheduledAt, "HH:mm", { locale: ptBR }),
+            meet: meetLink ?? "",
+          })
+        )
       : `Olá ${attendance.patient.name.split(" ")[0]}! Lembrete: sua consulta é ${whenLabel}, ${format(
           attendance.scheduledAt,
           "dd/MM/yyyy",
           { locale: ptBR }
-        )} às ${format(attendance.scheduledAt, "HH:mm", { locale: ptBR })}.`
+        )} às ${format(attendance.scheduledAt, "HH:mm", { locale: ptBR })}.${meetSentence ? `\n${meetSentence}` : ""}`
 
     await enqueueMessage(
       attendance.patientId,

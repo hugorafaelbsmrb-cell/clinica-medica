@@ -40,7 +40,26 @@ export async function saveAvailabilityRules(
   formData: FormData
 ): Promise<AgendaActionState> {
   try {
-    await guard()
+    const session = await auth()
+    const role = session?.user?.role
+    if (role !== "ADMIN" && role !== "MEDICO") {
+      throw new Error("Sem permissão para alterar a agenda")
+    }
+
+    // ADMIN escolhe o médico no formulário (vazio = grade geral);
+    // MEDICO só edita a própria grade.
+    let doctorId: string | null =
+      String(formData.get("doctorId") ?? "").trim() || null
+    if (role === "MEDICO") doctorId = session?.user?.id ?? null
+    if (doctorId) {
+      const doctor = await prisma.user.findFirst({
+        where: { id: doctorId, role: "MEDICO", active: true },
+        select: { id: true },
+      })
+      if (!doctor) {
+        return { success: false, message: "O médico selecionado não é válido." }
+      }
+    }
 
     const slotDurationRaw = Number(formData.get("slotDurationMin"))
     const bufferRaw = Number(formData.get("bufferMin"))
@@ -77,19 +96,29 @@ export async function saveAvailabilityRules(
         active,
       }
 
-      const existing = await prisma.availabilityRule.findUnique({
-        where: { weekday },
+      // Sem unique: faz o upsert manual por [doctorId, weekday]
+      const existing = await prisma.availabilityRule.findFirst({
+        where: { weekday, doctorId },
       })
 
       if (existing) {
-        await prisma.availabilityRule.update({ where: { weekday }, data })
+        await prisma.availabilityRule.update({
+          where: { id: existing.id },
+          data,
+        })
       } else if (active) {
-        await prisma.availabilityRule.create({ data: { weekday, ...data } })
+        await prisma.availabilityRule.create({
+          data: { weekday, doctorId, ...data },
+        })
       }
     }
 
     await prisma.auditLog.create({
-      data: { action: "UPDATE", entity: "AvailabilityRule" },
+      data: {
+        action: "UPDATE",
+        entity: "AvailabilityRule",
+        details: { medicoId: doctorId },
+      },
     })
 
     revalidatePath("/agenda")

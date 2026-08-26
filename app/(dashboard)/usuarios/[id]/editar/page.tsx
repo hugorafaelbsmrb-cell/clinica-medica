@@ -49,6 +49,7 @@ export default async function EditarUsuarioPage({
           email: user.email,
           role: user.role,
           crm: user.crm,
+          meetLink: user.meetLink,
           signatureText: user.signatureText,
           signatureImage: user.signatureImage,
         }}

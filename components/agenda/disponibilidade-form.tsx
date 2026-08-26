@@ -54,6 +54,7 @@ const MONTH_NAMES = [
 
 export type InitialRule = {
   weekday: number
+  doctorId: string | null
   startTime: string
   endTime: string
   slotDurationMin: number
@@ -83,23 +84,37 @@ function toDateKey(date: Date): string {
 }
 
 /**
- * Configuração da agenda pelo admin: grade semanal, exceções por data
- * (mini-calendário) e regras gerais de agendamento.
+ * Configuração da agenda: grade semanal (por médico ou geral), exceções
+ * por data (mini-calendário) e regras gerais de agendamento.
+ * ADMIN escolhe a grade que edita; MEDICO só enxerga a própria.
  */
 export function DisponibilidadeForm({
   rules,
   settings,
   exceptions,
+  doctors,
+  initialDoctorId,
+  canPickDoctor,
 }: {
   rules: InitialRule[]
   settings: InitialSettings
   exceptions: InitialException[]
+  doctors: { id: string; name: string }[]
+  /** "" = grade geral; id do médico para grade própria. */
+  initialDoctorId: string
+  canPickDoctor: boolean
 }) {
   const router = useRouter()
   const [monthOffset, setMonthOffset] = useState(0)
   const [blockingDay, setBlockingDay] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [doctorId, setDoctorId] = useState(initialDoctorId)
+
+  // Regras visíveis da grade selecionada (geral ou do médico)
+  const visibleRules = rules.filter(
+    (r) => (r.doctorId ?? null) === (doctorId || null)
+  )
 
   const [rulesState, rulesAction, rulesPending] = useActionState<
     AgendaActionState | null,
@@ -201,7 +216,43 @@ export function DisponibilidadeForm({
           <CardTitle className="text-base">Grade semanal de atendimento</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <form action={rulesAction} className="flex flex-col gap-4">
+          <form
+            key={doctorId}
+            action={rulesAction}
+            className="flex flex-col gap-4"
+          >
+            <input type="hidden" name="doctorId" value={doctorId} />
+
+            {canPickDoctor && (
+              <div className="flex flex-col gap-1">
+                <label
+                  htmlFor="availability-doctor"
+                  className="text-sm font-medium"
+                >
+                  Médico da grade
+                </label>
+                <select
+                  id="availability-doctor"
+                  value={doctorId}
+                  onChange={(event) => setDoctorId(event.target.value)}
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">
+                    Grade geral (médicos sem grade própria)
+                  </option>
+                  {doctors.map((doctor) => (
+                    <option key={doctor.id} value={doctor.id}>
+                      {doctor.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  A grade geral é usada como fallback para médicos sem grade
+                  própria.
+                </p>
+              </div>
+            )}
+
             <div className="overflow-x-auto">
               <div className="grid min-w-[340px] grid-cols-[1fr_auto_auto_auto] items-center gap-x-3 gap-y-2">
               <div className="text-sm font-medium text-muted-foreground">
@@ -218,7 +269,7 @@ export function DisponibilidadeForm({
               </div>
 
               {WEEKDAY_NAMES.map((label, weekday) => {
-                const rule = rules.find((r) => r.weekday === weekday)
+                const rule = visibleRules.find((r) => r.weekday === weekday)
                 return (
                   <div key={weekday} className="col-span-4 grid grid-cols-subgrid items-center gap-x-3">
                     <span className="text-sm font-medium">{label}</span>
@@ -259,7 +310,7 @@ export function DisponibilidadeForm({
                   name="slotDurationMin"
                   min={15}
                   max={240}
-                  defaultValue={rules[0]?.slotDurationMin ?? 60}
+                  defaultValue={visibleRules[0]?.slotDurationMin ?? 60}
                   className="h-10"
                 />
               </div>
@@ -273,7 +324,7 @@ export function DisponibilidadeForm({
                   name="bufferMin"
                   min={0}
                   max={120}
-                  defaultValue={rules[0]?.bufferMin ?? 15}
+                  defaultValue={visibleRules[0]?.bufferMin ?? 15}
                   className="h-10"
                 />
               </div>

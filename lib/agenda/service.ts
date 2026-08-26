@@ -46,14 +46,33 @@ function endOfDay(date: Date): Date {
 /**
  * Carrega todos os dados da agenda num intervalo e devolve os slots livres.
  * `from` e `to` são datas (horas ignoradas).
+ *
+ * Com `doctorId`, usa a grade própria do médico (fallback para a grade
+ * geral — regras com doctorId null — quando ele não tem regras) e conta
+ * como ocupados apenas os atendimentos dele e os sem médico vinculado.
+ * Sem `doctorId`, mantém o comportamento antigo: grade geral e todos os
+ * atendimentos como ocupação.
  */
-export async function getAvailableSlots(from: Date, to: Date): Promise<{
+export async function getAvailableSlots(
+  from: Date,
+  to: Date,
+  doctorId?: string | null
+): Promise<{
   slots: Date[]
   settings: AgendaSettings
 }> {
-  const [settings, rules, exceptions, attendances] = await Promise.all([
+  let rules = await prisma.availabilityRule.findMany({
+    where: doctorId ? { doctorId } : { doctorId: null },
+  })
+  // Médico sem grade própria usa a grade geral (regras sem médico).
+  if (doctorId && rules.length === 0) {
+    rules = await prisma.availabilityRule.findMany({
+      where: { doctorId: null },
+    })
+  }
+
+  const [settings, exceptions, attendances] = await Promise.all([
     getAppointmentSettings(),
-    prisma.availabilityRule.findMany(),
     prisma.availabilityException.findMany({
       where: { date: { gte: startOfDay(from), lte: endOfDay(to) } },
     }),
@@ -61,6 +80,9 @@ export async function getAvailableSlots(from: Date, to: Date): Promise<{
       where: {
         status: { not: "CANCELADO" },
         scheduledAt: { gte: startOfDay(from), lte: endOfDay(to) },
+        // Com médico, ocupam apenas os atendimentos dele e os sem médico
+        // vinculado (legado); sem médico, toda ocupação conta (antigo).
+        ...(doctorId ? { OR: [{ doctorId }, { doctorId: null }] } : {}),
       },
       select: { scheduledAt: true },
     }),
@@ -100,9 +122,15 @@ export async function getAvailableSlots(from: Date, to: Date): Promise<{
   return { slots, settings }
 }
 
-/** Verifica se um horário específico está livre (usado na confirmação). */
-export async function isSlotFree(scheduledAt: Date): Promise<boolean> {
+/**
+ * Verifica se um horário específico está livre (usado na confirmação).
+ * `doctorId` opcional: valida contra a grade e a ocupação daquele médico.
+ */
+export async function isSlotFree(
+  scheduledAt: Date,
+  doctorId?: string | null
+): Promise<boolean> {
   const day = startOfDay(scheduledAt)
-  const { slots } = await getAvailableSlots(day, day)
+  const { slots } = await getAvailableSlots(day, day, doctorId)
   return slots.some((s) => s.getTime() === scheduledAt.getTime())
 }

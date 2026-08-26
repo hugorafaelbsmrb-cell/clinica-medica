@@ -10,6 +10,7 @@ import {
   Phone,
   MapPin,
   HeartPulse,
+  Stethoscope,
 } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
@@ -55,6 +56,7 @@ export default async function PacienteDetalhePage({
     prisma.patient.findUnique({
       where: { id },
       include: {
+        doctor: { select: { id: true, name: true } },
         followUp: true,
         followUpPrograms: { orderBy: { createdAt: "desc" } },
         attendances: { orderBy: { scheduledAt: "desc" }, take: 10 },
@@ -214,6 +216,12 @@ export default async function PacienteDetalhePage({
               </p>
             )}
             {patient.insurance && <p>Convênio: {patient.insurance}</p>}
+            {patient.doctor && (
+              <p className="flex items-center gap-2">
+                <Stethoscope className="h-4 w-4 text-muted-foreground" />
+                Médico responsável: {patient.doctor.name}
+              </p>
+            )}
             {address && <p className="text-muted-foreground">{address}</p>}
             {patient.notes && (
               <>

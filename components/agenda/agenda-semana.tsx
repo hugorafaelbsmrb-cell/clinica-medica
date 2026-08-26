@@ -21,6 +21,7 @@ export type WeekDayData = {
     attendance: {
       id: string
       patientName: string
+      doctorName: string | null
       reason: string | null
     } | null
   }[]
@@ -118,6 +119,11 @@ export function AgendaSemana({
                           <User className="h-3 w-3 shrink-0" />
                           {slot.attendance.patientName}
                         </span>
+                        {slot.attendance.doctorName && (
+                          <span className="text-muted-foreground">
+                            {slot.attendance.doctorName}
+                          </span>
+                        )}
                         {slot.attendance.reason && (
                           <span className="line-clamp-2 text-muted-foreground">
                             {slot.attendance.reason}

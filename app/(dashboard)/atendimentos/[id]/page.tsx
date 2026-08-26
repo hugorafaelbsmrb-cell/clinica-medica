@@ -3,7 +3,7 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { ArrowLeft, CarFront, Navigation } from "lucide-react"
+import { ArrowLeft, CarFront, Navigation, Video } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
@@ -109,6 +109,25 @@ export default async function AtendimentoDetalhePage({
             <p className="text-muted-foreground">Médico responsável</p>
             <p>{attendance.doctor?.name ?? "A definir"}</p>
           </div>
+          {attendance.type === "TELECONSULTA" &&
+            attendance.doctor?.meetLink && (
+              <div>
+                <p className="text-muted-foreground">Videochamada</p>
+                <Button
+                  size="sm"
+                  render={
+                    <a
+                      href={attendance.doctor.meetLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    />
+                  }
+                >
+                  <Video className="h-4 w-4" />
+                  Abrir Meet
+                </Button>
+              </div>
+            )}
           {attendance.type === "DOMICILIAR" && (
             <div>
               <p className="text-muted-foreground">Endereço do domicílio</p>

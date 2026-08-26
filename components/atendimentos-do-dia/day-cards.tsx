@@ -44,6 +44,7 @@ export type DayCardData = {
   type: "PRESENCIAL" | "DOMICILIAR" | "TELECONSULTA"
   patientId: string
   patientName: string
+  doctorName: string | null
   age: number | null
   reason: string | null
   address: string
@@ -138,6 +139,12 @@ function DayCard({ attendance }: { attendance: DayCardData }) {
             )}
           </Button>
         </div>
+
+        {attendance.doctorName && (
+          <p className="-mt-2 text-xs text-muted-foreground">
+            Médico(a): {attendance.doctorName}
+          </p>
+        )}
 
         {/* Ação principal: iniciar/finalizar atendimento (só para os pendentes) */}
         {!done &&

@@ -1,13 +1,14 @@
 import type { Metadata } from "next"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
+import { listActiveDoctors } from "@/lib/doctor"
 import { PatientForm } from "@/components/pacientes/paciente-form"
 
 export const metadata: Metadata = { title: "Novo paciente" }
 
 export default async function NovoPacientePage() {
-  const session = await auth()
-  requireRole(session, ["ADMIN", "MEDICO", "SECRETARIA"])
+  const session = requireRole(await auth(), ["ADMIN", "MEDICO", "SECRETARIA"])
+  const doctors = await listActiveDoctors()
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -18,7 +19,7 @@ export default async function NovoPacientePage() {
           para habilitar as mensagens automáticas de WhatsApp.
         </p>
       </div>
-      <PatientForm />
+      <PatientForm doctors={doctors} isAdmin={session.user.role === "ADMIN"} />
     </div>
   )
 }

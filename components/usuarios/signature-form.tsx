@@ -13,6 +13,7 @@ import { updateMySignature, type ActionState } from "@/lib/actions/usuarios"
 export type SignatureInitialData = {
   name: string
   crm: string | null
+  meetLink: string | null
   signatureText: string | null
   signatureImage: string | null
 }
@@ -67,6 +68,19 @@ export function SignatureForm({ initial }: { initial: SignatureInitialData }) {
               />
             </Field>
           </div>
+
+          <Field>
+            <FieldLabel>Link do Google Meet (teleconsultas)</FieldLabel>
+            <Input
+              name="meetLink"
+              type="url"
+              defaultValue={initial.meetLink ?? ""}
+              placeholder="https://meet.google.com/xxx-xxxx-xxx"
+            />
+            <p className="text-xs text-muted-foreground">
+              Link padrão enviado ao paciente no dia da sua teleconsulta.
+            </p>
+          </Field>
 
           <Field>
             <FieldLabel>Assinatura desenhada</FieldLabel>
