@@ -1,11 +1,19 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ClipboardList, MapPinned, Stethoscope, type LucideIcon } from "lucide-react"
+import {
+  ClipboardList,
+  MapPinned,
+  Menu,
+  Stethoscope,
+  type LucideIcon,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { hasPermission, type Role } from "@/lib/rbac"
-import { NotificationBell } from "@/components/layout/notification-bell"
+import { Sheet, SheetTrigger } from "@/components/ui/sheet"
+import { MobileSidebarContent } from "@/components/layout/sidebar"
 
 type BottomNavItem = {
   href: string
@@ -41,10 +49,20 @@ const NAV_ITEMS: BottomNavItem[] = [
  * Barra inferior flutuante para o PWA/celular (estilo Nubank): cartão
  * arredondado descolado das bordas e acima da área do gesto do iPhone
  * (some em telas lg+). Atalho destacado para "Atendimento do dia", os
- * demais acessos rápidos e o sino em evidência. Respeita as permissões.
+ * demais acessos rápidos e o sanduíche que abre o menu lateral. Respeita
+ * as permissões do perfil logado.
  */
-export function BottomNav({ role }: { role: Role }) {
+export function BottomNav({
+  role,
+  clinicName,
+  logoDataUrl,
+}: {
+  role: Role
+  clinicName?: string | null
+  logoDataUrl?: string | null
+}) {
   const pathname = usePathname()
+  const [menuOpen, setMenuOpen] = useState(false)
   const items = NAV_ITEMS.filter((item) => hasPermission(role, item.area))
 
   return (
@@ -89,13 +107,27 @@ export function BottomNav({ role }: { role: Role }) {
           )
         })}
 
-        {/* Sino em destaque para o usuário ativar/consultar notificações */}
-        <div className="flex min-w-16 flex-col items-center justify-center gap-1">
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 ring-2 ring-primary/40">
-            <NotificationBell />
-          </span>
-          <span className="text-[10px] font-semibold text-primary">Avisos</span>
-        </div>
+        {/* Sanduíche: abre o menu lateral com toda a navegação */}
+        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+          <SheetTrigger
+            render={
+              <button
+                type="button"
+                title="Abrir menu"
+                className="flex min-w-16 flex-col items-center justify-center gap-0.5 text-muted-foreground transition-colors"
+              />
+            }
+          >
+            <Menu className="h-5 w-5" />
+            <span className="text-[10px] font-medium">Menu</span>
+          </SheetTrigger>
+          <MobileSidebarContent
+            role={role}
+            clinicName={clinicName}
+            logoDataUrl={logoDataUrl}
+            onNavigate={() => setMenuOpen(false)}
+          />
+        </Sheet>
       </div>
     </nav>
   )

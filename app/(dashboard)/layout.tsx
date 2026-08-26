@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { getClinicSettings } from "@/lib/clinic"
-import { Sidebar, MobileSidebar } from "@/components/layout/sidebar"
+import { Sidebar } from "@/components/layout/sidebar"
 import { UserMenu } from "@/components/layout/user-menu"
 import { NotificationBell } from "@/components/layout/notification-bell"
 import { BottomNav } from "@/components/layout/bottom-nav"
@@ -24,20 +24,10 @@ export default async function DashboardLayout({
         logoDataUrl={clinic.logoDataUrl}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center justify-between gap-2 border-b bg-background px-3 sm:px-4">
-          <MobileSidebar
-            role={session.user.role}
-            clinicName={clinic.name}
-            logoDataUrl={clinic.logoDataUrl}
-          />
-          {/* O trigger mobile fica oculto em telas grandes (lg:hidden), então
-              o justify-between só vê um item — o ml-auto garante que sino e
-              menu do usuário fiquem sempre à direita. */}
-          <div className="ml-auto flex items-center gap-1">
-            {/* No celular o sino fica em destaque na barra inferior (BottomNav) */}
-            <div className="hidden lg:block">
-              <NotificationBell />
-            </div>
+        <header className="flex h-14 items-center justify-end gap-2 border-b bg-background px-3 sm:px-4">
+          {/* O menu fica na barra inferior no celular e na sidebar no desktop */}
+          <div className="flex items-center gap-1">
+            <NotificationBell />
             <UserMenu
               name={session.user.name ?? ""}
               email={session.user.email ?? ""}
@@ -48,7 +38,11 @@ export default async function DashboardLayout({
         <main className="min-w-0 flex-1 bg-muted/30 p-4 pb-[calc(5.25rem+env(safe-area-inset-bottom))] md:p-6 md:pb-[calc(5.25rem+env(safe-area-inset-bottom))] lg:pb-6">
           {children}
         </main>
-        <BottomNav role={session.user.role} />
+        <BottomNav
+          role={session.user.role}
+          clinicName={clinic.name}
+          logoDataUrl={clinic.logoDataUrl}
+        />
       </div>
     </div>
   )
