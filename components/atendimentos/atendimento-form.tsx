@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useEffect, useState, useTransition } from "react"
+import { useActionState, useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { CheckCircle2, Loader2, LocateFixed, MapPin } from "lucide-react"
@@ -13,6 +13,7 @@ import { buildAddress } from "@/lib/geo"
 import {
   createAttendance,
   geocodeAttendanceAddress,
+  suggestDomiciliarPrice,
   type ActionState,
 } from "@/lib/actions/atendimentos"
 import type { DoctorOption } from "@/lib/doctor"
@@ -62,6 +63,16 @@ export function AttendanceForm({
     "idle"
   )
   const [geocoding, startGeocoding] = useTransition()
+  const [value, setValue] = useState("0")
+  // Sugestão de preço domiciliar por raio (urbano/fora), quando há coordenadas.
+  const [priceSuggestion, setPriceSuggestion] = useState<{
+    price: number
+    distanceKm: number | null
+    zone: "URBANO" | "FORA" | null
+  } | null>(null)
+  const lastSuggestedRef = useRef("")
+  const valueRef = useRef(value)
+  valueRef.current = value
   const [state, formAction, pending] = useActionState<
     ActionState | null,
     FormData
@@ -113,6 +124,44 @@ export function AttendanceForm({
       toast.error(state.message)
     }
   }, [state, router])
+
+  // Preço sugerido pela distância até a clínica (raio urbano). Só preenche
+  // o campo Valor se ele ainda estiver vazio ou com a última sugestão —
+  // valor digitado manualmente é respeitado.
+  useEffect(() => {
+    if (type !== "DOMICILIAR" || !latitude || !longitude) {
+      setPriceSuggestion(null)
+      return
+    }
+    const timer = setTimeout(() => {
+      suggestDomiciliarPrice({
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+      })
+        .then((result) => {
+          if (!result.success || result.price === undefined) {
+            setPriceSuggestion(null)
+            return
+          }
+          setPriceSuggestion({
+            price: result.price,
+            distanceKm: result.distanceKm ?? null,
+            zone: result.zone ?? null,
+          })
+          const current = valueRef.current
+          if (
+            current === "" ||
+            current === "0" ||
+            current === lastSuggestedRef.current
+          ) {
+            setValue(String(result.price))
+            lastSuggestedRef.current = String(result.price)
+          }
+        })
+        .catch(() => setPriceSuggestion(null))
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [type, latitude, longitude])
 
   function handlePatientChange(event: React.ChangeEvent<HTMLSelectElement>) {
     applyPatient(patients.find((patient) => patient.id === event.target.value))
@@ -366,8 +415,23 @@ export function AttendanceForm({
                 name="value"
                 step="0.01"
                 min="0"
-                defaultValue="0"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
               />
+              {priceSuggestion && priceSuggestion.zone && (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <MapPin className="h-3.5 w-3.5 shrink-0" />
+                  {priceSuggestion.zone === "URBANO"
+                    ? `Dentro do raio urbano (${priceSuggestion.distanceKm} km)`
+                    : `Fora do raio urbano (${priceSuggestion.distanceKm} km)`}
+                  {" "}
+                  — R${" "}
+                  {priceSuggestion.price.toLocaleString("pt-BR", {
+                    minimumFractionDigits: 2,
+                  })}{" "}
+                  sugerido
+                </p>
+              )}
             </Field>
           </div>
 

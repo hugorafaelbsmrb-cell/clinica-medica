@@ -35,7 +35,11 @@ export type ClinicInfo = {
   autoACaminhoMsg?: string | null
   consultaPrecoPresencial?: number | null
   consultaPrecoDomiciliar?: number | null
+  consultaPrecoDomiciliarFora?: number | null
   consultaPrecoTeleconsulta?: number | null
+  latitude?: number | null
+  longitude?: number | null
+  raioUrbanoKm?: number | null
   acompValorBaixa?: number | null
   acompValorMedia?: number | null
   acompValorAlta?: number | null
@@ -101,9 +105,15 @@ export async function getClinicSettings(): Promise<ClinicInfo> {
         consultaPrecoDomiciliar: settings.consultaPrecoDomiciliar
           ? Number(settings.consultaPrecoDomiciliar)
           : null,
+        consultaPrecoDomiciliarFora: settings.consultaPrecoDomiciliarFora
+          ? Number(settings.consultaPrecoDomiciliarFora)
+          : null,
         consultaPrecoTeleconsulta: settings.consultaPrecoTeleconsulta
           ? Number(settings.consultaPrecoTeleconsulta)
           : null,
+        latitude: settings.latitude,
+        longitude: settings.longitude,
+        raioUrbanoKm: settings.raioUrbanoKm,
         acompValorBaixa: settings.acompValorBaixa
           ? Number(settings.acompValorBaixa)
           : null,

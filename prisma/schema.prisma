@@ -201,8 +201,15 @@ model ClinicSettings {
   // Preços das consultas (usados no agendamento online com pagamento antecipado)
   // Vazio = agendamento online sem cobrança (confirmado na hora).
   consultaPrecoPresencial   Decimal? @db.Decimal(10, 2) // valor da consulta presencial
-  consultaPrecoDomiciliar   Decimal? @db.Decimal(10, 2) // valor da consulta domiciliar
+  consultaPrecoDomiciliar   Decimal? @db.Decimal(10, 2) // domiciliar dentro do raio urbano
+  consultaPrecoDomiciliarFora Decimal? @db.Decimal(10, 2) // domiciliar fora do raio urbano (vazio = usa o preço base)
   consultaPrecoTeleconsulta Decimal? @db.Decimal(10, 2) // valor da teleconsulta
+
+  // Localização da clínica: referência para a precificação domiciliar por
+  // raio de distância (urbano/fora do raio). Raio em quilômetros.
+  latitude     Float? // coordenadas da clínica (bot "Buscar coordenadas" em Configurações → Clínica)
+  longitude    Float?
+  raioUrbanoKm Float? // até esta distância cobra-se consultaPrecoDomiciliar; além, o preço "fora"
 
   // Acompanhamento: valores sugeridos por complexidade (o médico pode editar
   // no modal) e juros mensais repassados ao paciente no cartão parcelado.
@@ -292,6 +299,8 @@ model Attendance {
   latitude         Float? // localização do domicílio deste atendimento
   longitude        Float?
   locationSource   String? // GPS | GEOCODE | PATIENT (herdado do cadastro)
+  distanceKm       Float? // distância até a clínica (precificação domiciliar por raio)
+  pricingZone      String? // URBANO | FORA — faixa de preço aplicada ao domiciliar
   anamnesis        String?          @db.Text
   value            Decimal          @default(0) @db.Decimal(10, 2)
   createdAt        DateTime         @default(now())

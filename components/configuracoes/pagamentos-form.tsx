@@ -41,6 +41,8 @@ export type PaymentInitialData = {
   stripeWebhookUrl: string
   consultaPrecoPresencial: number | null
   consultaPrecoDomiciliar: number | null
+  consultaPrecoDomiciliarFora: number | null
+  raioUrbanoKm: number | null
   consultaPrecoTeleconsulta: number | null
   acompValorBaixa: number | null
   acompValorMedia: number | null
@@ -91,6 +93,16 @@ export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
     initial.consultaPrecoDomiciliar != null
       ? String(initial.consultaPrecoDomiciliar).replace(".", ",")
       : ""
+  )
+  const [precoDomiciliarFora, setPrecoDomiciliarFora] = useState(
+    initial.consultaPrecoDomiciliarFora != null
+      ? String(initial.consultaPrecoDomiciliarFora).replace(".", ",")
+      : ""
+  )
+  const [raioUrbano, setRaioUrbano] = useState(
+    initial.raioUrbanoKm != null
+      ? String(initial.raioUrbanoKm).replace(".", ",")
+      : "8"
   )
   const [precoTeleconsulta, setPrecoTeleconsulta] = useState(
     initial.consultaPrecoTeleconsulta != null
@@ -205,14 +217,27 @@ export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
                 />
               </Field>
               <Field>
-                <FieldLabel>Consulta domiciliar (R$)</FieldLabel>
+                <FieldLabel>Domiciliar — dentro do raio urbano (R$)</FieldLabel>
                 <Input
                   name="consultaPrecoDomiciliar"
                   type="text"
                   inputMode="decimal"
                   value={precoDomiciliar}
                   onChange={(event) => setPrecoDomiciliar(event.target.value)}
-                  placeholder="Ex.: 300,00"
+                  placeholder="Ex.: 500,00"
+                />
+              </Field>
+              <Field>
+                <FieldLabel>Domiciliar — fora do raio urbano (R$)</FieldLabel>
+                <Input
+                  name="consultaPrecoDomiciliarFora"
+                  type="text"
+                  inputMode="decimal"
+                  value={precoDomiciliarFora}
+                  onChange={(event) =>
+                    setPrecoDomiciliarFora(event.target.value)
+                  }
+                  placeholder="Ex.: 550,00"
                 />
               </Field>
               <Field>
@@ -225,6 +250,22 @@ export function PagamentosForm({ initial }: { initial: PaymentInitialData }) {
                   onChange={(event) => setPrecoTeleconsulta(event.target.value)}
                   placeholder="Ex.: 200,00"
                 />
+              </Field>
+              <Field>
+                <FieldLabel>Raio urbano (km)</FieldLabel>
+                <Input
+                  name="raioUrbanoKm"
+                  type="text"
+                  inputMode="decimal"
+                  value={raioUrbano}
+                  onChange={(event) => setRaioUrbano(event.target.value)}
+                  placeholder="Ex.: 8"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Distância máxima a partir da clínica para o preço domiciliar
+                  de dentro do raio. Configure a localização da clínica em
+                  "Dados da clínica".
+                </p>
               </Field>
             </div>
           </div>

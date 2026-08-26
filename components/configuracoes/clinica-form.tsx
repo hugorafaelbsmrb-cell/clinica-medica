@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { ImagePlus, Trash2 } from "lucide-react"
+import { ImagePlus, Loader2, MapPin, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch"
 import {
   saveClinicSettings,
   getSignerStatus,
+  geocodeClinicAddress,
   type ActionState,
 } from "@/lib/actions/configuracoes"
 
@@ -29,6 +30,8 @@ export type ClinicInitialData = {
   consultaPresencialEnabled?: boolean
   consultaDomiciliarEnabled?: boolean
   consultaTeleconsultaEnabled?: boolean
+  latitude?: number | null
+  longitude?: number | null
 }
 
 const MAX_LOGO_BYTES = 1024 * 1024 // 1 MB
@@ -78,6 +81,14 @@ export function ClinicaForm({ initial }: { initial: ClinicInitialData }) {
     initial.consultaTeleconsultaEnabled ?? true
   )
   const [signerOk, setSignerOk] = useState<boolean | null>(null)
+  const [address, setAddress] = useState(initial.address ?? "")
+  const [latitude, setLatitude] = useState(
+    initial.latitude != null ? String(initial.latitude).replace(".", ",") : ""
+  )
+  const [longitude, setLongitude] = useState(
+    initial.longitude != null ? String(initial.longitude).replace(".", ",") : ""
+  )
+  const [geocoding, setGeocoding] = useState(false)
 
   useEffect(() => {
     getSignerStatus()
@@ -119,6 +130,30 @@ export function ClinicaForm({ initial }: { initial: ClinicInitialData }) {
     const reader = new FileReader()
     reader.onload = () => setLogo(String(reader.result))
     reader.readAsDataURL(file)
+  }
+
+  // Busca as coordenadas da clínica pelo endereço (Nominatim) — referência
+  // do cálculo do raio urbano no atendimento domiciliar.
+  async function handleGeocodeClinic() {
+    setGeocoding(true)
+    try {
+      const result = await geocodeClinicAddress(address || undefined)
+      if (
+        result.success &&
+        result.latitude != null &&
+        result.longitude != null
+      ) {
+        setLatitude(String(result.latitude).replace(".", ","))
+        setLongitude(String(result.longitude).replace(".", ","))
+        toast.success(result.message)
+      } else {
+        toast.error(result.message)
+      }
+    } catch {
+      toast.error("Não foi possível buscar as coordenadas")
+    } finally {
+      setGeocoding(false)
+    }
   }
 
   return (
@@ -229,10 +264,71 @@ export function ClinicaForm({ initial }: { initial: ClinicInitialData }) {
             <FieldLabel>Endereço completo</FieldLabel>
             <Input
               name="address"
-              defaultValue={initial.address ?? ""}
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
               placeholder="Rua Exemplo, 123 — Centro, São Paulo/SP — CEP 00000-000"
             />
           </Field>
+
+          {/* Localização da clínica — referência do raio urbano domiciliar */}
+          <div className="flex flex-col gap-3 rounded-md border p-4">
+            <div className="flex flex-col gap-0.5">
+              <p className="text-sm font-semibold">Localização da clínica</p>
+              <p className="text-xs text-muted-foreground">
+                Ponto de referência do raio urbano: o preço do atendimento
+                domiciliar muda conforme a distância do paciente até aqui.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleGeocodeClinic}
+                disabled={geocoding}
+              >
+                {geocoding ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <MapPin className="h-4 w-4" />
+                )}
+                Buscar coordenadas pelo endereço
+              </Button>
+              {latitude && longitude && (
+                <Badge variant="secondary">
+                  {latitude}, {longitude}
+                </Badge>
+              )}
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field>
+                <FieldLabel>Latitude</FieldLabel>
+                <Input
+                  name="latitude"
+                  type="text"
+                  inputMode="decimal"
+                  value={latitude}
+                  onChange={(event) => setLatitude(event.target.value)}
+                  placeholder="Ex.: -23,5505"
+                />
+              </Field>
+              <Field>
+                <FieldLabel>Longitude</FieldLabel>
+                <Input
+                  name="longitude"
+                  type="text"
+                  inputMode="decimal"
+                  value={longitude}
+                  onChange={(event) => setLongitude(event.target.value)}
+                  placeholder="Ex.: -46,6333"
+                />
+              </Field>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Coordenadas em branco: o domiciliar usa um preço único (sem raio).
+              O botão busca pelo endereço acima e salva na hora.
+            </p>
+          </div>
 
           <Field>
             <FieldLabel>Horário de atendimento</FieldLabel>

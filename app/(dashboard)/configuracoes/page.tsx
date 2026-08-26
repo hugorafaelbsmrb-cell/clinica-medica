@@ -57,6 +57,9 @@ export default async function ConfiguracoesPage() {
           stripeWebhookUrl,
           consultaPrecoPresencial: clinic.consultaPrecoPresencial ?? null,
           consultaPrecoDomiciliar: clinic.consultaPrecoDomiciliar ?? null,
+          consultaPrecoDomiciliarFora:
+            clinic.consultaPrecoDomiciliarFora ?? null,
+          raioUrbanoKm: clinic.raioUrbanoKm ?? null,
           consultaPrecoTeleconsulta: clinic.consultaPrecoTeleconsulta ?? null,
           acompValorBaixa: clinic.acompValorBaixa ?? null,
           acompValorMedia: clinic.acompValorMedia ?? null,

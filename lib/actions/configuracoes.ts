@@ -5,6 +5,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { checkSignerHealth } from "@/lib/signing/signer-client"
+import { geocodeAddress } from "@/lib/geo"
 
 export type ActionState = {
   success: boolean
@@ -12,6 +13,20 @@ export type ActionState = {
 }
 
 const MAX_LOGO_BYTES = 1024 * 1024 // 1 MB
+
+/** Converte um campo de coordenada (aceita vírgula) para número. */
+function parseCoordinate(
+  value: FormDataEntryValue | null,
+  min: number,
+  max: number
+): number | null {
+  const text = String(value ?? "").trim().replace(",", ".")
+  if (!text) return null
+  const parsed = Number(text)
+  return Number.isFinite(parsed) && parsed >= min && parsed <= max
+    ? parsed
+    : null
+}
 
 const clinicSchema = z.object({
   name: z.string().min(2, "Informe o nome da clínica"),
@@ -84,6 +99,8 @@ export async function saveClinicSettings(
   }
 
   const data = parsed.data
+  const latitude = parseCoordinate(formData.get("latitude"), -90, 90)
+  const longitude = parseCoordinate(formData.get("longitude"), -180, 180)
   await prisma.clinicSettings.upsert({
     where: { id: 1 },
     update: {
@@ -94,6 +111,8 @@ export async function saveClinicSettings(
       cnpj: data.cnpj || null,
       horarioAtendimento: data.horarioAtendimento || null,
       logoDataUrl: data.logoDataUrl || null,
+      latitude,
+      longitude,
       enableDigitalSignature,
       consultaPresencialEnabled,
       consultaDomiciliarEnabled,
@@ -108,6 +127,8 @@ export async function saveClinicSettings(
       cnpj: data.cnpj || null,
       horarioAtendimento: data.horarioAtendimento || null,
       logoDataUrl: data.logoDataUrl || null,
+      latitude,
+      longitude,
       enableDigitalSignature,
       consultaPresencialEnabled,
       consultaDomiciliarEnabled,
@@ -126,6 +147,57 @@ export async function saveClinicSettings(
 
   revalidatePath("/", "layout")
   return { success: true, message: "Configurações salvas" }
+}
+
+/**
+ * Busca as coordenadas da clínica a partir do endereço (Nominatim) e
+ * salva em ClinicSettings — referência do cálculo do raio urbano
+ * domiciliar. Usa o endereço informado ou, sem ele, o salvo na clínica.
+ */
+export async function geocodeClinicAddress(address?: string): Promise<{
+  success: boolean
+  message: string
+  latitude?: number
+  longitude?: number
+}> {
+  const session = await auth()
+  if (!session?.user || session.user.role !== "ADMIN") {
+    return {
+      success: false,
+      message: "Apenas administradores podem alterar as configurações",
+    }
+  }
+
+  const clinic = await prisma.clinicSettings.findUnique({ where: { id: 1 } })
+  const query = address?.trim() || clinic?.address?.trim() || ""
+  if (!query) {
+    return {
+      success: false,
+      message: "Informe o endereço da clínica antes de buscar as coordenadas",
+    }
+  }
+
+  const coords = await geocodeAddress(query)
+  if (!coords) {
+    return {
+      success: false,
+      message:
+        "Não foi possível localizar o endereço. Confira os dados e tente novamente.",
+    }
+  }
+
+  await prisma.clinicSettings.update({
+    where: { id: 1 },
+    data: { latitude: coords.latitude, longitude: coords.longitude },
+  })
+
+  revalidatePath("/", "layout")
+  return {
+    success: true,
+    message: "Coordenadas da clínica salvas",
+    latitude: coords.latitude,
+    longitude: coords.longitude,
+  }
 }
 
 /** Saúde do microserviço de assinatura (exibida em Configurações). */

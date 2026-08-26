@@ -435,7 +435,10 @@ export function CadastroWizard() {
       setSelectedDayLabel("")
       setSelectedSlot("")
       startLoadingAgenda(async () => {
-        const result = await getPublicAgenda(doctorId || undefined)
+        const result = await getPublicAgenda(
+          doctorId || undefined,
+          patientId || undefined
+        )
         if (!result.available) {
           setPhase("sem-vagas")
           return
@@ -460,7 +463,7 @@ export function CadastroWizard() {
         return
       }
       startLoadingAgenda(async () => {
-        const result = await getPublicAgenda()
+        const result = await getPublicAgenda(undefined, patientId || undefined)
         if (result.modalities.length === 0) {
           setPhase("sem-vagas")
           return
@@ -659,6 +662,11 @@ export function CadastroWizard() {
             <p className="text-lg font-semibold capitalize">{formatted.date}</p>
             <p className="text-2xl font-bold text-amber-700">{formatted.time}</p>
             <p className="mt-1 text-base font-medium">Valor: R$ {valor}</p>
+            {paymentData.pricingZone === "FORA" && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Inclui o deslocamento fora do raio urbano.
+              </p>
+            )}
           </div>
 
           {paymentData.mock ? (
@@ -1422,6 +1430,11 @@ export function CadastroWizard() {
                             {m.price.toLocaleString("pt-BR", {
                               minimumFractionDigits: 2,
                             })}
+                            {m.zone === "FORA" && (
+                              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                                (fora do raio urbano)
+                              </span>
+                            )}
                           </p>
                         )}
                       </div>

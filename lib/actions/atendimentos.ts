@@ -14,6 +14,10 @@ import {
 import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
 import { notifyNewAppointment } from "@/lib/notifications"
 import {
+  priceFromCoordinates,
+  type DomiciliarZone,
+} from "@/lib/pricing/domiciliar"
+import {
   renderTemplate,
   sendImmediateMessage,
 } from "@/lib/whatsapp/message-service"
@@ -344,4 +348,43 @@ export async function geocodeAttendanceAddress(query: string): Promise<{
     latitude: coords.latitude,
     longitude: coords.longitude,
   }
+}
+
+/**
+ * Sugere o valor do atendimento domiciliar pela distância até a clínica
+ * (raio urbano). Chamada pelo formulário interno quando há coordenadas;
+ * o valor sugerido preenche o campo Valor e continua editável.
+ */
+export async function suggestDomiciliarPrice(input: {
+  latitude: number
+  longitude: number
+}): Promise<{
+  success: boolean
+  price?: number
+  distanceKm?: number | null
+  zone?: DomiciliarZone | null
+  message?: string
+}> {
+  const session = await auth()
+  if (!session?.user) return { success: false, message: "Sessão expirada" }
+
+  const latitude = Number(input.latitude)
+  const longitude = Number(input.longitude)
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180
+  ) {
+    return { success: false, message: "Coordenadas inválidas" }
+  }
+
+  const pricing = await priceFromCoordinates({ latitude, longitude })
+  if (pricing.price <= 0) {
+    return { success: false, message: "Preço domiciliar não configurado" }
+  }
+
+  return { success: true, ...pricing }
 }

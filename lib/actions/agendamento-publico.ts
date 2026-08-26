@@ -21,6 +21,10 @@ import { createCharge, simulatePaymentPaid } from "@/lib/payments/router"
 import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
 import { getPaymentSettings } from "@/lib/payments/settings"
 import { getClinicSettings } from "@/lib/clinic"
+import {
+  computeDomiciliarPrice,
+  type DomiciliarZone,
+} from "@/lib/pricing/domiciliar"
 import { listActiveDoctors } from "@/lib/doctor"
 import { notifyNewAppointment } from "@/lib/notifications"
 import type { PaymentMethodType } from "@/lib/payments/types"
@@ -104,6 +108,8 @@ export type PublicAgendaModality = {
   id: "PRESENCIAL" | "DOMICILIAR" | "TELECONSULTA"
   label: string
   price: number
+  /** Faixa de preço domiciliar aplicada ao paciente (URBANO | FORA). */
+  zone?: DomiciliarZone | null
 }
 
 export type PublicAgendaResult = {
@@ -127,9 +133,12 @@ export type PublicAgendaResult = {
  * Lista os dias com vagas livres dentro do horizonte de agendamento.
  * Com `doctorId`, devolve a agenda daquele médico (grade própria ou
  * grade geral como fallback); sem `doctorId`, devolve a grade geral.
+ * Com `patientId`, o preço domiciliar é calculado pela distância do
+ * paciente até a clínica (raio urbano).
  */
 export async function getPublicAgenda(
-  doctorId?: string
+  doctorId?: string,
+  patientId?: string
 ): Promise<PublicAgendaResult> {
   const settings = await getAppointmentSettings()
   const paymentSettings = await getPaymentSettings()
@@ -141,6 +150,23 @@ export async function getPublicAgenda(
 
   const doctors = await listActiveDoctors()
 
+  // Contexto do paciente para precificar o domiciliar por distância.
+  const patient = patientId
+    ? await prisma.patient.findUnique({
+        where: { id: patientId },
+        select: {
+          id: true,
+          latitude: true,
+          longitude: true,
+          street: true,
+          number: true,
+          neighborhood: true,
+          city: true,
+          state: true,
+        },
+      })
+    : null
+
   // Modalidades habilitadas pelo admin, com o preço de cada uma.
   const modalities: PublicAgendaModality[] = []
   if (clinic.consultaPresencialEnabled) {
@@ -151,10 +177,20 @@ export async function getPublicAgenda(
     })
   }
   if (clinic.consultaDomiciliarEnabled) {
+    let domiciliarPrice = paymentSettings.consultaPrecoDomiciliar
+    let domiciliarZone: DomiciliarZone | null = null
+    if (patient) {
+      const pricing = await computeDomiciliarPrice(patient)
+      if (pricing.ok) {
+        domiciliarPrice = pricing.price
+        domiciliarZone = pricing.zone
+      }
+    }
     modalities.push({
       id: "DOMICILIAR",
       label: "Domiciliar",
-      price: paymentSettings.consultaPrecoDomiciliar,
+      price: domiciliarPrice,
+      zone: domiciliarZone,
     })
   }
   if (clinic.consultaTeleconsultaEnabled) {
@@ -254,6 +290,8 @@ export type AgendarState = {
     pixQrCodeUrl: string | null
     /** true = cobrança em modo teste (gateway sem chave configurada). */
     mock: boolean
+    /** Faixa de preço domiciliar aplicada (URBANO | FORA | null). */
+    pricingZone?: DomiciliarZone | null
   }
 }
 
@@ -263,6 +301,8 @@ export type AgendarState = {
  * online (preço configurado), o horário é reservado com status
  * AGUARDANDO_PAGAMENTO e a cobrança é gerada no gateway escolhido;
  * a confirmação final acontece quando o pagamento cai (webhook).
+ * Domiciliar: preço por raio de distância até a clínica; sem localização
+ * resolvível do paciente, o agendamento é bloqueado com mensagem clara.
  */
 export async function agendarPublico(
   input: z.infer<typeof agendarSchema>
@@ -331,13 +371,34 @@ export async function agendarPublico(
 
   // Preço configurado = agendamento exige pagamento antes de confirmar.
   // Sem chave no gateway, a cobrança sai em modo teste (MOCK) — ver router.
+  // Domiciliar: preço por raio de distância até a clínica (urbano/fora).
   const paymentSettings = await getPaymentSettings()
-  const price =
-    typeInput === "DOMICILIAR"
-      ? paymentSettings.consultaPrecoDomiciliar
-      : typeInput === "TELECONSULTA"
+  let domiciliarZone: DomiciliarZone | null = null
+  let domiciliarDistanceKm: number | null = null
+  let price: number
+  if (typeInput === "DOMICILIAR") {
+    const pricing = await computeDomiciliarPrice({
+      id: patient.id,
+      latitude: patient.latitude,
+      longitude: patient.longitude,
+      street: patient.street,
+      number: patient.number,
+      neighborhood: patient.neighborhood,
+      city: patient.city,
+      state: patient.state,
+    })
+    if (!pricing.ok) {
+      return { success: false, message: pricing.message }
+    }
+    price = pricing.price
+    domiciliarZone = pricing.zone
+    domiciliarDistanceKm = pricing.distanceKm
+  } else {
+    price =
+      typeInput === "TELECONSULTA"
         ? paymentSettings.consultaPrecoTeleconsulta
         : paymentSettings.consultaPrecoPresencial
+  }
   const cobrar = price > 0
 
   try {
@@ -375,6 +436,9 @@ export async function agendarPublico(
           origin: "ONLINE",
           slotNote: reason,
           cancelToken: crypto.randomUUID().replaceAll("-", ""),
+          // Rastro da precificação domiciliar por raio (quando aplicável).
+          distanceKm: domiciliarDistanceKm,
+          pricingZone: domiciliarZone,
         },
       })
 
@@ -443,7 +507,10 @@ export async function agendarPublico(
               : typeInput === "TELECONSULTA"
                 ? "TELECONSULTA"
                 : "CONSULTA_PRESENCIAL",
-          description: `Consulta — ${patient.name}`,
+          description:
+            typeInput === "DOMICILIAR" && domiciliarZone === "FORA"
+              ? `Consulta domiciliar (fora do raio urbano) — ${patient.name}`
+              : `Consulta — ${patient.name}`,
           value: price,
           dueDate: new Date(),
           status: "PENDENTE",
@@ -503,6 +570,7 @@ export async function agendarPublico(
           pixCopiaCola: charge.pixCopiaCola ?? null,
           pixQrCodeUrl: charge.pixQrCodeUrl ?? null,
           mock: charge.mock === true,
+          pricingZone: domiciliarZone,
         },
       }
     }
