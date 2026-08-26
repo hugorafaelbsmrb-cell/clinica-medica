@@ -38,16 +38,17 @@ const NAV_ITEMS: BottomNavItem[] = [
 ]
 
 /**
- * Barra inferior fixa para o PWA/celular (some em telas lg+): atalho
- * destacado para "Atendimento do dia", os demais acessos rápidos e o sino
- * de notificações em evidência. Respeita as permissões do perfil logado.
+ * Barra inferior flutuante para o PWA/celular (estilo Nubank): cartão
+ * arredondado descolado das bordas e acima da área do gesto do iPhone
+ * (some em telas lg+). Atalho destacado para "Atendimento do dia", os
+ * demais acessos rápidos e o sino em evidência. Respeita as permissões.
  */
 export function BottomNav({ role }: { role: Role }) {
   const pathname = usePathname()
   const items = NAV_ITEMS.filter((item) => hasPermission(role, item.area))
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-[env(safe-area-inset-bottom)] lg:hidden">
+    <nav className="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-40 rounded-2xl border bg-background/95 shadow-lg shadow-black/10 backdrop-blur lg:hidden">
       <div className="flex h-16 items-stretch justify-around px-1">
         {items.map(({ href, label, icon: Icon, featured }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`)

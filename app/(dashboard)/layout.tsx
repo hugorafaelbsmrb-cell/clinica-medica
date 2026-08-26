@@ -45,7 +45,7 @@ export default async function DashboardLayout({
             />
           </div>
         </header>
-        <main className="min-w-0 flex-1 bg-muted/30 p-4 pb-24 md:p-6 lg:pb-6">
+        <main className="min-w-0 flex-1 bg-muted/30 p-4 pb-[calc(5.25rem+env(safe-area-inset-bottom))] md:p-6 md:pb-[calc(5.25rem+env(safe-area-inset-bottom))] lg:pb-6">
           {children}
         </main>
         <BottomNav role={session.user.role} />
