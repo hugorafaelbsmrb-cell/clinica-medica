@@ -15,6 +15,7 @@ import {
   geocodeAttendanceAddress,
   type ActionState,
 } from "@/lib/actions/atendimentos"
+import type { DoctorOption } from "@/lib/doctor"
 
 type PatientOption = {
   id: string
@@ -37,9 +38,13 @@ const SOURCE_LABEL: Record<string, string> = {
 
 export function AttendanceForm({
   patients,
+  doctors,
+  showDoctorSelect,
   preselectedPatientId,
 }: {
   patients: PatientOption[]
+  doctors: DoctorOption[]
+  showDoctorSelect: boolean
   preselectedPatientId?: string
 }) {
   const router = useRouter()
@@ -195,6 +200,28 @@ export function AttendanceForm({
               ))}
             </select>
           </Field>
+
+          {showDoctorSelect && (
+            <Field>
+              <FieldLabel>Médico responsável</FieldLabel>
+              <select
+                name="doctorId"
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+              >
+                <option value="">A definir</option>
+                {doctors.map((doctor) => (
+                  <option key={doctor.id} value={doctor.id}>
+                    {doctor.name}
+                    {doctor.crm ? ` — ${doctor.crm}` : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                A assinatura deste médico aparecerá no prontuário quando o
+                atendimento for realizado.
+              </p>
+            </Field>
+          )}
 
           <Field>
             <FieldLabel>Tipo de atendimento *</FieldLabel>

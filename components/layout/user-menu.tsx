@@ -1,7 +1,8 @@
 "use client"
 
+import Link from "next/link"
 import { signOut } from "next-auth/react"
-import { LogOut, UserCircle2 } from "lucide-react"
+import { LogOut, PenLine, UserCircle2 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -58,6 +59,12 @@ export function UserMenu({
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {role === "MEDICO" && (
+          <DropdownMenuItem render={<Link href="/minha-assinatura" />}>
+            <PenLine className="h-4 w-4" />
+            Minha assinatura
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           variant="destructive"
           onClick={() => {

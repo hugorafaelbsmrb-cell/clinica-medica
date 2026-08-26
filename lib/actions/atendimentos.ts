@@ -5,6 +5,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { getClinicSettings } from "@/lib/clinic"
+import { resolveDoctorId } from "@/lib/doctor"
 import { geocodeAddress } from "@/lib/geo"
 import {
   defaultAutomationMessage,
@@ -89,10 +90,23 @@ export async function createAttendance(
     }
   }
 
+  // Médico responsável (opcional no agendamento): o médico assina sempre
+  // com o próprio usuário; admin/secretária podem escolher ou deixar
+  // "A definir".
+  const doctorResult = await resolveDoctorId({
+    role: session.user.role,
+    selfId: session.user.id,
+    doctorId: formData.get("doctorId")?.toString() || null,
+    required: false,
+  })
+  if (doctorResult.error) {
+    return { success: false, message: doctorResult.error }
+  }
+
   const attendance = await prisma.attendance.create({
     data: {
       patientId: data.patientId,
-      doctorId: session.user.role === "MEDICO" ? session.user.id : null,
+      doctorId: doctorResult.doctorId,
       type: data.type,
       scheduledAt: new Date(data.scheduledAt),
       homeAddress: data.homeAddress || null,

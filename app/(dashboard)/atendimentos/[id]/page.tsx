@@ -159,6 +159,36 @@ export default async function AtendimentoDetalhePage({
         </CardContent>
       </Card>
 
+      {attendance.status === "REALIZADO" && attendance.doctor && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Assinatura do médico</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col items-start gap-3 text-sm">
+            {attendance.doctor.signatureImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={attendance.doctor.signatureImage}
+                alt="Assinatura do médico"
+                className="max-h-16 w-56 rounded-md border bg-background object-contain p-1"
+              />
+            ) : (
+              attendance.doctor.signatureText && (
+                <p className="font-serif text-lg italic text-muted-foreground">
+                  {attendance.doctor.signatureText}
+                </p>
+              )
+            )}
+            <div className="border-t pt-2">
+              <p className="font-medium">{attendance.doctor.name}</p>
+              {attendance.doctor.crm && (
+                <p className="text-muted-foreground">{attendance.doctor.crm}</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {attendance.status !== "CANCELADO" && (
         <Button
           variant="outline"

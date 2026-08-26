@@ -20,6 +20,10 @@ const userSchema = z.object({
   }),
   crm: z.string().optional(),
   signatureText: z.string().optional(),
+  signatureImage: z
+    .string()
+    .max(800_000, "Imagem de assinatura muito grande (use até 500 KB)")
+    .optional(),
 })
 
 export async function createUser(
@@ -38,6 +42,7 @@ export async function createUser(
     role: formData.get("role"),
     crm: formData.get("crm"),
     signatureText: formData.get("signatureText"),
+    signatureImage: formData.get("signatureImage") || undefined,
   })
 
   if (!parsed.success) {
@@ -67,6 +72,7 @@ export async function createUser(
       role: parsed.data.role,
       crm: parsed.data.crm || null,
       signatureText: parsed.data.signatureText || null,
+      signatureImage: parsed.data.signatureImage || null,
     },
   })
 
@@ -101,6 +107,7 @@ export async function updateUser(
     role: formData.get("role"),
     crm: formData.get("crm"),
     signatureText: formData.get("signatureText"),
+    signatureImage: formData.get("signatureImage") || undefined,
   })
 
   if (!parsed.success) {
@@ -132,6 +139,7 @@ export async function updateUser(
       role: parsed.data.role,
       crm: parsed.data.crm || null,
       signatureText: parsed.data.signatureText || null,
+      signatureImage: parsed.data.signatureImage || null,
       ...(newPassword ? { password: await bcrypt.hash(newPassword, 10) } : {}),
     },
   })
@@ -184,4 +192,67 @@ export async function toggleUserActive(userId: string): Promise<ActionState> {
     message: next ? "Usuário ativado" : "Usuário desativado",
     userId,
   }
+}
+
+/**
+ * Autoatendimento: o médico (ou admin) atualiza a própria assinatura
+ * virtual — imagem, texto de fallback e CRM — usada nos prontuários,
+ * prescrições e planos terapêuticos.
+ */
+export async function updateMySignature(
+  _prev: ActionState | null,
+  formData: FormData
+): Promise<ActionState> {
+  const session = await auth()
+  if (!session?.user) return { success: false, message: "Sessão expirada" }
+  if (session.user.role !== "MEDICO" && session.user.role !== "ADMIN") {
+    return {
+      success: false,
+      message: "Apenas médicos cadastram a própria assinatura",
+    }
+  }
+
+  const parsed = z
+    .object({
+      crm: z.string().optional(),
+      signatureText: z.string().optional(),
+      signatureImage: z
+        .string()
+        .max(800_000, "Imagem de assinatura muito grande (use até 500 KB)")
+        .optional(),
+    })
+    .safeParse({
+      crm: formData.get("crm"),
+      signatureText: formData.get("signatureText"),
+      signatureImage: formData.get("signatureImage") || undefined,
+    })
+
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: parsed.error.issues[0]?.message ?? "Dados inválidos",
+    }
+  }
+
+  await prisma.user.update({
+    where: { id: session.user.id },
+    data: {
+      crm: parsed.data.crm?.trim() || null,
+      signatureText: parsed.data.signatureText?.trim() || null,
+      signatureImage: parsed.data.signatureImage || null,
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      action: "UPDATE",
+      entity: "User",
+      entityId: session.user.id,
+      details: { scope: "assinatura" },
+    },
+  })
+
+  revalidatePath("/minha-assinatura")
+  return { success: true, message: "Assinatura atualizada", userId: session.user.id }
 }

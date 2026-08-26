@@ -136,6 +136,36 @@ export default async function PlanoDetalhePage({
         </CardContent>
       </Card>
 
+      {plan.status === "APROVADO" && plan.doctor && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Assinatura do médico</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col items-start gap-3 text-sm">
+            {plan.doctor.signatureImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={plan.doctor.signatureImage}
+                alt="Assinatura do médico"
+                className="max-h-16 w-56 rounded-md border bg-background object-contain p-1"
+              />
+            ) : (
+              plan.doctor.signatureText && (
+                <p className="font-serif text-lg italic text-muted-foreground">
+                  {plan.doctor.signatureText}
+                </p>
+              )
+            )}
+            <div className="border-t pt-2">
+              <p className="font-medium">{plan.doctor.name}</p>
+              {plan.doctor.crm && (
+                <p className="text-muted-foreground">{plan.doctor.crm}</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {canApprove && (
         <div className="flex justify-end">
           <ApprovePlanButton planId={plan.id} />

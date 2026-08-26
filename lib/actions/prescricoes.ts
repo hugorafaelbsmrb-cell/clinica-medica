@@ -6,6 +6,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { getClinicSettings } from "@/lib/clinic"
+import { resolveDoctorId } from "@/lib/doctor"
 import { generatePrescriptionPdf } from "@/lib/pdf/prescription-pdf"
 import { sendDocumentMessage } from "@/lib/whatsapp/message-service"
 
@@ -52,11 +53,23 @@ export async function createPrescription(
     }
   }
 
+  // Médico responsável: o médico assina sempre com o próprio usuário;
+  // admin/secretária escolhem o médico cadastrado no formulário.
+  const doctorResult = await resolveDoctorId({
+    role: session.user.role,
+    selfId: session.user.id,
+    doctorId: formData.get("doctorId")?.toString() || null,
+    required: true,
+  })
+  if (doctorResult.error) {
+    return { success: false, message: doctorResult.error }
+  }
+
   const prescription = await prisma.prescription.create({
     data: {
       patientId,
       attendanceId,
-      doctorId: session.user.id,
+      doctorId: doctorResult.doctorId,
       items: {
         create: validItems.map((medication, index) => ({
           medication: medication.trim(),
@@ -99,6 +112,7 @@ export async function createPrescription(
           doctorName: full.doctor?.name,
           doctorCrm: full.doctor?.crm,
           doctorSignature: full.doctor?.signatureText,
+          signatureImage: full.doctor?.signatureImage,
           clinic,
           issuedAt: prescription.createdAt,
           items: full.items,

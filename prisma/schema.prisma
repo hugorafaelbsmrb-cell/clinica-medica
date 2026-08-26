@@ -136,6 +136,7 @@ model User {
   active              Boolean              @default(true)
   crm                 String? // CRM do médico (ex.: "CRM/SP 123456")
   signatureText       String? // Assinatura pré-cadastrada (ex.: "Dr. Carlos Mendes")
+  signatureImage      String? // Assinatura virtual do médico (data URL de imagem PNG/JPG)
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   attendances         Attendance[]         @relation("AttendanceDoctor")

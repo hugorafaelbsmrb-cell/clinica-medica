@@ -50,6 +50,7 @@ export default async function EditarUsuarioPage({
           role: user.role,
           crm: user.crm,
           signatureText: user.signatureText,
+          signatureImage: user.signatureImage,
         }}
       />
     </div>

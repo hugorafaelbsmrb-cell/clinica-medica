@@ -4,6 +4,7 @@ import { ptBR } from "date-fns/locale"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
+import { listActiveDoctors } from "@/lib/doctor"
 import { PrescriptionForm } from "@/components/prescricoes/prescricao-form"
 
 export const metadata: Metadata = { title: "Nova prescrição" }
@@ -13,12 +14,11 @@ export default async function NovaPrescricaoPage({
 }: {
   searchParams: Promise<{ atendimento?: string; patientId?: string }>
 }) {
-  const session = await auth()
-  requireRole(session, ["ADMIN", "MEDICO"])
+  const session = requireRole(await auth(), ["ADMIN", "MEDICO"])
 
   const { atendimento, patientId } = await searchParams
 
-  const [patients, attendances] = await Promise.all([
+  const [patients, attendances, doctors] = await Promise.all([
     prisma.patient.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
@@ -28,6 +28,7 @@ export default async function NovaPrescricaoPage({
       take: 100,
       include: { patient: true },
     }),
+    listActiveDoctors(),
   ])
 
   return (
@@ -48,6 +49,8 @@ export default async function NovaPrescricaoPage({
             { locale: ptBR }
           )}`,
         }))}
+        doctors={doctors}
+        showDoctorSelect={session.user.role !== "MEDICO"}
         preselectedAttendanceId={atendimento}
         preselectedPatientId={patientId}
       />

@@ -6,6 +6,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { getClinicSettings } from "@/lib/clinic"
+import { resolveDoctorId } from "@/lib/doctor"
 import { generatePlanSummary } from "@/lib/ai/therapeutic-plan"
 import { isAIEnabled } from "@/lib/ai/provider"
 import { generatePlanPdf } from "@/lib/pdf/plan-pdf"
@@ -51,11 +52,23 @@ export async function createPlan(
     }
   }
 
+  // Médico responsável: o médico assina sempre com o próprio usuário;
+  // admin/secretária escolhem o médico cadastrado no formulário.
+  const doctorResult = await resolveDoctorId({
+    role: session.user.role,
+    selfId: session.user.id,
+    doctorId: formData.get("doctorId")?.toString() || null,
+    required: true,
+  })
+  if (doctorResult.error) {
+    return { success: false, message: doctorResult.error }
+  }
+
   const data = parsed.data
   const plan = await prisma.therapeuticPlan.create({
     data: {
       patientId: data.patientId,
-      doctorId: session.user.id,
+      doctorId: doctorResult.doctorId,
       diagnosis: data.diagnosis,
       goals: data.goals || null,
       guidelines: data.guidelines || null,
@@ -159,6 +172,7 @@ export async function approvePlan(planId: string): Promise<ActionState> {
         doctorName: plan.doctor?.name,
         doctorCrm: plan.doctor?.crm,
         doctorSignature: plan.doctor?.signatureText,
+        signatureImage: plan.doctor?.signatureImage,
         clinic,
         updatedAt: new Date(),
         diagnosis: plan.diagnosis,

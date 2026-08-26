@@ -134,11 +134,20 @@ export default async function PrescricaoImprimirPage({
           {/* Assinatura */}
           <div className="mt-16 flex items-end justify-between">
             <div className="w-64">
-              <div className="min-h-8 border-t pt-2">
-                {(prescription.doctor?.signatureText ?? prescription.doctor?.name) && (
-                  <p className="text-center font-serif text-lg italic">
-                    {prescription.doctor?.signatureText ?? prescription.doctor?.name}
-                  </p>
+              <div className="flex min-h-8 flex-col items-center border-t pt-2">
+                {prescription.doctor?.signatureImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={prescription.doctor.signatureImage}
+                    alt="Assinatura do médico"
+                    className="max-h-14 w-48 object-contain"
+                  />
+                ) : (
+                  (prescription.doctor?.signatureText ?? prescription.doctor?.name) && (
+                    <p className="text-center font-serif text-lg italic">
+                      {prescription.doctor?.signatureText ?? prescription.doctor?.name}
+                    </p>
+                  )
                 )}
               </div>
               <p className="text-center text-sm text-muted-foreground">

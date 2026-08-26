@@ -14,6 +14,7 @@ import {
   previewSummaryWithAI,
   type ActionState,
 } from "@/lib/actions/planos"
+import type { DoctorOption } from "@/lib/doctor"
 
 type PatientOption = { id: string; name: string }
 
@@ -29,10 +30,14 @@ export type PlanInitialData = {
 export function PlanForm({
   patients,
   initial,
+  doctors,
+  showDoctorSelect,
   preselectedPatientId,
 }: {
   patients: PatientOption[]
   initial?: PlanInitialData
+  doctors: DoctorOption[]
+  showDoctorSelect: boolean
   preselectedPatientId?: string
 }) {
   const router = useRouter()
@@ -126,6 +131,29 @@ export function PlanForm({
               ))}
             </select>
           </Field>
+
+          {!isEditing && showDoctorSelect && (
+            <Field>
+              <FieldLabel>Médico responsável (assinatura) *</FieldLabel>
+              <select
+                name="doctorId"
+                required
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+              >
+                <option value="">Selecione o médico...</option>
+                {doctors.map((doctor) => (
+                  <option key={doctor.id} value={doctor.id}>
+                    {doctor.name}
+                    {doctor.crm ? ` — ${doctor.crm}` : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                A assinatura cadastrada deste médico aparece no plano
+                terapêutico (tela e PDF enviado por WhatsApp).
+              </p>
+            </Field>
+          )}
 
           <Field>
             <FieldLabel>Diagnóstico *</FieldLabel>

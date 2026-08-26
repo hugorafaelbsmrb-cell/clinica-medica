@@ -108,8 +108,27 @@ export default async function PrescricaoDetalhePage({
           <CardHeader>
             <CardTitle className="text-base">Médico responsável</CardTitle>
           </CardHeader>
-          <CardContent className="text-sm">
-            {prescription.doctor?.name ?? "—"}
+          <CardContent className="flex flex-col gap-3 text-sm">
+            <div>
+              <p className="font-medium">{prescription.doctor?.name ?? "—"}</p>
+              {prescription.doctor?.crm && (
+                <p className="text-muted-foreground">{prescription.doctor.crm}</p>
+              )}
+            </div>
+            {prescription.doctor?.signatureImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={prescription.doctor.signatureImage}
+                alt="Assinatura do médico"
+                className="h-14 w-48 rounded-md border bg-background object-contain p-1"
+              />
+            ) : (
+              prescription.doctor?.signatureText && (
+                <p className="font-serif text-lg italic text-muted-foreground">
+                  {prescription.doctor.signatureText}
+                </p>
+              )
+            )}
           </CardContent>
         </Card>
         <Card>

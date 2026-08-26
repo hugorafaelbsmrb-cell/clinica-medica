@@ -44,6 +44,8 @@ export default async function EditarPlanoPage({
       </div>
       <PlanForm
         patients={[]}
+        doctors={[]}
+        showDoctorSelect={false}
         initial={{
           id: plan.id,
           patientId: plan.patientId,

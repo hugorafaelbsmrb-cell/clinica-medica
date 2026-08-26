@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
+import { listActiveDoctors } from "@/lib/doctor"
 import { PlanForm } from "@/components/planos/plano-form"
 
 export const metadata: Metadata = { title: "Novo plano terapêutico" }
@@ -11,12 +12,11 @@ export default async function NovoPlanoPage({
 }: {
   searchParams: Promise<{ atendimento?: string; patientId?: string }>
 }) {
-  const session = await auth()
-  requireRole(session, ["ADMIN", "MEDICO"])
+  const session = requireRole(await auth(), ["ADMIN", "MEDICO"])
 
   const { atendimento, patientId } = await searchParams
 
-  const [patients, attendance] = await Promise.all([
+  const [patients, attendance, doctors] = await Promise.all([
     prisma.patient.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
@@ -24,6 +24,7 @@ export default async function NovoPlanoPage({
     atendimento
       ? prisma.attendance.findUnique({ where: { id: atendimento } })
       : Promise.resolve(null),
+    listActiveDoctors(),
   ])
 
   return (
@@ -39,6 +40,8 @@ export default async function NovoPlanoPage({
       </div>
       <PlanForm
         patients={patients}
+        doctors={doctors}
+        showDoctorSelect={session.user.role !== "MEDICO"}
         preselectedPatientId={patientId ?? attendance?.patientId}
       />
     </div>

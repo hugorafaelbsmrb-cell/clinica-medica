@@ -17,6 +17,7 @@ export type PrescriptionPdfData = {
   doctorName?: string | null
   doctorCrm?: string | null
   doctorSignature?: string | null
+  signatureImage?: string | null
   clinic?: ClinicInfo
   issuedAt: Date
   items: Array<{
@@ -121,9 +122,10 @@ export async function generatePrescriptionPdf(
     doc.moveDown(0.3)
   })
 
-  // Assinatura do médico (pré-cadastrada + CRM)
+  // Assinatura do médico (imagem pré-cadastrada ou texto de fallback + CRM)
   drawSignatureBlock(doc, {
     signatureText: data.doctorSignature ?? data.doctorName,
+    signatureImage: data.signatureImage,
     doctorName: data.doctorName,
     crm: data.doctorCrm,
   })

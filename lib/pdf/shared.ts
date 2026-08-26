@@ -64,13 +64,15 @@ export function drawClinicHeader(
 }
 
 /**
- * Desenha o bloco de assinatura: linha de assinatura, assinatura pré-cadastrada
- * em itálico (se houver), nome do médico e CRM.
+ * Desenha o bloco de assinatura: linha de assinatura, imagem da assinatura
+ * pré-cadastrada (se houver, com fallback para o texto em itálico), nome do
+ * médico e CRM.
  */
 export function drawSignatureBlock(
   doc: PDFKit.PDFDocument,
   options: {
     signatureText?: string | null
+    signatureImage?: string | null
     doctorName?: string | null
     crm?: string | null
     label?: string
@@ -85,7 +87,20 @@ export function drawSignatureBlock(
     .strokeColor("#999999")
     .stroke()
 
-  if (options.signatureText?.trim()) {
+  // Preferência pela imagem da assinatura sobre a linha; se ausente ou
+  // inválida, cai para o texto pré-cadastrado em itálico.
+  let drewImage = false
+  const image = parseLogoBuffer(options.signatureImage)
+  if (image) {
+    try {
+      doc.image(image, left, lineY - 48, { fit: [220, 44] })
+      drewImage = true
+    } catch {
+      drewImage = false
+    }
+  }
+
+  if (!drewImage && options.signatureText?.trim()) {
     doc.fontSize(13)
       .font("Helvetica-Oblique")
       .fillColor("#111111")

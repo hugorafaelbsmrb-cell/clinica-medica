@@ -12,6 +12,7 @@ import {
   createPrescription,
   type ActionState,
 } from "@/lib/actions/prescricoes"
+import type { DoctorOption } from "@/lib/doctor"
 
 type PatientOption = { id: string; name: string }
 type AttendanceOption = { id: string; label: string }
@@ -27,11 +28,15 @@ type ItemRow = {
 export function PrescriptionForm({
   patients,
   attendances,
+  doctors,
+  showDoctorSelect,
   preselectedAttendanceId,
   preselectedPatientId,
 }: {
   patients: PatientOption[]
   attendances: AttendanceOption[]
+  doctors: DoctorOption[]
+  showDoctorSelect: boolean
   preselectedAttendanceId?: string
   preselectedPatientId?: string
 }) {
@@ -112,6 +117,29 @@ export function PrescriptionForm({
               </select>
             </Field>
           </div>
+
+          {showDoctorSelect && (
+            <Field>
+              <FieldLabel>Médico responsável (assinatura) *</FieldLabel>
+              <select
+                name="doctorId"
+                required
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+              >
+                <option value="">Selecione o médico...</option>
+                {doctors.map((doctor) => (
+                  <option key={doctor.id} value={doctor.id}>
+                    {doctor.name}
+                    {doctor.crm ? ` — ${doctor.crm}` : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                A assinatura cadastrada deste médico aparece na prescrição
+                (tela, impressão e PDF enviado por WhatsApp).
+              </p>
+            </Field>
+          )}
 
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
