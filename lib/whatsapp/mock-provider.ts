@@ -36,6 +36,20 @@ export class MockProvider implements WhatsAppProvider {
     }
   }
 
+  async sendImage(
+    phone: string,
+    caption: string,
+    imageDataUrl: string
+  ): Promise<SendResult> {
+    console.log(
+      `[WhatsApp MOCK] Enviando imagem para ${phone} (${imageDataUrl.length} chars) — ${caption}`
+    )
+    return {
+      ok: true,
+      providerMessageId: `mock-img-${Date.now()}`,
+    }
+  }
+
   async validatePhone(phone: string): Promise<PhoneValidationResult> {
     console.log(`[WhatsApp MOCK] Validando número ${phone}`)
     return { ok: true, exists: true }

@@ -11,7 +11,7 @@
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { prisma } from "@/lib/prisma"
-import { getWhatsAppProvider, normalizePhone } from "./provider"
+import { getWhatsAppProvider, normalizePhone, type SendResult } from "./provider"
 
 /** Substitui variáveis {{nome}}, {{data}} no corpo do template. */
 export function renderTemplate(
@@ -392,6 +392,38 @@ export async function queueAppointmentReminders(now = new Date()): Promise<numbe
 }
 
 /**
+ * Marca a campanha como CONCLUIDA quando o fan-out terminou e não há
+ * mais mensagens pendentes dela na fila.
+ */
+async function maybeCompleteMarketingCampaign(campaignId: string): Promise<void> {
+  const [campaign, pendingCount] = await Promise.all([
+    prisma.marketingCampaign.findUnique({
+      where: { id: campaignId },
+      select: { status: true, audience: true },
+    }),
+    prisma.message.count({
+      where: { marketingCampaignId: campaignId, status: "PENDENTE" },
+    }),
+  ])
+
+  if (
+    !campaign ||
+    campaign.status === "CONCLUIDA" ||
+    campaign.status === "CANCELADA"
+  ) {
+    return
+  }
+
+  const audience = (campaign.audience ?? {}) as { fanoutDone?: boolean }
+  if (!audience.fanoutDone || pendingCount > 0) return
+
+  await prisma.marketingCampaign.update({
+    where: { id: campaignId },
+    data: { status: "CONCLUIDA" },
+  })
+}
+
+/**
  * Processa a fila: envia todas as mensagens PENDENTE cujo scheduledFor já venceu.
  * Retorna o resumo de sucessos/falhas.
  */
@@ -411,37 +443,99 @@ export async function processPendingMessages(
     take: 100,
   })
 
+  // Campanhas de marketing envolvidas no lote (uma consulta só).
+  const campaignIds = [
+    ...new Set(
+      pending
+        .filter((m) => m.type === "MARKETING" && m.marketingCampaignId)
+        .map((m) => m.marketingCampaignId!)
+    ),
+  ]
+  const campaigns = campaignIds.length
+    ? await prisma.marketingCampaign.findMany({
+        where: { id: { in: campaignIds } },
+      })
+    : []
+  const campaignById = new Map(campaigns.map((c) => [c.id, c]))
+
   let sent = 0
   let failed = 0
+  const touchedCampaigns = new Set<string>()
 
   for (const message of pending) {
+    const phone = normalizePhone(message.patient.phone ?? "")
+    const campaign = message.marketingCampaignId
+      ? campaignById.get(message.marketingCampaignId)
+      : null
+
     if (!message.patient.phone) {
       await prisma.message.update({
         where: { id: message.id },
         data: { status: "FALHA", error: "Paciente sem telefone" },
       })
       failed++
+      if (campaign) {
+        await prisma.marketingCampaign.update({
+          where: { id: campaign.id },
+          data: { failedCount: { increment: 1 } },
+        })
+        touchedCampaigns.add(campaign.id)
+      }
       continue
     }
 
-    const result = await provider.sendText(
-      normalizePhone(message.patient.phone),
-      message.content
-    )
+    // Campanha cancelada depois do fan-out: não envia.
+    if (campaign && campaign.status === "CANCELADA") {
+      await prisma.message.update({
+        where: { id: message.id },
+        data: { status: "FALHA", error: "Campanha cancelada" },
+      })
+      failed++
+      continue
+    }
+
+    // Marketing com imagem: tenta enviar a mídia com a legenda; quando o
+    // provedor não suporta ou falha, cai para texto puro (com o link).
+    let result: SendResult | undefined
+    if (campaign?.imageDataUrl && provider.sendImage) {
+      result = await provider.sendImage(phone, message.content, campaign.imageDataUrl)
+    }
+    if (!result?.ok) {
+      result = await provider.sendText(phone, message.content)
+    }
 
     if (result.ok) {
       await prisma.message.update({
         where: { id: message.id },
         data: { status: "ENVIADA", sentAt: now, error: null },
       })
+      if (campaign) {
+        await prisma.marketingCampaign.update({
+          where: { id: campaign.id },
+          data: { sentCount: { increment: 1 } },
+        })
+        touchedCampaigns.add(campaign.id)
+      }
       sent++
     } else {
       await prisma.message.update({
         where: { id: message.id },
         data: { status: "FALHA", error: result.error ?? "Erro desconhecido" },
       })
+      if (campaign) {
+        await prisma.marketingCampaign.update({
+          where: { id: campaign.id },
+          data: { failedCount: { increment: 1 } },
+        })
+        touchedCampaigns.add(campaign.id)
+      }
       failed++
     }
+  }
+
+  // Fila da campanha zerada + fan-out concluído → campanha CONCLUIDA.
+  for (const campaignId of touchedCampaigns) {
+    await maybeCompleteMarketingCampaign(campaignId)
   }
 
   return { sent, failed }

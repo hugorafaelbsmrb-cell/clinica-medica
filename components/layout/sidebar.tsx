@@ -22,6 +22,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   LogOut,
+  Megaphone,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -53,6 +54,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/planos-terapeuticos", label: "Planos Terapêuticos", icon: ClipboardList, area: "planos" },
   { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, area: "whatsapp" },
   { href: "/automacoes", label: "Automações", icon: Workflow, area: "automacoes" },
+  { href: "/marketing", label: "Marketing", icon: Megaphone, area: "marketing" },
   { href: "/financeiro", label: "Financeiro", icon: Wallet, area: "financeiro" },
   { href: "/relatorios", label: "Relatórios", icon: BarChart3, area: "relatorios" },
   { href: "/usuarios", label: "Usuários", icon: UserCog, area: "usuarios" },

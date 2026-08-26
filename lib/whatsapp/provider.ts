@@ -42,6 +42,15 @@ export interface WhatsAppProvider {
     document: Buffer,
     fileName: string
   ): Promise<SendResult>
+  /**
+   * Envia uma imagem (data URL PNG/JPEG) com legenda. Opcional: quando o
+   * provedor não implementa mídia, o chamador cai para texto puro.
+   */
+  sendImage?(
+    phone: string,
+    caption: string,
+    imageDataUrl: string
+  ): Promise<SendResult>
   /** Valida se um número está registrado no WhatsApp. */
   validatePhone(phone: string): Promise<PhoneValidationResult>
   /**

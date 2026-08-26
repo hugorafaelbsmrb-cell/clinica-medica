@@ -9,6 +9,7 @@
  * Endpoints usados (base https://api.w-api.app/v1):
  *  - POST /message/send-text     → body { phone, message }
  *  - POST /message/send-document → body { phone, document (base64|URL), extension, fileName, caption }
+ *  - POST /message/send-image    → body { phone, image (base64), caption }
  *  - GET  /contacts/phone-exists → query { phoneNumber } → { exists: boolean, phoneNumber, lid }
  *  - Webhook de mensagem recebida → evento "webhookReceived"
  */
@@ -104,6 +105,23 @@ export class WApiProvider implements WhatsAppProvider {
       document: document.toString("base64"),
       extension,
       fileName,
+      caption,
+    })
+  }
+
+  /**
+   * POST /message/send-image → body { phone, image (base64), caption }.
+   * Segue a convenção do send-document (base64 sem o prefixo data URL).
+   */
+  async sendImage(
+    phone: string,
+    caption: string,
+    imageDataUrl: string
+  ): Promise<SendResult> {
+    const base64 = imageDataUrl.includes(",") ? imageDataUrl.split(",")[1] ?? "" : imageDataUrl
+    return this.post("/message/send-image", {
+      phone,
+      image: base64,
       caption,
     })
   }

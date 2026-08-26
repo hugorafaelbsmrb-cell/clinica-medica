@@ -36,6 +36,7 @@ const TYPE_LABELS: Record<string, string> = {
   MANUAL: "Manual",
   RESPOSTA: "Resposta",
   DOCUMENTO: "Documento",
+  MARKETING: "Marketing",
 }
 
 export default async function WhatsAppPage() {

@@ -57,6 +57,7 @@ enum MessageType {
   LINK_PAGAMENTO
   LEMBRETE_PAGAMENTO
   PAGAMENTO_CONFIRMADO
+  MARKETING
 }
 
 enum MessageStatus {
@@ -367,11 +368,14 @@ model Message {
   deliveredAt    DateTime?
   readAt         DateTime?
   error          String?
+  marketingCampaignId String? // campanha de marketing que originou a mensagem
+  marketingCampaign    MarketingCampaign? @relation(fields: [marketingCampaignId], references: [id], onDelete: SetNull)
   createdAt      DateTime      @default(now())
 
   @@index([patientId])
   @@index([status])
   @@index([scheduledFor])
+  @@index([marketingCampaignId])
 }
 
 enum NotificationType {
@@ -659,6 +663,40 @@ model MedicalCertificate {
   uploadedAt        DateTime @default(now())
 
   @@index([userId])
+  @@index([status])
+}
+
+enum MarketingCampaignStatus {
+  RASCUNHO
+  AGENDADA
+  ENVIANDO
+  CONCLUIDA
+  CANCELADA
+}
+
+/**
+ * Campanha de marketing em massa (WhatsApp).
+ * O cron /api/cron/send-messages dispara campanhas AGENDADA vencidas:
+ * fan-out em lotes de Message (tipo MARKETING) e envio pela fila normal.
+ * audience (JSON): { kind: TODOS|MEDICO|ATIVOS, doctorId?, days?,
+ * total?, fanoutDone? } — total/fanoutDone são estado do envio.
+ */
+model MarketingCampaign {
+  id           String                  @id @default(cuid())
+  name         String
+  tone         String                  @default("informativo") // informativo | promocional | sazonal | evento
+  body         String                  @db.Text // suporta {{nome}}
+  imageDataUrl String?                 @db.Text // data URL PNG/JPEG (até 2 MB)
+  linkUrl      String?
+  scheduledFor DateTime
+  status       MarketingCampaignStatus @default(RASCUNHO)
+  audience     Json?
+  sentCount    Int                     @default(0)
+  failedCount  Int                     @default(0)
+  messages     Message[]
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
   @@index([status])
 }
 
