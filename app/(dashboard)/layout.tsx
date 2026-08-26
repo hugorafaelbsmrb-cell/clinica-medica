@@ -4,6 +4,7 @@ import { getClinicSettings } from "@/lib/clinic"
 import { Sidebar, MobileSidebar } from "@/components/layout/sidebar"
 import { UserMenu } from "@/components/layout/user-menu"
 import { NotificationBell } from "@/components/layout/notification-bell"
+import { BottomNav } from "@/components/layout/bottom-nav"
 
 export default async function DashboardLayout({
   children,
@@ -33,7 +34,10 @@ export default async function DashboardLayout({
               o justify-between só vê um item — o ml-auto garante que sino e
               menu do usuário fiquem sempre à direita. */}
           <div className="ml-auto flex items-center gap-1">
-            <NotificationBell />
+            {/* No celular o sino fica em destaque na barra inferior (BottomNav) */}
+            <div className="hidden lg:block">
+              <NotificationBell />
+            </div>
             <UserMenu
               name={session.user.name ?? ""}
               email={session.user.email ?? ""}
@@ -41,7 +45,10 @@ export default async function DashboardLayout({
             />
           </div>
         </header>
-        <main className="min-w-0 flex-1 bg-muted/30 p-4 md:p-6">{children}</main>
+        <main className="min-w-0 flex-1 bg-muted/30 p-4 pb-24 md:p-6 lg:pb-6">
+          {children}
+        </main>
+        <BottomNav role={session.user.role} />
       </div>
     </div>
   )
