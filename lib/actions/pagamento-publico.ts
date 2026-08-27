@@ -13,6 +13,7 @@ import { prisma } from "@/lib/prisma"
 import { getClientIp } from "@/lib/payments/ip"
 import {
   payChargeWithCard,
+  replacePaymentMethod,
   simulatePaymentPaid,
 } from "@/lib/payments/router"
 
@@ -20,6 +21,11 @@ const pagarCartaoSchema = z.object({
   /** Id da cobrança (chave pública da página de pagamento). */
   token: z.string().min(1),
   holderName: z.string().trim().min(3, "Informe o nome impresso no cartão"),
+  /** E-mail do titular é obrigatório no Asaas (payWithCreditCard). */
+  holderEmail: z
+    .string()
+    .trim()
+    .email("Informe o e-mail do titular do cartão"),
   number: z.string().regex(/^\d{13,19}$/, "Número do cartão inválido"),
   expiryMonth: z.string().regex(/^(0[1-9]|1[0-2])$/, "Mês de validade inválido"),
   expiryYear: z.string().regex(/^\d{4}$/, "Ano de validade inválido"),
@@ -59,6 +65,7 @@ export async function pagarComCartao(
     payment.id,
     {
       holderName: parsed.data.holderName,
+      holderEmail: parsed.data.holderEmail,
       number: parsed.data.number,
       expiryMonth: parsed.data.expiryMonth,
       expiryYear: parsed.data.expiryYear,
@@ -66,6 +73,54 @@ export async function pagarComCartao(
     },
     remoteIp
   )
+}
+
+const trocarMetodoSchema = z.object({
+  /** Id da cobrança (chave pública da página de pagamento). */
+  token: z.string().min(1),
+  // Dinheiro não entra aqui: a página pública é só para meios online.
+  method: z.enum(["PIX", "CARTAO", "APPLE_PAY"]),
+})
+
+export type TrocarMetodoPagamentoState = {
+  success: boolean
+  message: string
+  /** Id da nova cobrança (a página recarrega com o novo token). */
+  newToken?: string
+}
+
+/**
+ * Troca a forma de pagamento pela página pública /pagar/[id]: cancela a
+ * cobrança atual e gera uma nova no meio escolhido. Devolve o id da nova
+ * cobrança para a página atualizar o próprio link.
+ */
+export async function trocarMetodoPagamentoPorToken(
+  input: z.infer<typeof trocarMetodoSchema>
+): Promise<TrocarMetodoPagamentoState> {
+  const parsed = trocarMetodoSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: parsed.error.issues[0]?.message ?? "Dados inválidos",
+    }
+  }
+
+  const payment = await prisma.payment.findUnique({
+    where: { id: parsed.data.token },
+  })
+  if (!payment) return { success: false, message: "Cobrança não encontrada" }
+  if (payment.status !== "PENDENTE") {
+    return { success: false, message: "Esta cobrança já foi finalizada" }
+  }
+
+  const result = await replacePaymentMethod(payment.id, parsed.data.method)
+  if (!result.success) return { success: false, message: result.message }
+
+  return {
+    success: true,
+    message: result.message,
+    newToken: result.newPaymentId,
+  }
 }
 
 /**

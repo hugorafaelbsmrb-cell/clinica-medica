@@ -183,7 +183,8 @@ export type AsaasCardInput = {
   expiryYear: string
   /** Código de segurança. */
   ccv: string
-  holderEmail?: string
+  /** E-mail do titular — obrigatório no Asaas (payWithCreditCard). */
+  holderEmail: string
   holderCpf?: string
   holderPostalCode?: string
   holderAddressNumber?: string
@@ -214,7 +215,9 @@ export async function payAsaasCard(
       },
       creditCardHolderInfo: {
         name: card.holderName.slice(0, 200),
-        ...(card.holderEmail ? { email: card.holderEmail.slice(0, 100) } : {}),
+        // Sem e-mail o Asaas recusa a transação
+        // ("Informe o email do titular do cartão.").
+        email: card.holderEmail.slice(0, 100),
         ...(card.holderCpf ? { cpfCnpj: card.holderCpf } : {}),
         ...(card.holderPostalCode ? { postalCode: card.holderPostalCode } : {}),
         ...(card.holderAddressNumber

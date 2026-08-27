@@ -10,6 +10,7 @@ import {
   CreditCard,
   FlaskConical,
   Loader2,
+  RefreshCw,
   XCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -18,6 +19,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import {
   pagarComCartao,
   simularPagamentoPorToken,
+  trocarMetodoPagamentoPorToken,
   verificarPagamentoPorToken,
 } from "@/lib/actions/pagamento-publico"
 
@@ -60,6 +62,12 @@ const MONTH_LABELS = [
   "novembro",
   "dezembro",
 ]
+
+const METODO_LABEL: Record<string, string> = {
+  PIX: "PIX (QR code)",
+  CARTAO: "Cartão de crédito",
+  APPLE_PAY: "Apple Pay",
+}
 
 function formatDateTime(iso: string): { date: string; time: string } {
   const d = new Date(iso)
@@ -110,9 +118,12 @@ export function PagamentoPublicoForm({ data }: { data: PagamentoPublicoData }) {
 
   // Cartão de crédito transparente
   const [cardHolder, setCardHolder] = useState("")
+  const [cardHolderEmail, setCardHolderEmail] = useState("")
   const [cardNumber, setCardNumber] = useState("")
   const [cardExpiry, setCardExpiry] = useState("")
   const [cardCvv, setCardCvv] = useState("")
+  // Seletor de troca de forma de pagamento
+  const [showTrocarMetodo, setShowTrocarMetodo] = useState(false)
   const [pending, startPending] = useTransition()
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -165,6 +176,11 @@ export function PagamentoPublicoForm({ data }: { data: PagamentoPublicoData }) {
       toast.error("Informe o nome impresso no cartão.")
       return
     }
+    // O Asaas exige o e-mail do titular para processar o cartão.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cardHolderEmail.trim())) {
+      toast.error("Informe o e-mail do titular do cartão.")
+      return
+    }
     if (!/^\d{3,4}$/.test(cardCvv)) {
       toast.error("Informe o código de segurança (CVV).")
       return
@@ -173,6 +189,7 @@ export function PagamentoPublicoForm({ data }: { data: PagamentoPublicoData }) {
       const result = await pagarComCartao({
         token: data.token,
         holderName: cardHolder.trim(),
+        holderEmail: cardHolderEmail.trim(),
         number: digits,
         expiryMonth: expiryDigits.slice(0, 2),
         expiryYear: `20${expiryDigits.slice(2)}`,
@@ -199,6 +216,21 @@ export function PagamentoPublicoForm({ data }: { data: PagamentoPublicoData }) {
       } else {
         toast.error(result.message)
       }
+    })
+  }
+
+  // Troca a forma de pagamento: a página recarrega com a nova cobrança
+  function trocarMetodo(method: "PIX" | "CARTAO" | "APPLE_PAY") {
+    startPending(async () => {
+      const result = await trocarMetodoPagamentoPorToken({
+        token: data.token,
+        method,
+      })
+      if (result.success && result.newToken) {
+        window.location.href = `/pagar/${result.newToken}`
+        return
+      }
+      toast.error(result.message)
     })
   }
 
@@ -364,6 +396,14 @@ export function PagamentoPublicoForm({ data }: { data: PagamentoPublicoData }) {
                   className="h-12"
                 />
                 <Input
+                  type="email"
+                  placeholder="E-mail do titular do cartão"
+                  value={cardHolderEmail}
+                  onChange={(e) => setCardHolderEmail(e.target.value)}
+                  autoComplete="email"
+                  className="h-12"
+                />
+                <Input
                   placeholder="Número do cartão"
                   value={cardNumber}
                   onChange={(e) => setCardNumber(maskCardNumber(e.target.value))}
@@ -437,6 +477,58 @@ export function PagamentoPublicoForm({ data }: { data: PagamentoPublicoData }) {
               )}
               Já paguei — verificar
             </Button>
+
+            {(
+              ["PIX", "CARTAO", "APPLE_PAY"] as const
+            ).filter((m) => m !== data.method).length > 0 && (
+              <div className="flex flex-col gap-2">
+                {!showTrocarMetodo ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setShowTrocarMetodo(true)}
+                    disabled={pending}
+                    className="h-12 text-base"
+                  >
+                    <RefreshCw className="h-5 w-5" />
+                    Trocar forma de pagamento
+                  </Button>
+                ) : (
+                  <div className="rounded-xl border-2 border-border p-3">
+                    <p className="mb-2 text-center text-sm text-muted-foreground">
+                      Escolha outra forma de pagamento:
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      {(["PIX", "CARTAO", "APPLE_PAY"] as const)
+                        .filter((m) => m !== data.method)
+                        .map((metodo) => (
+                          <Button
+                            key={metodo}
+                            type="button"
+                            variant="outline"
+                            onClick={() => trocarMetodo(metodo)}
+                            disabled={pending}
+                            className="h-12 text-base"
+                          >
+                            {pending ? (
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                            ) : null}
+                            {METODO_LABEL[metodo]}
+                          </Button>
+                        ))}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setShowTrocarMetodo(false)}
+                        className="h-10 text-sm"
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <p className="text-center text-sm text-muted-foreground">
               Assim que o pagamento for confirmado, tudo é atualizado

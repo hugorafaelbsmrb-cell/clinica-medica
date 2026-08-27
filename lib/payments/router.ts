@@ -13,6 +13,8 @@ import { prisma } from "@/lib/prisma"
 import { isValidCpf } from "@/lib/cpf"
 import { getClinicSettings } from "@/lib/clinic"
 import { getPaymentSettings } from "@/lib/payments/settings"
+import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
+import { paymentPageUrl } from "@/lib/payments/url"
 import {
   createAsaasCharge,
   getAsaasPaymentStatus,
@@ -27,7 +29,10 @@ import {
   sendImmediateMessage,
   queueAppointmentConfirmation,
 } from "@/lib/whatsapp/message-service"
-import { defaultAutomationMessage } from "@/lib/whatsapp/automations"
+import {
+  defaultAutomationMessage,
+  queuePaymentLinkMessage,
+} from "@/lib/whatsapp/automations"
 import { notifyAppointmentConfirmed } from "@/lib/notifications"
 import type {
   CreateChargeInput,
@@ -167,6 +172,8 @@ export type CardChargeInput = {
   expiryMonth: string
   expiryYear: string
   ccv: string
+  /** E-mail do titular — obrigatório no Asaas para payWithCreditCard. */
+  holderEmail: string
 }
 
 /**
@@ -232,7 +239,7 @@ export async function payChargeWithCard(
     expiryMonth: card.expiryMonth,
     expiryYear: card.expiryYear,
     ccv: card.ccv,
-    holderEmail: payment.patient?.email ?? undefined,
+    holderEmail: card.holderEmail,
     holderCpf: cpf,
     holderPostalCode: payment.patient?.zipCode?.replace(/\D/g, "") || undefined,
     holderAddressNumber: payment.patient?.number ?? undefined,
@@ -265,6 +272,199 @@ export async function payChargeWithCard(
     pending: true,
     message:
       "Pagamento em análise pelo banco. Continue nesta tela — confirmamos automaticamente.",
+  }
+}
+
+/**
+ * Troca a forma de pagamento de uma cobrança PENDENTE: gera a nova cobrança
+ * no meio escolhido e só então cancela a anterior (e o lançamento vinculado).
+ * Dinheiro não gera cobrança — só vale para consultas: cancela a cobrança
+ * pendente e confirma a consulta direto, para pagamento no ato.
+ */
+export async function replacePaymentMethod(
+  paymentId: string,
+  newMethod: PaymentMethodType | "DINHEIRO"
+): Promise<{
+  success: boolean
+  message: string
+  /** true = trocou para dinheiro; a consulta já está confirmada. */
+  cash?: boolean
+  scheduledAt?: string
+  /** Id da nova cobrança criada (atualiza o link público /pagar). */
+  newPaymentId?: string
+}> {
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    include: {
+      patient: { select: { id: true, name: true, cpf: true } },
+      attendance: {
+        select: {
+          id: true,
+          status: true,
+          type: true,
+          patientId: true,
+          scheduledAt: true,
+          cancelToken: true,
+        },
+      },
+      financialEntry: {
+        select: {
+          type: true,
+          category: true,
+          description: true,
+          value: true,
+          dueDate: true,
+        },
+      },
+    },
+  })
+  if (!payment) return { success: false, message: "Cobrança não encontrada" }
+  if (payment.status !== "PENDENTE") {
+    return { success: false, message: "Esta cobrança já foi finalizada" }
+  }
+  if (newMethod === payment.method) {
+    return {
+      success: false,
+      message: "A cobrança já está nesta forma de pagamento",
+    }
+  }
+
+  const settings = await getPaymentSettings()
+  const methodEnabled =
+    newMethod === "PIX"
+      ? settings.pixEnabled
+      : newMethod === "CARTAO"
+        ? settings.cartaoEnabled
+        : newMethod === "APPLE_PAY"
+          ? settings.applePayEnabled && Boolean(settings.stripeSecretKey)
+          : settings.dinheiroEnabled
+  if (!methodEnabled) {
+    return {
+      success: false,
+      message:
+        "Esta forma de pagamento não está mais disponível. Escolha outra, por favor.",
+    }
+  }
+
+  const patientId = payment.patientId ?? payment.attendance?.patientId
+
+  // Dinheiro: sem cobrança antecipada — só para consultas agendadas.
+  if (newMethod === "DINHEIRO") {
+    if (!payment.attendanceId || !payment.attendance) {
+      return {
+        success: false,
+        message:
+          "Pagamento em dinheiro só está disponível para consultas agendadas.",
+      }
+    }
+    if (payment.attendance.type === "TELECONSULTA") {
+      return {
+        success: false,
+        message: "Pagamento em dinheiro não está disponível para teleconsulta.",
+      }
+    }
+
+    await cancelPendingPaymentAndEntry(
+      payment.id,
+      "troca para dinheiro no atendimento"
+    )
+    await prisma.attendance.update({
+      where: { id: payment.attendance.id },
+      data: {
+        status: "AGENDADO",
+        value: Number(payment.amount),
+        paymentMethod: "DINHEIRO",
+      },
+    })
+    await prisma.auditLog.create({
+      data: {
+        action: "UPDATE",
+        entity: "Attendance",
+        entityId: payment.attendance.id,
+        patientId: patientId ?? undefined,
+        details: {
+          motivo: "Troca de forma de pagamento — dinheiro no atendimento",
+        },
+      },
+    })
+    if (patientId) {
+      await queueAppointmentConfirmation(patientId, {
+        id: payment.attendance.id,
+        scheduledAt: payment.attendance.scheduledAt,
+        cancelToken: payment.attendance.cancelToken,
+      })
+      await notifyAppointmentConfirmed(payment.attendance.id)
+    }
+    return {
+      success: true,
+      message:
+        "Consulta confirmada! O pagamento será em dinheiro no atendimento.",
+      cash: true,
+      scheduledAt: payment.attendance.scheduledAt.toISOString(),
+    }
+  }
+
+  // Nova cobrança primeiro (se falhar, a antiga continua válida), com um
+  // lançamento financeiro copiado do anterior (mesma origem e mesmo valor).
+  const newEntry = await prisma.financialEntry.create({
+    data: {
+      type: payment.financialEntry?.type ?? "RECEITA",
+      category: payment.financialEntry?.category ?? "CONSULTA_PRESENCIAL",
+      description:
+        payment.financialEntry?.description ??
+        `Consulta — ${payment.patient?.name ?? "paciente"}`,
+      value: payment.financialEntry?.value ?? Number(payment.amount),
+      dueDate: payment.financialEntry?.dueDate ?? new Date(),
+      status: "PENDENTE",
+      attendanceId: payment.attendanceId,
+    },
+  })
+
+  const charge = await createCharge({
+    method: newMethod,
+    amountCents: Math.round(Number(payment.amount) * 100),
+    description:
+      payment.financialEntry?.description ??
+      `Consulta — ${payment.patient?.name ?? "paciente"}`,
+    customerName: payment.patient?.name,
+    customerCpf: payment.patient?.cpf ?? undefined,
+    financialEntryId: newEntry.id,
+    attendanceId: payment.attendanceId ?? undefined,
+    patientId: payment.patientId ?? undefined,
+    followUpId: payment.followUpId ?? undefined,
+    cycleNumber: payment.cycleNumber ?? undefined,
+  })
+
+  if (!charge.ok || !charge.paymentId) {
+    await prisma.financialEntry.delete({ where: { id: newEntry.id } })
+    console.error(
+      "[Pagamento] Falha ao trocar forma de pagamento:",
+      charge.error
+    )
+    return {
+      success: false,
+      message:
+        "Não foi possível gerar o novo pagamento agora. Tente novamente em instantes.",
+    }
+  }
+
+  // Só encerra a cobrança antiga depois que a nova foi criada com sucesso.
+  await cancelPendingPaymentAndEntry(payment.id, `troca para ${newMethod}`)
+
+  // Novo link de pagamento via WhatsApp (consentimento checado pelo serviço)
+  if (patientId) {
+    await queuePaymentLinkMessage(patientId, {
+      checkoutUrl: charge.checkoutUrl ?? null,
+      pixCopiaCola: charge.pixCopiaCola ?? null,
+      paymentUrl: paymentPageUrl(charge.paymentId),
+      amount: Number(payment.amount),
+    })
+  }
+
+  return {
+    success: true,
+    message: "Forma de pagamento alterada!",
+    newPaymentId: charge.paymentId,
   }
 }
 

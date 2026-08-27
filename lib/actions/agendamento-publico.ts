@@ -17,7 +17,7 @@ import { getAvailableSlots, isSlotFree } from "@/lib/agenda/service"
 import { queueAppointmentConfirmation } from "@/lib/whatsapp/message-service"
 import { queuePaymentLinkMessage } from "@/lib/whatsapp/automations"
 import { getAppointmentSettings } from "@/lib/agenda/service"
-import { createCharge, payChargeWithCard, simulatePaymentPaid } from "@/lib/payments/router"
+import { createCharge, payChargeWithCard, replacePaymentMethod, simulatePaymentPaid } from "@/lib/payments/router"
 import { getClientIp } from "@/lib/payments/ip"
 import { paymentPageUrl } from "@/lib/payments/url"
 import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
@@ -790,6 +790,11 @@ const pagarCartaoAgendamentoSchema = z.object({
   /** Token público do horário reservado (mesma proteção da simulação). */
   token: z.string().min(1),
   holderName: z.string().trim().min(3, "Informe o nome impresso no cartão"),
+  /** E-mail do titular é obrigatório no Asaas (payWithCreditCard). */
+  holderEmail: z
+    .string()
+    .trim()
+    .email("Informe o e-mail do titular do cartão"),
   number: z.string().regex(/^\d{13,19}$/, "Número do cartão inválido"),
   expiryMonth: z.string().regex(/^(0[1-9]|1[0-2])$/, "Mês de validade inválido"),
   expiryYear: z.string().regex(/^\d{4}$/, "Ano de validade inválido"),
@@ -839,6 +844,7 @@ export async function pagarComCartaoAgendamento(
     payment.id,
     {
       holderName: parsed.data.holderName,
+      holderEmail: parsed.data.holderEmail,
       number: parsed.data.number,
       expiryMonth: parsed.data.expiryMonth,
       expiryYear: parsed.data.expiryYear,
@@ -846,6 +852,98 @@ export async function pagarComCartaoAgendamento(
     },
     remoteIp
   )
+}
+
+const trocarMetodoSchema = z.object({
+  attendanceId: z.string().min(1),
+  /** Token público do horário reservado (mesma proteção do pagamento). */
+  token: z.string().min(1),
+  method: z.enum(["PIX", "CARTAO", "APPLE_PAY", "DINHEIRO"]),
+})
+
+export type TrocarMetodoAgendamentoState = {
+  success: boolean
+  message: string
+  scheduledAt?: string
+  /** Novo pagamento quando o meio trocado continua cobrando antecipado. */
+  payment?: AgendarState["payment"]
+  /** true = trocou para dinheiro; a consulta já está confirmada. */
+  cash?: boolean
+}
+
+/**
+ * Troca a forma de pagamento da reserva pendente: cancela a cobrança atual
+ * e gera uma nova no meio escolhido (ou confirma na hora, no dinheiro).
+ * Validado pelo token público do horário — quem não tem o link não troca.
+ */
+export async function trocarMetodoPagamentoAgendamento(
+  input: z.infer<typeof trocarMetodoSchema>
+): Promise<TrocarMetodoAgendamentoState> {
+  const parsed = trocarMetodoSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: parsed.error.issues[0]?.message ?? "Dados inválidos",
+    }
+  }
+
+  const attendance = await prisma.attendance.findFirst({
+    where: { id: parsed.data.attendanceId, cancelToken: parsed.data.token },
+    include: { payments: true },
+  })
+  if (!attendance) return { success: false, message: "Reserva não encontrada" }
+
+  const payment =
+    attendance.payments.find((p) => p.status === "PENDENTE") ??
+    attendance.payments[0]
+  if (!payment || payment.status !== "PENDENTE") {
+    return {
+      success: false,
+      message: "Cobrança não encontrada ou já finalizada",
+    }
+  }
+
+  const result = await replacePaymentMethod(payment.id, parsed.data.method)
+  if (!result.success) return { success: false, message: result.message }
+
+  if (result.cash) {
+    return {
+      success: true,
+      message: result.message,
+      scheduledAt: result.scheduledAt,
+      cash: true,
+    }
+  }
+
+  if (result.newPaymentId) {
+    const novo = await prisma.payment.findUnique({
+      where: { id: result.newPaymentId },
+    })
+    if (novo) {
+      // Neste ponto o meio nunca é DINHEIRO (voltaria antes com cash: true)
+      const method = parsed.data.method as "PIX" | "CARTAO" | "APPLE_PAY"
+      return {
+        success: true,
+        message: result.message,
+        payment: {
+          attendanceId: attendance.id,
+          token: attendance.cancelToken ?? "",
+          method,
+          amount: Number(novo.amount),
+          checkoutUrl: novo.checkoutUrl,
+          pixCopiaCola: novo.pixCopiaCola,
+          pixQrCodeUrl: novo.pixQrCodeUrl,
+          mock: novo.provider === "MOCK",
+          pricingZone: (attendance.pricingZone as DomiciliarZone | null) ?? null,
+        },
+      }
+    }
+  }
+
+  return {
+    success: false,
+    message: "Não foi possível gerar o novo pagamento agora. Tente novamente.",
+  }
 }
 
 export type CancelState = {

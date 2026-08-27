@@ -22,6 +22,7 @@ import {
   Loader2,
   LocateFixed,
   QrCode,
+  RefreshCw,
   Stethoscope,
   Video,
   Wallet,
@@ -50,6 +51,7 @@ import {
   pagarComCartaoAgendamento,
   reverseGeocodeCoordinates,
   simularPagamentoAgendamento,
+  trocarMetodoPagamentoAgendamento,
   verificarPagamentoAgendamento,
   type AgendarState,
   type ConsultasPublicasResult,
@@ -101,6 +103,13 @@ const MONTH_LABELS = [
   "novembro",
   "dezembro",
 ]
+
+const METODO_LABEL: Record<string, string> = {
+  PIX: "PIX (QR code)",
+  CARTAO: "Cartão de crédito",
+  APPLE_PAY: "Apple Pay",
+  DINHEIRO: "Dinheiro no atendimento",
+}
 
 function formatDateTime(iso: string): { date: string; time: string } {
   const d = new Date(iso)
@@ -254,10 +263,13 @@ export function CadastroWizard() {
 
   // Cartão de crédito transparente (checkout direto no sistema)
   const [cardHolder, setCardHolder] = useState("")
+  const [cardHolderEmail, setCardHolderEmail] = useState("")
   const [cardNumber, setCardNumber] = useState("")
   const [cardExpiry, setCardExpiry] = useState("")
   const [cardCvv, setCardCvv] = useState("")
   const [cardPayPending, startCardPayment] = useTransition()
+  // Seletor de troca de forma de pagamento na tela de pagamento
+  const [showTrocarMetodo, setShowTrocarMetodo] = useState(false)
 
   // Consulta em loop se o pagamento da reserva já caiu (webhook)
   useEffect(() => {
@@ -661,6 +673,39 @@ export function CadastroWizard() {
     })
   }
 
+  // Troca a forma de pagamento da reserva (nova cobrança no meio escolhido)
+  function trocarMetodo(
+    method: "PIX" | "CARTAO" | "APPLE_PAY" | "DINHEIRO"
+  ) {
+    if (!paymentData) return
+    startAgendar(async () => {
+      const result = await trocarMetodoPagamentoAgendamento({
+        attendanceId: paymentData.attendanceId,
+        token: paymentData.token,
+        method,
+      })
+      if (!result.success) {
+        toast.error(result.message)
+        return
+      }
+      if (result.cash) {
+        // Troca para dinheiro: a consulta já está confirmada
+        setSuccessDate(result.scheduledAt ?? paymentDate)
+        setSuccessMessage(result.message)
+        setPhase("sucesso")
+        return
+      }
+      if (result.payment) {
+        setPaymentData(result.payment)
+        setMetodoPagamento(method)
+        setShowTrocarMetodo(false)
+        toast.success(result.message)
+        return
+      }
+      toast.error("Não foi possível alterar a forma de pagamento.")
+    })
+  }
+
   /** Máscara 0000 0000 0000 0000 para o número do cartão. */
   function maskCardNumber(value: string): string {
     const digits = value.replace(/\D/g, "").slice(0, 16)
@@ -696,6 +741,11 @@ export function CadastroWizard() {
       toast.error("Informe o nome impresso no cartão.")
       return
     }
+    // O Asaas exige o e-mail do titular para processar o cartão.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cardHolderEmail.trim())) {
+      toast.error("Informe o e-mail do titular do cartão.")
+      return
+    }
     if (!/^\d{3,4}$/.test(cardCvv)) {
       toast.error("Informe o código de segurança (CVV).")
       return
@@ -705,6 +755,7 @@ export function CadastroWizard() {
         attendanceId: paymentData.attendanceId,
         token: paymentData.token,
         holderName: cardHolder.trim(),
+        holderEmail: cardHolderEmail.trim(),
         number: digits,
         expiryMonth: expiryDigits.slice(0, 2),
         expiryYear: `20${expiryDigits.slice(2)}`,
@@ -804,6 +855,23 @@ export function CadastroWizard() {
     const valor = paymentData.amount.toLocaleString("pt-BR", {
       minimumFractionDigits: 2,
     })
+    // Outras formas de pagamento liberadas (exceto a atual) para a troca
+    const outrosMetodos: ("PIX" | "CARTAO" | "APPLE_PAY" | "DINHEIRO")[] = []
+    if (agenda?.paymentMethods.pix && paymentData.method !== "PIX") {
+      outrosMetodos.push("PIX")
+    }
+    if (agenda?.paymentMethods.cartao && paymentData.method !== "CARTAO") {
+      outrosMetodos.push("CARTAO")
+    }
+    if (agenda?.paymentMethods.applePay && paymentData.method !== "APPLE_PAY") {
+      outrosMetodos.push("APPLE_PAY")
+    }
+    if (
+      agenda?.paymentMethods.dinheiro &&
+      tipoConsulta !== "TELECONSULTA"
+    ) {
+      outrosMetodos.push("DINHEIRO")
+    }
     return (
       <Card className="w-full max-w-md">
         <CardContent className="flex flex-col gap-5 py-10">
@@ -908,6 +976,14 @@ export function CadastroWizard() {
                     className="h-12"
                   />
                   <Input
+                    type="email"
+                    placeholder="E-mail do titular do cartão"
+                    value={cardHolderEmail}
+                    onChange={(e) => setCardHolderEmail(e.target.value)}
+                    autoComplete="email"
+                    className="h-12"
+                  />
+                  <Input
                     placeholder="Número do cartão"
                     value={cardNumber}
                     onChange={(e) => setCardNumber(maskCardNumber(e.target.value))}
@@ -981,6 +1057,54 @@ export function CadastroWizard() {
                 )}
                 Já paguei — verificar
               </Button>
+
+              {outrosMetodos.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  {!showTrocarMetodo ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setShowTrocarMetodo(true)}
+                      disabled={agendarPending}
+                      className="h-12 text-base"
+                    >
+                      <RefreshCw className="h-5 w-5" />
+                      Trocar forma de pagamento
+                    </Button>
+                  ) : (
+                    <div className="rounded-xl border-2 border-border p-3">
+                      <p className="mb-2 text-center text-sm text-muted-foreground">
+                        Escolha outra forma de pagamento:
+                      </p>
+                      <div className="flex flex-col gap-2">
+                        {outrosMetodos.map((metodo) => (
+                          <Button
+                            key={metodo}
+                            type="button"
+                            variant="outline"
+                            onClick={() => trocarMetodo(metodo)}
+                            disabled={agendarPending}
+                            className="h-12 text-base"
+                          >
+                            {agendarPending ? (
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                            ) : null}
+                            {METODO_LABEL[metodo]}
+                          </Button>
+                        ))}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => setShowTrocarMetodo(false)}
+                          className="h-10 text-sm"
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <p className="text-center text-sm text-muted-foreground">
                 Assim que o pagamento for confirmado, sua consulta é confirmada
