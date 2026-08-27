@@ -4,6 +4,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { normalizePhone } from "@/lib/whatsapp/provider"
 import { queueFirstContact } from "@/lib/whatsapp/message-service"
+import { isValidCpf } from "@/lib/cpf"
 
 /** Formata 11 dígitos como XXX.XXX.XXX-XX (para busca de CPFs já formatados). */
 function formatCpf(digits: string): string {
@@ -25,6 +26,12 @@ const cadastroSchema = z.object({
     .refine(
       (value) => value.length === 0 || value.length === 11,
       "Informe um CPF válido com 11 números"
+    )
+    // Dígitos verificadores: CPF inválido derruba a cobrança no gateway
+    // (o Asaas recusa com "CPF/CNPJ inválido").
+    .refine(
+      (value) => value.length === 0 || isValidCpf(value),
+      "Este CPF não é válido — confira os números digitados"
     ),
   phone: z
     .string()

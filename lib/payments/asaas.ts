@@ -6,8 +6,8 @@
  *
  * Meios de pagamento:
  *  - PIX: QR code + copia-e-cola já vêm na resposta;
- *  - cartão: o Asaas devolve o link de pagamento (invoiceUrl) com o
- *    checkout do cartão hospedado por ele.
+ *  - cartão: cobrança criada com billingType CREDIT_CARD e paga de forma
+ *    transparente via payWithCreditCard (sem checkout hospedado do Asaas).
  * Documentação: https://docs.asaas.com/reference/api-de-pagamentos
  */
 import type {
@@ -16,6 +16,7 @@ import type {
   NormalizedPaymentEvent,
   ProviderStatusResult,
 } from "@/lib/payments/types"
+import { isValidCpf } from "@/lib/cpf"
 
 const PROD_BASE_URL = "https://api.asaas.com/v3"
 const SANDBOX_BASE_URL = "https://api-sandbox.asaas.com/v3"
@@ -133,7 +134,9 @@ export async function createAsaasCharge(
     if (input.customerName) {
       body.customer = {
         name: input.customerName.slice(0, 255),
-        ...(input.customerCpf
+        // CPF inválido derruba a cobrança no Asaas ("CPF/CNPJ inválido");
+        // nesse caso omitimos o campo e a cobrança segue só com o nome.
+        ...(input.customerCpf && isValidCpf(input.customerCpf)
           ? { cpfCnpj: input.customerCpf.replace(/\D/g, "") }
           : {}),
       }
@@ -165,6 +168,86 @@ export async function createAsaasCharge(
     return {
       ok: false,
       error: "Falha ao conectar no Asaas. Verifique a conexão e a chave.",
+    }
+  }
+}
+
+export type AsaasCardInput = {
+  /** Nome impresso no cartão. */
+  holderName: string
+  /** Número do cartão (somente dígitos). */
+  number: string
+  /** Mês de validade "MM". */
+  expiryMonth: string
+  /** Ano de validade "AAAA". */
+  expiryYear: string
+  /** Código de segurança. */
+  ccv: string
+  holderEmail?: string
+  holderCpf?: string
+  holderPostalCode?: string
+  holderAddressNumber?: string
+  holderPhone?: string
+  /** IP do comprador (análise antifraude). */
+  remoteIp?: string
+}
+
+/**
+ * Paga uma cobrança já criada com cartão de crédito, de forma transparente:
+ * o cartão é processado direto no Asaas (payWithCreditCard), sem checkout
+ * hospedado. Cartão aprovado volta com status CONFIRMED; recusado, o Asaas
+ * responde 400 com a descrição do motivo (a cobrança não é persistida).
+ */
+export async function payAsaasCard(
+  providerPaymentId: string,
+  apiKey: string,
+  card: AsaasCardInput
+): Promise<{ ok: boolean; status?: string; paidAt?: Date; error?: string }> {
+  try {
+    const body: Record<string, unknown> = {
+      creditCard: {
+        holderName: card.holderName.slice(0, 100),
+        number: card.number,
+        expiryMonth: card.expiryMonth,
+        expiryYear: card.expiryYear,
+        ccv: card.ccv,
+      },
+      creditCardHolderInfo: {
+        name: card.holderName.slice(0, 200),
+        ...(card.holderEmail ? { email: card.holderEmail.slice(0, 100) } : {}),
+        ...(card.holderCpf ? { cpfCnpj: card.holderCpf } : {}),
+        ...(card.holderPostalCode ? { postalCode: card.holderPostalCode } : {}),
+        ...(card.holderAddressNumber
+          ? { addressNumber: card.holderAddressNumber.slice(0, 20) }
+          : {}),
+        ...(card.holderPhone ? { mobilePhone: card.holderPhone } : {}),
+      },
+    }
+    if (card.remoteIp) body.remoteIp = card.remoteIp
+
+    const { response } = await asaasFetch(
+      apiKey,
+      `/payments/${providerPaymentId}/payWithCreditCard`,
+      { method: "POST", body: JSON.stringify(body) }
+    )
+    const data = (await response.json().catch(() => ({}))) as AsaasPayment & {
+      errors?: { description?: string }[]
+    }
+
+    if (!response.ok) {
+      const detail =
+        data.errors?.[0]?.description ?? `Asaas respondeu ${response.status}`
+      return { ok: false, error: detail }
+    }
+    return {
+      ok: true,
+      status: data.status,
+      paidAt: data.paymentDate ? new Date(data.paymentDate) : undefined,
+    }
+  } catch {
+    return {
+      ok: false,
+      error: "Falha ao conectar no Asaas ao processar o cartão.",
     }
   }
 }

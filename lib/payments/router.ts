@@ -10,9 +10,14 @@
  * gateways é normalizado aqui e baixa o lançamento do Financeiro sozinho.
  */
 import { prisma } from "@/lib/prisma"
+import { isValidCpf } from "@/lib/cpf"
 import { getClinicSettings } from "@/lib/clinic"
 import { getPaymentSettings } from "@/lib/payments/settings"
-import { createAsaasCharge, getAsaasPaymentStatus } from "@/lib/payments/asaas"
+import {
+  createAsaasCharge,
+  getAsaasPaymentStatus,
+  payAsaasCard,
+} from "@/lib/payments/asaas"
 import {
   createStripeCheckout,
   getStripeCheckoutStatus,
@@ -153,6 +158,114 @@ export async function createCharge(
   })
 
   return { ...result, paymentId: payment.id, provider }
+}
+
+/** Dados do cartão coletados no checkout transparente do próprio sistema. */
+export type CardChargeInput = {
+  holderName: string
+  number: string
+  expiryMonth: string
+  expiryYear: string
+  ccv: string
+}
+
+/**
+ * Paga uma cobrança PENDENTE do Asaas com cartão de crédito sem sair do
+ * sistema (payWithCreditCard): os dados do portador vêm do cadastro do
+ * paciente e o cartão é processado direto no gateway. Cartão aprovado
+ * (CONFIRMED/RECEIVED) já baixa a cobrança e confirma o horário reservado;
+ * recusado, o erro do gateway volta para exibir ao paciente.
+ */
+export async function payChargeWithCard(
+  paymentId: string,
+  card: CardChargeInput,
+  remoteIp?: string
+): Promise<{
+  success: boolean
+  message: string
+  scheduledAt?: string
+  /** true = em análise (ex.: antifraude); confirmação sai pelo webhook. */
+  pending?: boolean
+}> {
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    include: {
+      patient: {
+        select: {
+          email: true,
+          cpf: true,
+          zipCode: true,
+          number: true,
+          phone: true,
+        },
+      },
+      attendance: { select: { scheduledAt: true } },
+    },
+  })
+  if (!payment) return { success: false, message: "Cobrança não encontrada" }
+  if (payment.provider !== "ASAAS") {
+    return {
+      success: false,
+      message: "Esta cobrança não aceita cartão direto no sistema",
+    }
+  }
+  if (payment.status !== "PENDENTE") {
+    return { success: false, message: "Esta cobrança já foi finalizada" }
+  }
+  if (!payment.providerPaymentId) {
+    return {
+      success: false,
+      message: "Cobrança sem identificador no gateway",
+    }
+  }
+
+  const settings = await getPaymentSettings()
+  // CPF inválido derruba a transação no Asaas — só envia quando válido.
+  const cpf =
+    payment.patient?.cpf && isValidCpf(payment.patient.cpf)
+      ? payment.patient.cpf.replace(/\D/g, "")
+      : undefined
+
+  const result = await payAsaasCard(payment.providerPaymentId, settings.asaasApiKey, {
+    holderName: card.holderName,
+    number: card.number,
+    expiryMonth: card.expiryMonth,
+    expiryYear: card.expiryYear,
+    ccv: card.ccv,
+    holderEmail: payment.patient?.email ?? undefined,
+    holderCpf: cpf,
+    holderPostalCode: payment.patient?.zipCode?.replace(/\D/g, "") || undefined,
+    holderAddressNumber: payment.patient?.number ?? undefined,
+    holderPhone: payment.patient?.phone?.replace(/\D/g, "") || undefined,
+    remoteIp,
+  })
+
+  if (!result.ok) {
+    return {
+      success: false,
+      message:
+        result.error ??
+        "O cartão foi recusado. Verifique os dados e tente novamente.",
+    }
+  }
+
+  // Cartão aprovado na hora: baixa a cobrança e confirma o horário.
+  if (result.status === "CONFIRMED" || result.status === "RECEIVED") {
+    await applyPaymentPaid(payment.id, result.paidAt ?? new Date())
+    return {
+      success: true,
+      message: "Pagamento aprovado!",
+      scheduledAt: payment.attendance?.scheduledAt.toISOString(),
+    }
+  }
+
+  // Em análise (antifraude etc.): a confirmação final sai pelo webhook.
+  return {
+    success: false,
+    pending: true,
+    message:
+      "Pagamento em análise pelo banco. Continue nesta tela — confirmamos automaticamente.",
+  }
 }
 
 /** Consulta o status no gateway e aplica a baixa se o pagamento caiu. */

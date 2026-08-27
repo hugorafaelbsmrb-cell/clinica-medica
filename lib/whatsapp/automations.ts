@@ -19,6 +19,7 @@
 import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
 import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
+import { paymentPageUrl } from "@/lib/payments/url"
 import { getWhatsAppProvider, normalizePhone } from "./provider"
 import {
   renderTemplate,
@@ -348,7 +349,7 @@ async function processPagamentosPendentes(
       continue
     }
 
-    const link = payment.checkoutUrl ?? payment.pixCopiaCola ?? ""
+    const link = paymentPageUrl(payment.id)
     await enqueueMessage(
       patientId,
       "LEMBRETE_PAGAMENTO",
@@ -398,6 +399,8 @@ export async function queuePaymentLinkMessage(
   payment: {
     checkoutUrl: string | null
     pixCopiaCola: string | null
+    /** Página de pagamento do próprio sistema (preferida, quando existe). */
+    paymentUrl?: string | null
     amount: number
   }
 ): Promise<void> {
@@ -409,7 +412,7 @@ export async function queuePaymentLinkMessage(
 
   const msg =
     clinic.autoPagamentoLinkMsg?.trim() || defaultAutomationMessage("linkpagamento")
-  const link = payment.checkoutUrl ?? payment.pixCopiaCola ?? ""
+  const link = payment.paymentUrl ?? payment.checkoutUrl ?? payment.pixCopiaCola ?? ""
 
   await sendImmediateMessage(
     patientId,

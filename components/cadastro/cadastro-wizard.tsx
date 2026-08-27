@@ -46,6 +46,7 @@ import {
   getConsultasByCpf,
   getPublicAgenda,
   lookupPatientByCpf,
+  pagarComCartaoAgendamento,
   reverseGeocodeCoordinates,
   simularPagamentoAgendamento,
   verificarPagamentoAgendamento,
@@ -235,6 +236,13 @@ export function CadastroWizard() {
   >(null)
   const [paymentDate, setPaymentDate] = useState("")
   const paymentPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Cartão de crédito transparente (checkout direto no sistema)
+  const [cardHolder, setCardHolder] = useState("")
+  const [cardNumber, setCardNumber] = useState("")
+  const [cardExpiry, setCardExpiry] = useState("")
+  const [cardCvv, setCardCvv] = useState("")
+  const [cardPayPending, startCardPayment] = useTransition()
 
   // Consulta em loop se o pagamento da reserva já caiu (webhook)
   useEffect(() => {
@@ -632,6 +640,66 @@ export function CadastroWizard() {
     })
   }
 
+  /** Máscara 0000 0000 0000 0000 para o número do cartão. */
+  function maskCardNumber(value: string): string {
+    const digits = value.replace(/\D/g, "").slice(0, 16)
+    return digits.replace(/(\d{4})(?=\d)/g, "$1 ").trim()
+  }
+
+  /** Máscara MM/AA para a validade do cartão (limita o mês em 01–12). */
+  function maskCardExpiry(value: string): string {
+    const digits = value.replace(/\D/g, "").slice(0, 4)
+    let month = digits.slice(0, 2)
+    if (month.length === 2) {
+      const n = Number(month)
+      if (n < 1) month = "01"
+      if (n > 12) month = "12"
+    }
+    return month + (digits.length > 2 ? `/${digits.slice(2)}` : "")
+  }
+
+  // Paga a reserva com cartão direto no sistema (sem sair da página)
+  function pagarComCartao() {
+    if (!paymentData) return
+    const digits = cardNumber.replace(/\D/g, "")
+    if (digits.length < 13 || digits.length > 19) {
+      toast.error("Informe o número completo do cartão.")
+      return
+    }
+    const expiryDigits = cardExpiry.replace(/\D/g, "")
+    if (expiryDigits.length !== 4) {
+      toast.error("Informe a validade do cartão (MM/AA).")
+      return
+    }
+    if (cardHolder.trim().length < 3) {
+      toast.error("Informe o nome impresso no cartão.")
+      return
+    }
+    if (!/^\d{3,4}$/.test(cardCvv)) {
+      toast.error("Informe o código de segurança (CVV).")
+      return
+    }
+    startCardPayment(async () => {
+      const result = await pagarComCartaoAgendamento({
+        attendanceId: paymentData.attendanceId,
+        token: paymentData.token,
+        holderName: cardHolder.trim(),
+        number: digits,
+        expiryMonth: expiryDigits.slice(0, 2),
+        expiryYear: `20${expiryDigits.slice(2)}`,
+        ccv: cardCvv,
+      })
+      if (result.success && result.scheduledAt) {
+        setSuccessDate(result.scheduledAt)
+        setPhase("sucesso")
+      } else if (result.pending) {
+        toast.info(result.message)
+      } else {
+        toast.error(result.message)
+      }
+    })
+  }
+
   // Copia para a área de transferência (com fallback para navegadores antigos)
   async function copiarPagamento(text: string) {
     try {
@@ -796,7 +864,71 @@ export function CadastroWizard() {
                 </div>
               )}
 
-              {paymentData.checkoutUrl && (
+              {paymentData.method === "CARTAO" && (
+                <form
+                  className="flex flex-col gap-3"
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    pagarComCartao()
+                  }}
+                >
+                  <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-3 text-center">
+                    <p className="text-sm font-medium">
+                      Pague com cartão de crédito direto aqui — sem sair desta
+                      página.
+                    </p>
+                  </div>
+                  <Input
+                    placeholder="Nome impresso no cartão"
+                    value={cardHolder}
+                    onChange={(e) => setCardHolder(e.target.value)}
+                    autoComplete="cc-name"
+                    className="h-12"
+                  />
+                  <Input
+                    placeholder="Número do cartão"
+                    value={cardNumber}
+                    onChange={(e) => setCardNumber(maskCardNumber(e.target.value))}
+                    inputMode="numeric"
+                    autoComplete="cc-number"
+                    className="h-12"
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      placeholder="Validade (MM/AA)"
+                      value={cardExpiry}
+                      onChange={(e) => setCardExpiry(maskCardExpiry(e.target.value))}
+                      inputMode="numeric"
+                      autoComplete="cc-exp"
+                      className="h-12"
+                    />
+                    <Input
+                      placeholder="CVV"
+                      value={cardCvv}
+                      onChange={(e) =>
+                        setCardCvv(e.target.value.replace(/\D/g, "").slice(0, 4))
+                      }
+                      inputMode="numeric"
+                      autoComplete="cc-csc"
+                      className="h-12"
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    className="h-14 w-full text-lg"
+                    disabled={cardPayPending || agendarPending}
+                  >
+                    {cardPayPending ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <CreditCard className="h-5 w-5" />
+                    )}
+                    Pagar R$ {valor} com cartão
+                  </Button>
+                </form>
+              )}
+
+              {paymentData.method === "APPLE_PAY" && paymentData.checkoutUrl && (
                 <Button
                   type="button"
                   className="h-14 w-full text-lg"
@@ -809,12 +941,7 @@ export function CadastroWizard() {
                   }
                 >
                   <CreditCard className="h-5 w-5" />
-                  Pagar agora
-                  {paymentData.method === "CARTAO"
-                    ? " com cartão"
-                    : paymentData.method === "APPLE_PAY"
-                      ? " com Apple Pay"
-                      : ""}
+                  Pagar com Apple Pay
                 </Button>
               )}
 

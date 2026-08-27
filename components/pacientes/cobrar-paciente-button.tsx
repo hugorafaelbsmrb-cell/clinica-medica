@@ -30,6 +30,7 @@ import {
   refreshPayment,
   type CreatePaymentResult,
 } from "@/lib/actions/pagamentos"
+import { paymentPageUrl } from "@/lib/payments/url"
 import { cn } from "@/lib/utils"
 
 function formatCurrency(value: number): string {
@@ -265,14 +266,14 @@ export function CobrarPacienteButton({
               </div>
             )}
 
-            {result.checkoutUrl && (
+            {result.paymentId && (
               <div className="flex flex-col gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   render={
                     <a
-                      href={result.checkoutUrl}
+                      href={paymentPageUrl(result.paymentId)}
                       target="_blank"
                       rel="noopener noreferrer"
                     />
@@ -286,7 +287,7 @@ export function CobrarPacienteButton({
                   variant="secondary"
                   render={
                     <a
-                      href={shareText(result.checkoutUrl)}
+                      href={shareText(paymentPageUrl(result.paymentId))}
                       target="_blank"
                       rel="noopener noreferrer"
                     />

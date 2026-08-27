@@ -51,6 +51,7 @@ import {
   type CreateFollowUpResult,
 } from "@/lib/actions/acompanhamentos"
 import { priceTableInstallments } from "@/lib/acompanhamentos/pricing"
+import { paymentPageUrl } from "@/lib/payments/url"
 import { cn } from "@/lib/utils"
 
 type Complexity = "BAIXA" | "MEDIA" | "ALTA"
@@ -494,14 +495,14 @@ export function MarcarAcompanhamentoButton({
               </div>
             )}
 
-            {result.checkoutUrl && (
+            {result.paymentId && (
               <div className="flex flex-col gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   render={
                     <a
-                      href={result.checkoutUrl}
+                      href={paymentPageUrl(result.paymentId)}
                       target="_blank"
                       rel="noopener noreferrer"
                     />
@@ -515,7 +516,7 @@ export function MarcarAcompanhamentoButton({
                   variant="secondary"
                   render={
                     <a
-                      href={shareText(result.checkoutUrl)}
+                      href={shareText(paymentPageUrl(result.paymentId))}
                       target="_blank"
                       rel="noopener noreferrer"
                     />

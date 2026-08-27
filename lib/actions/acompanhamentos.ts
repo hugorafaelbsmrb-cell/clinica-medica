@@ -16,6 +16,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { createCharge } from "@/lib/payments/router"
+import { paymentPageUrl } from "@/lib/payments/url"
 import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
 import { getPaymentSettings } from "@/lib/payments/settings"
 import type { PaymentMethodType } from "@/lib/payments/types"
@@ -449,7 +450,10 @@ export async function generateFollowUpRecurringCharge(
   })
 
   // Link de pagamento pelo WhatsApp (respeita consentimento LGPD).
-  const url = result.checkoutUrl ?? result.pixCopiaCola
+  // Sempre a página de pagamento do próprio sistema (transparente).
+  const url = result.paymentId
+    ? paymentPageUrl(result.paymentId)
+    : (result.checkoutUrl ?? result.pixCopiaCola)
   if (
     url &&
     program.patient.phone &&

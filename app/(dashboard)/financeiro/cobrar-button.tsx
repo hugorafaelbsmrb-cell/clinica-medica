@@ -28,6 +28,7 @@ import {
   refreshPayment,
   type CreatePaymentResult,
 } from "@/lib/actions/pagamentos"
+import { paymentPageUrl } from "@/lib/payments/url"
 
 type EntryPayment = {
   id: string
@@ -129,10 +130,14 @@ export function CobrarButton({
       `Olá! Segue o link para pagamento de ${formatCurrency(value)} (${description}): ${url}`
     )}`
 
-  const resultUrl = result?.checkoutUrl ?? pendingPayment?.checkoutUrl ?? null
+  const resultPaymentId = result?.paymentId ?? pendingPayment?.id ?? null
+  // Sempre a página de pagamento do próprio sistema (transparente),
+  // em vez do checkout hospedado do gateway.
+  const resultUrl = resultPaymentId
+    ? paymentPageUrl(resultPaymentId)
+    : (result?.checkoutUrl ?? pendingPayment?.checkoutUrl ?? null)
   const resultPix = result?.pixCopiaCola ?? pendingPayment?.pixCopiaCola ?? null
   const resultQr = result?.pixQrCodeUrl ?? pendingPayment?.pixQrCodeUrl ?? null
-  const resultPaymentId = result?.paymentId ?? pendingPayment?.id ?? null
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -214,14 +219,14 @@ export function CobrarButton({
                   variant="outline"
                   size="sm"
                   className="w-full"
-                  onClick={() => handleCopy(result.checkoutUrl ?? "", "Link de pagamento")}
+                  onClick={() => handleCopy(resultUrl ?? "", "Link de pagamento")}
                 >
                   <ExternalLink className="h-4 w-4" />
                   Copiar link
                 </Button>
-                {result.checkoutUrl && (
+                {resultUrl && (
                   <a
-                    href={shareText(result.checkoutUrl)}
+                    href={shareText(resultUrl)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"

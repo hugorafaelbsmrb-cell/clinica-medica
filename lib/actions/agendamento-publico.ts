@@ -17,7 +17,9 @@ import { getAvailableSlots, isSlotFree } from "@/lib/agenda/service"
 import { queueAppointmentConfirmation } from "@/lib/whatsapp/message-service"
 import { queuePaymentLinkMessage } from "@/lib/whatsapp/automations"
 import { getAppointmentSettings } from "@/lib/agenda/service"
-import { createCharge, simulatePaymentPaid } from "@/lib/payments/router"
+import { createCharge, payChargeWithCard, simulatePaymentPaid } from "@/lib/payments/router"
+import { getClientIp } from "@/lib/payments/ip"
+import { paymentPageUrl } from "@/lib/payments/url"
 import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
 import { getPaymentSettings } from "@/lib/payments/settings"
 import { getClinicSettings } from "@/lib/clinic"
@@ -636,6 +638,9 @@ export async function agendarPublico(
         await queuePaymentLinkMessage(patientId, {
           checkoutUrl: charge.checkoutUrl ?? null,
           pixCopiaCola: charge.pixCopiaCola ?? null,
+          // Sempre a página de pagamento do próprio sistema (transparente),
+          // em vez do checkout hospedado do gateway.
+          paymentUrl: charge.paymentId ? paymentPageUrl(charge.paymentId) : null,
           amount: price,
         })
       }
@@ -778,6 +783,69 @@ export async function simularPagamentoAgendamento(input: {
   if (!payment) return { success: false, message: "Cobrança não encontrada" }
 
   return simulatePaymentPaid(payment.id, input)
+}
+
+const pagarCartaoAgendamentoSchema = z.object({
+  attendanceId: z.string().min(1),
+  /** Token público do horário reservado (mesma proteção da simulação). */
+  token: z.string().min(1),
+  holderName: z.string().trim().min(3, "Informe o nome impresso no cartão"),
+  number: z.string().regex(/^\d{13,19}$/, "Número do cartão inválido"),
+  expiryMonth: z.string().regex(/^(0[1-9]|1[0-2])$/, "Mês de validade inválido"),
+  expiryYear: z.string().regex(/^\d{4}$/, "Ano de validade inválido"),
+  ccv: z.string().regex(/^\d{3,4}$/, "CVV inválido"),
+})
+
+export type PagarCartaoAgendamentoState = {
+  success: boolean
+  message: string
+  scheduledAt?: string
+  /** true = pagamento em análise (ex.: antifraude); confirmação via webhook. */
+  pending?: boolean
+}
+
+/**
+ * Paga a reserva com cartão de crédito direto no sistema (checkout
+ * transparente), sem redirecionar o paciente para o site do Asaas.
+ * Validado pelo token público do horário — quem não tem o link da reserva
+ * não consegue pagar.
+ */
+export async function pagarComCartaoAgendamento(
+  input: z.infer<typeof pagarCartaoAgendamentoSchema>
+): Promise<PagarCartaoAgendamentoState> {
+  const parsed = pagarCartaoAgendamentoSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: parsed.error.issues[0]?.message ?? "Dados do cartão inválidos",
+    }
+  }
+
+  const attendance = await prisma.attendance.findFirst({
+    where: { id: parsed.data.attendanceId, cancelToken: parsed.data.token },
+    include: { payments: true },
+  })
+  if (!attendance) return { success: false, message: "Reserva não encontrada" }
+
+  const payment =
+    attendance.payments.find((p) => p.status === "PENDENTE") ??
+    attendance.payments[0]
+  if (!payment || payment.status !== "PENDENTE") {
+    return { success: false, message: "Cobrança não encontrada ou já finalizada" }
+  }
+
+  const remoteIp = await getClientIp()
+  return payChargeWithCard(
+    payment.id,
+    {
+      holderName: parsed.data.holderName,
+      number: parsed.data.number,
+      expiryMonth: parsed.data.expiryMonth,
+      expiryYear: parsed.data.expiryYear,
+      ccv: parsed.data.ccv,
+    },
+    remoteIp
+  )
 }
 
 export type CancelState = {
