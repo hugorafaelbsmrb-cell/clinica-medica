@@ -17,7 +17,60 @@ import type {
   ProviderStatusResult,
 } from "@/lib/payments/types"
 
-const BASE_URL = "https://api.asaas.com/v3"
+const PROD_BASE_URL = "https://api.asaas.com/v3"
+const SANDBOX_BASE_URL = "https://api-sandbox.asaas.com/v3"
+
+/**
+ * Ambiente detectado por chave. As chaves de sandbox e de produção têm o
+ * mesmo formato ($aact_...), então a distinção é feita na primeira chamada:
+ * produção recusa chave de sandbox com 401/403 e aí tentamos a sandbox.
+ * O resultado fica em cache para as próximas chamadas com a mesma chave.
+ */
+const environmentByKey = new Map<string, "prod" | "sandbox">()
+
+/**
+ * Fetch na API do Asaas resolvendo o ambiente automaticamente:
+ * usa a URL de produção; se a chave for recusada (401/403), tenta a sandbox
+ * e memoriza o ambiente que aceitou a chave.
+ */
+async function asaasFetch(
+  apiKey: string,
+  path: string,
+  init?: RequestInit
+): Promise<{ response: Response; environment: "prod" | "sandbox" }> {
+  const known = environmentByKey.get(apiKey)
+  if (known) {
+    const base = known === "sandbox" ? SANDBOX_BASE_URL : PROD_BASE_URL
+    return {
+      response: await fetch(`${base}${path}`, { ...init, headers: headers(apiKey) }),
+      environment: known,
+    }
+  }
+
+  const production = await fetch(`${PROD_BASE_URL}${path}`, {
+    ...init,
+    headers: headers(apiKey),
+  })
+  if (production.status !== 401 && production.status !== 403) {
+    environmentByKey.set(apiKey, "prod")
+    return { response: production, environment: "prod" }
+  }
+
+  // Produção recusou a chave — pode ser chave de sandbox. Tenta o ambiente
+  // de testes antes de concluir que a chave é inválida.
+  const sandbox = await fetch(`${SANDBOX_BASE_URL}${path}`, {
+    ...init,
+    headers: headers(apiKey),
+  })
+  if (sandbox.status !== 401 && sandbox.status !== 403) {
+    environmentByKey.set(apiKey, "sandbox")
+    return { response: sandbox, environment: "sandbox" }
+  }
+
+  // Recusada nos dois ambientes: chave realmente inválida.
+  environmentByKey.set(apiKey, "prod")
+  return { response: production, environment: "prod" }
+}
 
 type AsaasPayment = {
   id: string
@@ -86,9 +139,8 @@ export async function createAsaasCharge(
       }
     }
 
-    const response = await fetch(`${BASE_URL}/payments`, {
+    const { response } = await asaasFetch(apiKey, "/payments", {
       method: "POST",
-      headers: headers(apiKey),
       body: JSON.stringify(body),
     })
     const data = (await response.json().catch(() => ({}))) as AsaasPayment & {
@@ -123,10 +175,10 @@ export async function getAsaasPaymentStatus(
   apiKey: string
 ): Promise<ProviderStatusResult> {
   try {
-    const response = await fetch(`${BASE_URL}/payments/${providerPaymentId}`, {
-      method: "GET",
-      headers: headers(apiKey),
-    })
+    const { response } = await asaasFetch(
+      apiKey,
+      `/payments/${providerPaymentId}`
+    )
     const data = (await response.json().catch(() => ({}))) as AsaasPayment
 
     if (!response.ok || !data.id) {
@@ -224,10 +276,10 @@ export async function testAsaasConnection(
   apiKey: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const response = await fetch(`${BASE_URL}/finance/balance`, {
-      method: "GET",
-      headers: headers(apiKey),
-    })
+    const { response, environment } = await asaasFetch(
+      apiKey,
+      "/finance/balance"
+    )
 
     if (response.status === 401 || response.status === 403) {
       return {
@@ -241,7 +293,13 @@ export async function testAsaasConnection(
         message: `Asaas respondeu ${response.status}`,
       }
     }
-    return { success: true, message: "Chave válida — conexão com o Asaas OK" }
+    return {
+      success: true,
+      message:
+        environment === "sandbox"
+          ? "Chave válida — conexão com o Asaas Sandbox OK"
+          : "Chave válida — conexão com o Asaas OK",
+    }
   } catch {
     return {
       success: false,
