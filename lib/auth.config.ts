@@ -45,6 +45,17 @@ export const authConfig = {
         return true
       }
 
+      // Página pública de pagamento (link enviado ao paciente; o acesso é
+      // protegido pelo id imprevisível do Payment, mesmo padrão do /cancelar)
+      if (pathname.startsWith("/pagar")) {
+        return true
+      }
+
+      // Página de status de pagamento (retorno após checkout/QR Code)
+      if (pathname.startsWith("/pagamento")) {
+        return true
+      }
+
       if (!isLoggedIn) return false
 
       const rule = routePermissions.find((r) => pathname.startsWith(r.prefix))
