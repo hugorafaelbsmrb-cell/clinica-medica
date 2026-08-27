@@ -32,6 +32,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { isValidCpf } from "@/lib/cpf"
 import { PublicDayPicker } from "@/components/agenda/public-day-picker"
 import { RemarcarConsulta } from "@/components/agenda/remarcar-consulta"
 import { CancelarConsultaButton } from "@/components/agenda/cancelar-consulta-button"
@@ -145,6 +146,16 @@ function toIsoBirthDate(value: string): string {
   return `${d.slice(4)}-${d.slice(2, 4)}-${d.slice(0, 2)}`
 }
 
+/** Máscara progressiva 000.000.000-00 para o CPF (pontos e traço sozinhos). */
+function maskCpf(value: string): string {
+  const d = value.replace(/\D/g, "").slice(0, 11)
+  let out = d.slice(0, 3)
+  if (d.length > 3) out += `.${d.slice(3, 6)}`
+  if (d.length > 6) out += `.${d.slice(6, 9)}`
+  if (d.length > 9) out += `-${d.slice(9)}`
+  return out
+}
+
 type ExistingPatient = {
   id: string
   name: string
@@ -194,6 +205,10 @@ export function CadastroWizard() {
   // Reconhecimento pelo CPF
   const [cpfStatus, setCpfStatus] = useState<
     "idle" | "checking" | "notfound"
+  >("idle")
+  // Validação em tempo real do dígito verificador do CPF (passo 0)
+  const [cpfValidity, setCpfValidity] = useState<
+    "idle" | "valid" | "invalid"
   >("idle")
   const [existingPatient, setExistingPatient] = useState<ExistingPatient | null>(
     null
@@ -297,7 +312,13 @@ export function CadastroWizard() {
       const digits = cpf.replace(/\D/g, "")
       if (digits.length > 0) {
         if (digits.length !== 11) {
-          setError("Informe um CPF válido com 11 números.")
+          setError("Informe o CPF completo (11 números).")
+          return
+        }
+        // Valida o dígito verificador já no primeiro passo: CPF errado
+        // derruba a cobrança no Asaas lá na frente.
+        if (!isValidCpf(digits)) {
+          setError("Este CPF não é válido — confira os números digitados.")
           return
         }
         if (cpfStatus !== "notfound") {
@@ -764,6 +785,7 @@ export function CadastroWizard() {
             variant="outline"
             onClick={() => {
               setCpfStatus("idle")
+              setCpfValidity("idle")
               setPhase(existingPatient ? "consultas" : "cadastro")
             }}
             className="h-12 text-base"
@@ -1110,6 +1132,7 @@ export function CadastroWizard() {
               variant="ghost"
               onClick={() => {
                 setCpfStatus("idle")
+                setCpfValidity("idle")
                 setPhase("cadastro")
                 setCadStep(0)
               }}
@@ -1240,17 +1263,43 @@ export function CadastroWizard() {
                     id="cadastro-cpf"
                     value={cpf}
                     onChange={(event) => {
-                      setCpf(event.target.value)
+                      const masked = maskCpf(event.target.value)
+                      const cpfDigits = masked.replace(/\D/g, "")
+                      setCpf(masked)
                       setCpfStatus("idle")
+                      setCpfValidity(
+                        cpfDigits.length === 11
+                          ? isValidCpf(cpfDigits)
+                            ? "valid"
+                            : "invalid"
+                          : "idle"
+                      )
                     }}
                     placeholder="000.000.000-00"
                     inputMode="numeric"
-                    className="h-14 text-lg"
+                    maxLength={14}
+                    className={cn(
+                      "h-14 text-lg",
+                      cpfValidity === "invalid" &&
+                        "border-red-500 focus-visible:ring-red-500"
+                    )}
                     autoComplete="off"
                   />
+                  {cpfValidity === "valid" && (
+                    <p className="flex items-center gap-2 text-sm font-medium text-green-600">
+                      <CheckCircle2 className="h-4 w-4" />
+                      CPF válido
+                    </p>
+                  )}
+                  {cpfValidity === "invalid" && (
+                    <p className="flex items-center gap-2 text-sm font-medium text-red-600">
+                      <AlertTriangle className="h-4 w-4" />
+                      Este CPF não parece correto — confira os números digitados
+                    </p>
+                  )}
                   <p className="text-sm text-muted-foreground">
-                    Se você já é paciente, informe seu CPF para ir direto ao
-                    agendamento da consulta.
+                    Digite só os números — os pontos e o traço entram sozinhos.
+                    Se você já é paciente, seu CPF leva direto ao agendamento.
                   </p>
                 </div>
                 {cpfStatus === "checking" && (
