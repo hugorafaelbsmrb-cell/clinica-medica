@@ -6,6 +6,7 @@
 import type {
   PhoneValidationResult,
   SendResult,
+  WhatsAppButton,
   WhatsAppIncoming,
   WhatsAppProvider,
 } from "./provider"
@@ -47,6 +48,20 @@ export class MockProvider implements WhatsAppProvider {
     return {
       ok: true,
       providerMessageId: `mock-img-${Date.now()}`,
+    }
+  }
+
+  async sendTextWithButtons(
+    phone: string,
+    message: string,
+    buttons: WhatsAppButton[]
+  ): Promise<SendResult> {
+    console.log(
+      `[WhatsApp MOCK] Enviando para ${phone} com ${buttons.length} botão(ões): ${message}`
+    )
+    return {
+      ok: true,
+      providerMessageId: `mock-btns-${Date.now()}`,
     }
   }
 

@@ -31,6 +31,12 @@ export type WhatsAppIncoming = {
   providerMessageId?: string
 }
 
+/** Botão de ação anexado a uma mensagem de texto (máx. 3 por mensagem). */
+export type WhatsAppButton =
+  | { type: "URL"; label: string; url: string }
+  | { type: "CALL"; label: string; phone: string }
+  | { type: "REPLY"; label: string }
+
 export interface WhatsAppProvider {
   readonly name: string
   /** Envia mensagem de texto para o número informado (com DDI, ex.: 5511999990000). */
@@ -50,6 +56,15 @@ export interface WhatsAppProvider {
     phone: string,
     caption: string,
     imageDataUrl: string
+  ): Promise<SendResult>
+  /**
+   * Envia texto com botões de ação (ex.: botão URL para links de pagamento).
+   * Opcional: quando o provedor não implementa, o chamador cai para texto puro.
+   */
+  sendTextWithButtons?(
+    phone: string,
+    message: string,
+    buttons: WhatsAppButton[]
   ): Promise<SendResult>
   /** Valida se um número está registrado no WhatsApp. */
   validatePhone(phone: string): Promise<PhoneValidationResult>

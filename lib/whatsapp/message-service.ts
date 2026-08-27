@@ -11,7 +11,13 @@
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { prisma } from "@/lib/prisma"
-import { getWhatsAppProvider, normalizePhone, type SendResult } from "./provider"
+import {
+  getWhatsAppProvider,
+  normalizePhone,
+  type SendResult,
+  type WhatsAppButton,
+  type WhatsAppProvider,
+} from "./provider"
 
 /** Substitui variáveis {{nome}}, {{data}} no corpo do template. */
 export function renderTemplate(
@@ -38,6 +44,53 @@ function meetSentenceFor(meetLink: string | null): string {
  */
 function withoutMeetSentence(content: string): string {
   return content.replace(/Sua teleconsulta será por videochamada:\s*/, "")
+}
+
+/** Expressão para links http(s) no corpo da mensagem. */
+const LINK_PATTERN = /https?:\/\/[^\s]+/g
+
+/**
+ * Extrai até `limit` links http(s) do texto, sem pontuação colada no fim.
+ * Links duplicados aparecem uma vez só.
+ */
+export function extractLinks(content: string, limit = 3): string[] {
+  const matches = content.match(LINK_PATTERN) ?? []
+  return [...new Set(matches)]
+    .map((m) => m.replace(/[),.;!?]+$/, ""))
+    .slice(0, limit)
+}
+
+/**
+ * Envia texto com botão(ões) de URL quando há link no conteúdo e o provedor
+ * suporta (W-API send-buttons-action). Se o envio com botão falhar — ex.:
+ * plano sem suporte a botões — reenvia o texto puro para nunca perder a
+ * entrega.
+ */
+export async function sendTextSmart(
+  provider: WhatsAppProvider,
+  phone: string,
+  content: string,
+  buttons?: WhatsAppButton[],
+  defaultLabel = "Abrir link"
+): Promise<SendResult> {
+  const resolved =
+    buttons?.length
+      ? buttons
+      : extractLinks(content).map((url) => ({
+          type: "URL" as const,
+          label: defaultLabel,
+          url,
+        }))
+
+  if (resolved.length && provider.sendTextWithButtons) {
+    const result = await provider.sendTextWithButtons(phone, content, resolved)
+    if (result.ok) return result
+    console.warn(
+      `[WhatsApp] Botões falharam (${result.error}) — reenviando como texto puro`
+    )
+  }
+
+  return provider.sendText(phone, content)
 }
 
 export async function enqueueMessage(
@@ -89,7 +142,10 @@ export async function sendImmediateMessage(
     | "CONFIRMACAO_AGENDAMENTO"
     | "PAGAMENTO_CONFIRMADO",
   content: string,
-  attendanceId?: string
+  attendanceId?: string,
+  /** Botões explícitos (ex.: "Pagar agora" → link de pagamento). Sem eles,
+   *  os links do texto viram botões "Abrir link" automaticamente. */
+  buttons?: WhatsAppButton[]
 ): Promise<{ ok: boolean; error?: string }> {
   const patient = await prisma.patient.findUnique({ where: { id: patientId } })
   if (!patient?.phone) {
@@ -97,7 +153,13 @@ export async function sendImmediateMessage(
   }
 
   const provider = await getWhatsAppProvider()
-  const result = await provider.sendText(normalizePhone(patient.phone), content)
+  const result = await sendTextSmart(
+    provider,
+    normalizePhone(patient.phone),
+    content,
+    buttons,
+    type === "LINK_PAGAMENTO" ? "Pagar agora" : "Abrir link"
+  )
 
   await prisma.message.create({
     data: {
@@ -310,7 +372,13 @@ export async function queueAppointmentConfirmation(
     patientId,
     "CONFIRMACAO_AGENDAMENTO",
     content,
-    attendance.id
+    attendance.id,
+    [
+      { type: "URL", label: "Remarcar consulta", url: manageLink },
+      ...(meetLink
+        ? [{ type: "URL" as const, label: "Entrar na videochamada", url: meetLink }]
+        : []),
+    ]
   )
 }
 
@@ -496,12 +564,22 @@ export async function processPendingMessages(
 
     // Marketing com imagem: tenta enviar a mídia com a legenda; quando o
     // provedor não suporta ou falha, cai para texto puro (com o link).
+    // Mensagens com link ganham botão URL; se o botão falhar, o envio cai
+    // automaticamente para texto puro (sem perder a entrega).
     let result: SendResult | undefined
     if (campaign?.imageDataUrl && provider.sendImage) {
       result = await provider.sendImage(phone, message.content, campaign.imageDataUrl)
     }
     if (!result?.ok) {
-      result = await provider.sendText(phone, message.content)
+      result = await sendTextSmart(
+        provider,
+        phone,
+        message.content,
+        undefined,
+        message.type === "LINK_PAGAMENTO" || message.type === "LEMBRETE_PAGAMENTO"
+          ? "Pagar agora"
+          : "Abrir link"
+      )
     }
 
     if (result.ok) {

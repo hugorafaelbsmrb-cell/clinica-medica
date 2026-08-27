@@ -463,7 +463,16 @@ export async function generateFollowUpRecurringCharge(
     const content = `Olá ${
       program.patient.name.split(" ")[0]
     }! Chegou o ciclo ${cycleNumber} do seu acompanhamento (${valor}). Pague pelo link: ${url}`
-    await sendImmediateMessage(program.patientId, "LINK_PAGAMENTO", content)
+    await sendImmediateMessage(
+      program.patientId,
+      "LINK_PAGAMENTO",
+      content,
+      undefined,
+      // Botão "Pagar agora" só com link http(s); copia-e-cola PIX segue no texto.
+      url.startsWith("http")
+        ? [{ type: "URL", label: "Pagar agora", url }]
+        : undefined
+    )
   }
 
   await prisma.auditLog.create({

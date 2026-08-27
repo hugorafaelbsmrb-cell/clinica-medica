@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
 import { notifyAttendantNeeded } from "@/lib/notifications"
 import { getWhatsAppProvider, normalizePhone } from "./provider"
+import { sendTextSmart } from "./message-service"
 import { normalizeText, runBot, type BotState } from "./bot-engine"
 
 const SESSION_TTL_MS = 15 * 60 * 1000 // sessão expira após 15 minutos
@@ -87,7 +88,9 @@ export async function handleBotMessage(
 
   if (reply) {
     const provider = await getWhatsAppProvider()
-    const sent = await provider.sendText(phone, reply)
+    // Respostas com link (ex.: /cadastro) viram texto com botão "Abrir";
+    // se o botão falhar, cai automaticamente para texto puro.
+    const sent = await sendTextSmart(provider, phone, reply)
     if (!sent.ok) {
       console.error(`[Bot] Falha ao responder ${phone}: ${sent.error}`)
     }

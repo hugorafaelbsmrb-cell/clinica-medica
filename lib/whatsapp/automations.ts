@@ -20,7 +20,12 @@ import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
 import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
 import { getWhatsAppProvider, normalizePhone } from "./provider"
-import { renderTemplate, enqueueMessage, sendImmediateMessage } from "./message-service"
+import {
+  renderTemplate,
+  enqueueMessage,
+  sendImmediateMessage,
+  sendTextSmart,
+} from "./message-service"
 
 export type AutomationCounts = {
   cadastro: number
@@ -98,7 +103,11 @@ async function processCadastroIncompleto(
       nome: attempt.name?.split(" ")[0] || "paciente",
       data: now.toLocaleDateString("pt-BR"),
     })
-    const result = await provider.sendText(normalizePhone(attempt.phone), content)
+    const result = await sendTextSmart(
+      provider,
+      normalizePhone(attempt.phone),
+      content
+    )
 
     if (result.ok) {
       await prisma.registrationAttempt.update({
@@ -411,7 +420,12 @@ export async function queuePaymentLinkMessage(
         minimumFractionDigits: 2,
       }),
       link,
-    })
+    }),
+    undefined,
+    // Botão "Pagar agora" só com link http(s); copia-e-cola PIX segue no texto.
+    link.startsWith("http")
+      ? [{ type: "URL", label: "Pagar agora", url: link }]
+      : undefined
   )
 }
 

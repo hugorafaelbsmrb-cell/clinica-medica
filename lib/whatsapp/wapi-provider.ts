@@ -10,12 +10,14 @@
  *  - POST /message/send-text     → body { phone, message }
  *  - POST /message/send-document → body { phone, document (base64|URL), extension, fileName, caption }
  *  - POST /message/send-image    → body { phone, image (base64), caption }
+ *  - POST /message/send-buttons-action → body { phone, message, buttonActions: [{ type, buttonText, url|phone }] }
  *  - GET  /contacts/phone-exists → query { phoneNumber } → { exists: boolean, phoneNumber, lid }
  *  - Webhook de mensagem recebida → evento "webhookReceived"
  */
 import type {
   PhoneValidationResult,
   SendResult,
+  WhatsAppButton,
   WhatsAppIncoming,
   WhatsAppProvider,
 } from "./provider"
@@ -88,6 +90,28 @@ export class WApiProvider implements WhatsAppProvider {
 
   async sendText(phone: string, message: string): Promise<SendResult> {
     return this.post("/message/send-text", { phone, message })
+  }
+
+  /**
+   * POST /message/send-buttons-action (plano PRO da W-API): envia o texto
+   * com botões de ação, ex.: botão URL que abre o link de pagamento direto
+   * no WhatsApp. Máximo 3 botões por mensagem.
+   */
+  async sendTextWithButtons(
+    phone: string,
+    message: string,
+    buttons: WhatsAppButton[]
+  ): Promise<SendResult> {
+    return this.post("/message/send-buttons-action", {
+      phone,
+      message,
+      buttonActions: buttons.slice(0, 3).map((button) => ({
+        type: button.type,
+        buttonText: button.label,
+        ...(button.type === "URL" ? { url: button.url } : {}),
+        ...(button.type === "CALL" ? { phone: button.phone } : {}),
+      })),
+    })
   }
 
   async sendDocument(
