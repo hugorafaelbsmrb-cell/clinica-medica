@@ -89,17 +89,21 @@ export function IntegracoesForm({
 
   function handlePairing() {
     setPairingResult(null)
+    setWapiTest(null)
     startPairing(async () => {
       const result = await generatePairingCode(pairingPhone)
       setPairingResult(result)
+      if (result.success) runStatusCheck()
     })
   }
 
   function handleQr() {
     setQrResult(null)
+    setWapiTest(null)
     startQr(async () => {
       const result = await generateQrCode()
       setQrResult(result)
+      if (result.success) runStatusCheck()
     })
   }
 
@@ -155,6 +159,31 @@ export function IntegracoesForm({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial.wApiInstance, initial.wApiToken])
+
+  // Enquanto o QR/código de pareamento estiver na tela, re-verifica o status
+  // a cada 10s — assim que o celular concluir a conexão, o badge muda para
+  // "Conectada" sozinho e a verificação para.
+  useEffect(() => {
+    if (
+      (!qrResult?.success && !pairingResult?.success) ||
+      connectionStatus?.connected
+    ) {
+      return
+    }
+    const interval = setInterval(runStatusCheck, 10_000)
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qrResult?.success, pairingResult?.success, connectionStatus?.connected])
+
+  // Conectou: limpa o QR/código antigos e qualquer erro de teste pendente,
+  // para não deixar mensagens desatualizadas na tela.
+  useEffect(() => {
+    if (connectionStatus?.connected) {
+      setQrResult(null)
+      setPairingResult(null)
+      setWapiTest(null)
+    }
+  }, [connectionStatus?.connected])
 
   function handleTest(service: "deepseek" | "wapi") {
     setDeepseekTest(null)

@@ -63,22 +63,24 @@ export async function testDeepSeekConnection(
 }
 
 /**
- * Testa as credenciais da W-API chamando o endpoint de validação de número,
- * que exige instanceId + token e confirma a conexão da instância.
+ * Testa as credenciais da W-API consultando o status da instância, que
+ * valida a autenticação sem exigir WhatsApp conectado. Outros endpoints
+ * (ex.: phone-exists) devolvem 401 "Whatsapp não conectado" quando a
+ * instância está desconectada — o que era confundido com credencial errada.
  */
 export async function testWApiConnection(
   instanceId: string,
   token: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const url = `https://api.w-api.app/v1/contacts/phone-exists?instanceId=${encodeURIComponent(instanceId)}&phoneNumber=5511999990000`
+    const url = `https://api.w-api.app/v1/instance/status-instance?instanceId=${encodeURIComponent(instanceId)}`
     const response = await fetch(url, {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
     })
 
     const text = await response.text()
-    let data: { message?: string; error?: string } = {}
+    let data: { connected?: boolean; error?: boolean; message?: string } = {}
     try {
       data = text ? JSON.parse(text) : {}
     } catch {
@@ -91,17 +93,22 @@ export async function testWApiConnection(
         message: "Autenticação recusada — confira o ID da instância e o token",
       }
     }
-    if (response.ok) {
+    if (!response.ok || data.error) {
       return {
-        success: true,
-        message: "Conexão com a W-API OK — credenciais válidas",
+        success: false,
+        message: data.message ?? `W-API respondeu ${response.status}`,
       }
     }
-
-    const detail = data.message ?? data.error ?? ""
+    if (data.connected === true) {
+      return {
+        success: true,
+        message: "Conexão com a W-API OK — WhatsApp conectado",
+      }
+    }
     return {
-      success: false,
-      message: `W-API respondeu ${response.status}${detail ? `: ${detail}` : ""}`,
+      success: true,
+      message:
+        "Credenciais válidas, mas o WhatsApp não está conectado — gere o QR code ou o código de pareamento abaixo",
     }
   } catch {
     return {
@@ -141,6 +148,13 @@ export async function getWApiConnectionStatus(
       data = text ? JSON.parse(text) : {}
     } catch {
       data = {}
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      return {
+        success: false,
+        message: "Autenticação recusada — confira o ID da instância e o token",
+      }
     }
 
     if (!response.ok || data.error) {
