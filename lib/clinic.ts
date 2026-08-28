@@ -51,6 +51,9 @@ export type ClinicInfo = {
   autoPagamentoLembreteMsg?: string | null
   autoPagamentoConfirmadoEnabled?: boolean
   autoPagamentoConfirmadoMsg?: string | null
+  autoAgendamentoFollowUpEnabled?: boolean
+  autoAgendamentoFollowUpMsg?: string | null
+  autoAgendamentoCanceladoMsg?: string | null
   enableDigitalSignature?: boolean
   consultaPresencialEnabled?: boolean
   consultaDomiciliarEnabled?: boolean
@@ -135,6 +138,10 @@ export async function getClinicSettings(): Promise<ClinicInfo> {
         autoPagamentoConfirmadoEnabled:
           settings.autoPagamentoConfirmadoEnabled,
         autoPagamentoConfirmadoMsg: settings.autoPagamentoConfirmadoMsg,
+        autoAgendamentoFollowUpEnabled:
+          settings.autoAgendamentoFollowUpEnabled,
+        autoAgendamentoFollowUpMsg: settings.autoAgendamentoFollowUpMsg,
+        autoAgendamentoCanceladoMsg: settings.autoAgendamentoCanceladoMsg,
         enableDigitalSignature: settings.enableDigitalSignature,
         consultaPresencialEnabled: settings.consultaPresencialEnabled,
         consultaDomiciliarEnabled: settings.consultaDomiciliarEnabled,

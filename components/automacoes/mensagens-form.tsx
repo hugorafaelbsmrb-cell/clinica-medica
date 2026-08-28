@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
   Cake,
+  Clock,
   HeartPulse,
   History,
   MapPinned,
@@ -54,6 +55,9 @@ export type MensagensInitialData = {
   autoPagamentoLembreteMsg: string
   autoPagamentoConfirmadoEnabled: boolean
   autoPagamentoConfirmadoMsg: string
+  autoAgendamentoFollowUpEnabled: boolean
+  autoAgendamentoFollowUpMsg: string
+  autoAgendamentoCanceladoMsg: string
 }
 
 type SectionProps = {
@@ -177,6 +181,15 @@ export function MensagensForm({
     initial.autoPagamentoConfirmadoMsg
   )
 
+  const [agendamentoFollowUpEnabled, setAgendamentoFollowUpEnabled] =
+    useState(initial.autoAgendamentoFollowUpEnabled)
+  const [agendamentoFollowUpMsg, setAgendamentoFollowUpMsg] = useState(
+    initial.autoAgendamentoFollowUpMsg
+  )
+  const [agendamentoCanceladoMsg, setAgendamentoCanceladoMsg] = useState(
+    initial.autoAgendamentoCanceladoMsg
+  )
+
   const [state, formAction, pending] = useActionState<
     AutomationState | null,
     FormData
@@ -200,7 +213,8 @@ export function MensagensForm({
     acaminhoEnabled ||
     pagamentoLinkEnabled ||
     pagamentoLembreteEnabled ||
-    pagamentoConfirmadoEnabled
+    pagamentoConfirmadoEnabled ||
+    agendamentoFollowUpEnabled
 
   return (
     <Card>
@@ -466,6 +480,41 @@ export function MensagensForm({
                   }
                   rows={3}
                   placeholder="Olá {{nome}}! Recebemos seu pagamento de R$ {{valor}}. Tudo certo! (padrão)"
+                />
+              </Field>
+            </Section>
+
+            {/* 10) Follow-up do agendamento não pago */}
+            <Section
+              icon={<Clock className="h-4 w-4 text-amber-600" />}
+              title="Follow-up do agendamento não pago"
+              description="Agendamentos online não pagos recebem lembretes em 30 min, 1h e 2h após a reserva. Sem pagamento, a reserva é cancelada e o horário é liberado na agenda."
+              enabled={agendamentoFollowUpEnabled}
+              onToggle={setAgendamentoFollowUpEnabled}
+              fieldName="autoAgendamentoFollowUpEnabled"
+            >
+              <Field>
+                <FieldLabel>Mensagem do lembrete</FieldLabel>
+                <Textarea
+                  name="autoAgendamentoFollowUpMsg"
+                  value={agendamentoFollowUpMsg}
+                  onChange={(event) =>
+                    setAgendamentoFollowUpMsg(event.target.value)
+                  }
+                  rows={3}
+                  placeholder="Olá {{nome}}! Seu horário continua reservado. Falta o pagamento de R$ {{valor}} — é rapidinho por aqui: {{link}} (padrão)"
+                />
+              </Field>
+              <Field>
+                <FieldLabel>Mensagem de liberação do horário</FieldLabel>
+                <Textarea
+                  name="autoAgendamentoCanceladoMsg"
+                  value={agendamentoCanceladoMsg}
+                  onChange={(event) =>
+                    setAgendamentoCanceladoMsg(event.target.value)
+                  }
+                  rows={3}
+                  placeholder="Olá {{nome}}! Como não identificamos o pagamento, a reserva de {{data}} às {{hora}} foi liberada. É só agendar de novo por aqui: {{link}} (padrão)"
                 />
               </Field>
             </Section>

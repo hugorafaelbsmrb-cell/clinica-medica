@@ -877,7 +877,7 @@ async function queuePaymentConfirmedMessage(
  * Libera o horário reservado por um agendamento online cujo pagamento
  * expirou ou foi cancelado (consulta vira CANCELADO).
  */
-async function releasePendingAttendance(attendanceId: string): Promise<void> {
+export async function releasePendingAttendance(attendanceId: string): Promise<void> {
   const attendance = await prisma.attendance.findUnique({
     where: { id: attendanceId },
     select: { id: true, status: true },

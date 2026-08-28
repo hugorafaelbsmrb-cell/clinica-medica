@@ -58,6 +58,12 @@ export default async function AutomacoesPage() {
             clinic.autoPagamentoConfirmadoEnabled ?? true,
           autoPagamentoConfirmadoMsg:
             clinic.autoPagamentoConfirmadoMsg ?? "",
+          autoAgendamentoFollowUpEnabled:
+            clinic.autoAgendamentoFollowUpEnabled ?? true,
+          autoAgendamentoFollowUpMsg:
+            clinic.autoAgendamentoFollowUpMsg ?? "",
+          autoAgendamentoCanceladoMsg:
+            clinic.autoAgendamentoCanceladoMsg ?? "",
         }}
       />
     </div>

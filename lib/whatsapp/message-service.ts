@@ -108,7 +108,8 @@ export async function enqueueMessage(
     | "MEDICO_A_CAMINHO"
     | "LINK_PAGAMENTO"
     | "LEMBRETE_PAGAMENTO"
-    | "PAGAMENTO_CONFIRMADO",
+    | "PAGAMENTO_CONFIRMADO"
+    | "AGENDAMENTO_CANCELADO",
   content: string,
   scheduledFor?: Date,
   attendanceId?: string

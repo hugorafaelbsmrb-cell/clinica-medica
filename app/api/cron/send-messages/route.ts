@@ -17,6 +17,7 @@ import {
   queueDueFollowUps,
 } from "@/lib/whatsapp/message-service"
 import { queueAutomationMessages } from "@/lib/whatsapp/automations"
+import { processAgendamentoFollowUps } from "@/lib/whatsapp/payment-follow-up"
 import { queueDueMarketingCampaigns } from "@/lib/marketing/service"
 import { sweepExpiredPayments } from "@/lib/payments/router"
 import { generateDueFollowUpCharges } from "@/lib/actions/acompanhamentos"
@@ -65,6 +66,7 @@ export async function GET(request: NextRequest) {
     const queuedReminders = await queueAppointmentReminders()
     const automations = await queueAutomationMessages()
     const marketing = await queueDueMarketingCampaigns()
+    const agendamentoFollowUps = await processAgendamentoFollowUps()
     const expiredPayments = await sweepExpiredPayments()
     const followUpCharges = await generateDueFollowUpCharges()
     const { sent, failed } = await processPendingMessages()
@@ -77,6 +79,7 @@ export async function GET(request: NextRequest) {
       queuedReminders,
       automations,
       marketing,
+      agendamentoFollowUps,
       expiredPayments,
       followUpCharges,
       sent,

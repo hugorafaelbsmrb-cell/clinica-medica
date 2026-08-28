@@ -57,6 +57,7 @@ enum MessageType {
   LINK_PAGAMENTO
   LEMBRETE_PAGAMENTO
   PAGAMENTO_CONFIRMADO
+  AGENDAMENTO_CANCELADO
   MARKETING
 }
 
@@ -233,6 +234,12 @@ model ClinicSettings {
   autoPagamentoLembreteMsg          String?  @db.Text
   autoPagamentoConfirmadoEnabled    Boolean  @default(true) // aviso de pagamento confirmado
   autoPagamentoConfirmadoMsg        String?  @db.Text
+
+  // Follow-up de agendamento online não pago: lembretes em 30 min, 1h e 2h;
+  // sem pagamento após o último, a reserva é cancelada e o horário liberado.
+  autoAgendamentoFollowUpEnabled Boolean @default(true)
+  autoAgendamentoFollowUpMsg     String? @db.Text // lembrete com {{nome}}, {{valor}} e {{link}}
+  autoAgendamentoCanceladoMsg    String? @db.Text // aviso de liberação com {{nome}}, {{data}}, {{hora}} e {{link}}
 
   // Assinatura digital ICP-Brasil: liga/desliga a assinatura PAdES nos PDFs
   enableDigitalSignature            Boolean  @default(false)
@@ -579,6 +586,7 @@ model Payment {
   externalStatus    String? // status bruto reportado pelo gateway
   fee               Decimal?         @db.Decimal(10, 2) // taxa cobrada pelo gateway
   remindedAt        DateTime? // quando o lembrete automático de pagamento foi enviado
+  followUpStage     Int      @default(0) // follow-up do agendamento online: 0=nenhum, 1=30min, 2=1h, 3=2h, 4=finalizado/cancelado
   financialEntryId  String?          @unique
   financialEntry    FinancialEntry?  @relation(fields: [financialEntryId], references: [id], onDelete: SetNull)
   attendanceId      String?

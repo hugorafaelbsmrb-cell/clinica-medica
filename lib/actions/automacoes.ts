@@ -46,6 +46,8 @@ export async function saveMensagensAutomation(
     pagamentolink: z.string().max(2000).optional(),
     pagamentolembrete: z.string().max(2000).optional(),
     pagamentoconfirmado: z.string().max(2000).optional(),
+    agendamentofollowup: z.string().max(2000).optional(),
+    agendamentocancelado: z.string().max(2000).optional(),
   })
   const parsed = msgSchema.safeParse({
     cadastro: formData.get("autoCadastroMsg"),
@@ -57,6 +59,8 @@ export async function saveMensagensAutomation(
     pagamentolink: formData.get("autoPagamentoLinkMsg"),
     pagamentolembrete: formData.get("autoPagamentoLembreteMsg"),
     pagamentoconfirmado: formData.get("autoPagamentoConfirmadoMsg"),
+    agendamentofollowup: formData.get("autoAgendamentoFollowUpMsg"),
+    agendamentocancelado: formData.get("autoAgendamentoCanceladoMsg"),
   })
   if (!parsed.success) {
     return {
@@ -103,6 +107,12 @@ export async function saveMensagensAutomation(
       "autoPagamentoConfirmadoEnabled"
     ),
     autoPagamentoConfirmadoMsg: data.pagamentoconfirmado?.trim() || null,
+    autoAgendamentoFollowUpEnabled: flag(
+      formData,
+      "autoAgendamentoFollowUpEnabled"
+    ),
+    autoAgendamentoFollowUpMsg: data.agendamentofollowup?.trim() || null,
+    autoAgendamentoCanceladoMsg: data.agendamentocancelado?.trim() || null,
   }
 
   await prisma.clinicSettings.upsert({

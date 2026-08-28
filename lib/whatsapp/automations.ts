@@ -9,8 +9,9 @@
  *  3. Aniversário — mensagem no dia do aniversário do paciente.
  *  4. Reativação — mensagem para clientes com a última consulta
  *     há mais de X dias.
- *  5. Pagamento pendente — lembrete para quem reservou/cobrou e ainda
- *     não pagou depois do tempo definido pelo admin.
+ *  5. Pagamento pendente — lembrete para cobranças avulsas ainda não
+ *     pagas depois do tempo definido pelo admin. Cobranças de agendamento
+ *     online seguem o follow-up próprio (payment-follow-up.ts).
  *
  * As mensagens usam a fila (tabela Message) sempre que há paciente
  * cadastrado; para tentativas de cadastro o envio é direto, pois ainda
@@ -18,7 +19,6 @@
  */
 import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
-import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
 import { paymentPageUrl } from "@/lib/payments/url"
 import { getWhatsAppProvider, normalizePhone } from "./provider"
 import {
@@ -300,8 +300,9 @@ async function processReativacao(
 
 /**
  * 5) Pagamentos pendentes: lembrete (uma única vez por cobrança) para quem
- *    reservou ou recebeu cobrança e não pagou dentro do tempo definido.
- *    Também varre cobranças vencidas e libera horários reservados.
+ *    recebeu cobrança avulsa e não pagou dentro do tempo definido.
+ *    Cobranças vinculadas a agendamento online são tratadas pelo follow-up
+ *    próprio (lib/whatsapp/payment-follow-up.ts).
  */
 async function processPagamentosPendentes(
   clinic: Awaited<ReturnType<typeof getClinicSettings>>,
@@ -315,10 +316,8 @@ async function processPagamentosPendentes(
     where: {
       status: "PENDENTE",
       remindedAt: null,
+      attendanceId: null,
       createdAt: { lte: cutoff },
-    },
-    include: {
-      attendance: { select: { patientId: true, status: true } },
     },
     orderBy: { createdAt: "asc" },
     take: 20,
@@ -331,17 +330,7 @@ async function processPagamentosPendentes(
 
   let queued = 0
   for (const payment of payments) {
-    // Horário já foi cancelado/liberado: encerra a cobrança e o lançamento
-    // pendente vinculado, e não lembra o pagamento.
-    if (payment.attendance && payment.attendance.status !== "AGUARDANDO_PAGAMENTO") {
-      await cancelPendingPaymentAndEntry(
-        payment.id,
-        "Horário não está mais reservado"
-      )
-      continue
-    }
-
-    const patientId = payment.patientId ?? payment.attendance?.patientId
+    const patientId = payment.patientId
     if (!patientId) continue
 
     const patient = await prisma.patient.findUnique({ where: { id: patientId } })
