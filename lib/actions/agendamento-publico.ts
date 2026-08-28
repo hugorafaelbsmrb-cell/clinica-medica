@@ -138,6 +138,8 @@ export type PublicAgendaResult = {
     applePay: boolean
     dinheiro: boolean
   }
+  /** Juros mensais repassados ao cliente no cartão parcelado (%). */
+  jurosParcelamento: number
 }
 
 /**
@@ -230,6 +232,7 @@ export async function getPublicAgenda(
           Boolean(paymentSettings.stripeSecretKey),
         dinheiro: paymentSettings.dinheiroEnabled,
       },
+      jurosParcelamento: paymentSettings.jurosParcelamento,
     }
   }
 
@@ -252,6 +255,7 @@ export async function getPublicAgenda(
           Boolean(paymentSettings.stripeSecretKey),
         dinheiro: paymentSettings.dinheiroEnabled,
       },
+      jurosParcelamento: paymentSettings.jurosParcelamento,
     }
   }
 
@@ -286,6 +290,7 @@ export async function getPublicAgenda(
         Boolean(paymentSettings.stripeSecretKey),
       dinheiro: paymentSettings.dinheiroEnabled,
     },
+    jurosParcelamento: paymentSettings.jurosParcelamento,
   }
 }
 
@@ -795,10 +800,21 @@ const pagarCartaoAgendamentoSchema = z.object({
     .string()
     .trim()
     .email("Informe o e-mail do titular do cartão"),
+  /** CEP do titular é obrigatório no Asaas (payWithCreditCard). */
+  holderPostalCode: z
+    .string()
+    .regex(/^\d{8}$/, "Informe o CEP do titular do cartão"),
+  /** Número do endereço do titular é obrigatório no Asaas. */
+  holderAddressNumber: z
+    .string()
+    .trim()
+    .min(1, "Informe o número do endereço do titular"),
   number: z.string().regex(/^\d{13,19}$/, "Número do cartão inválido"),
   expiryMonth: z.string().regex(/^(0[1-9]|1[0-2])$/, "Mês de validade inválido"),
   expiryYear: z.string().regex(/^\d{4}$/, "Ano de validade inválido"),
   ccv: z.string().regex(/^\d{3,4}$/, "CVV inválido"),
+  /** Parcelamento no cartão (1 = à vista; juros por conta do cliente). */
+  installmentCount: z.coerce.number().int().min(1).max(12).default(1),
 })
 
 export type PagarCartaoAgendamentoState = {
@@ -845,10 +861,13 @@ export async function pagarComCartaoAgendamento(
     {
       holderName: parsed.data.holderName,
       holderEmail: parsed.data.holderEmail,
+      holderPostalCode: parsed.data.holderPostalCode,
+      holderAddressNumber: parsed.data.holderAddressNumber,
       number: parsed.data.number,
       expiryMonth: parsed.data.expiryMonth,
       expiryYear: parsed.data.expiryYear,
       ccv: parsed.data.ccv,
+      installmentCount: parsed.data.installmentCount,
     },
     remoteIp
   )

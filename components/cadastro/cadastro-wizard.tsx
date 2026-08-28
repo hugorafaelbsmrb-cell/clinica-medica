@@ -34,6 +34,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { isValidCpf } from "@/lib/cpf"
+import { buildInstallmentOptions } from "@/lib/payments/installments"
 import { PublicDayPicker } from "@/components/agenda/public-day-picker"
 import { RemarcarConsulta } from "@/components/agenda/remarcar-consulta"
 import { CancelarConsultaButton } from "@/components/agenda/cancelar-consulta-button"
@@ -267,6 +268,10 @@ export function CadastroWizard() {
   const [cardNumber, setCardNumber] = useState("")
   const [cardExpiry, setCardExpiry] = useState("")
   const [cardCvv, setCardCvv] = useState("")
+  // Dados do titular exigidos pelo Asaas (endereço) e parcelamento
+  const [cardHolderCep, setCardHolderCep] = useState("")
+  const [cardHolderNumero, setCardHolderNumero] = useState("")
+  const [parcelas, setParcelas] = useState(1)
   const [cardPayPending, startCardPayment] = useTransition()
   // Seletor de troca de forma de pagamento na tela de pagamento
   const [showTrocarMetodo, setShowTrocarMetodo] = useState(false)
@@ -699,6 +704,7 @@ export function CadastroWizard() {
         setPaymentData(result.payment)
         setMetodoPagamento(method)
         setShowTrocarMetodo(false)
+        setParcelas(1)
         toast.success(result.message)
         return
       }
@@ -722,6 +728,12 @@ export function CadastroWizard() {
       if (n > 12) month = "12"
     }
     return month + (digits.length > 2 ? `/${digits.slice(2)}` : "")
+  }
+
+  /** Máscara 00000-000 para o CEP do titular do cartão. */
+  function maskCep(value: string): string {
+    const digits = value.replace(/\D/g, "").slice(0, 8)
+    return digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits
   }
 
   // Paga a reserva com cartão direto no sistema (sem sair da página)
@@ -750,16 +762,28 @@ export function CadastroWizard() {
       toast.error("Informe o código de segurança (CVV).")
       return
     }
+    // O Asaas também exige o endereço do titular (CEP + número).
+    if (cardHolderCep.replace(/\D/g, "").length !== 8) {
+      toast.error("Informe o CEP do titular do cartão.")
+      return
+    }
+    if (!cardHolderNumero.trim()) {
+      toast.error("Informe o número do endereço do titular.")
+      return
+    }
     startCardPayment(async () => {
       const result = await pagarComCartaoAgendamento({
         attendanceId: paymentData.attendanceId,
         token: paymentData.token,
         holderName: cardHolder.trim(),
         holderEmail: cardHolderEmail.trim(),
+        holderPostalCode: cardHolderCep.replace(/\D/g, ""),
+        holderAddressNumber: cardHolderNumero.trim(),
         number: digits,
         expiryMonth: expiryDigits.slice(0, 2),
         expiryYear: `20${expiryDigits.slice(2)}`,
         ccv: cardCvv,
+        installmentCount: parcelas,
       })
       if (result.success && result.scheduledAt) {
         setSuccessDate(result.scheduledAt)
@@ -855,6 +879,16 @@ export function CadastroWizard() {
     const valor = paymentData.amount.toLocaleString("pt-BR", {
       minimumFractionDigits: 2,
     })
+    // Opções de parcelamento no cartão (juros por conta do cliente)
+    const parcelamentoOptions = buildInstallmentOptions(
+      paymentData.amount,
+      agenda?.jurosParcelamento ?? 2.99
+    )
+    const parcelaAtual =
+      parcelamentoOptions.find((o) => o.count === parcelas) ??
+      parcelamentoOptions[0]
+    const formatBRL = (v: number) =>
+      v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })
     // Outras formas de pagamento liberadas (exceto a atual) para a troca
     const outrosMetodos: ("PIX" | "CARTAO" | "APPLE_PAY" | "DINHEIRO")[] = []
     if (agenda?.paymentMethods.pix && paymentData.method !== "PIX") {
@@ -1011,6 +1045,56 @@ export function CadastroWizard() {
                       className="h-12"
                     />
                   </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      placeholder="CEP do titular"
+                      value={cardHolderCep}
+                      onChange={(e) => setCardHolderCep(maskCep(e.target.value))}
+                      inputMode="numeric"
+                      autoComplete="postal-code"
+                      className="h-12"
+                    />
+                    <Input
+                      placeholder="Número do endereço"
+                      value={cardHolderNumero}
+                      onChange={(e) => setCardHolderNumero(e.target.value)}
+                      autoComplete="address-line1"
+                      className="h-12"
+                    />
+                  </div>
+
+                  {parcelamentoOptions.length > 1 && (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-sm font-medium">
+                        Parcelamento no cartão (juros por sua conta):
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {parcelamentoOptions.map((op) => (
+                          <button
+                            key={op.count}
+                            type="button"
+                            onClick={() => setParcelas(op.count)}
+                            className={cn(
+                              "rounded-lg border-2 px-1 py-2 text-center text-xs transition-colors",
+                              parcelas === op.count
+                                ? "border-primary bg-primary/10 font-semibold text-primary"
+                                : "border-border hover:border-primary/40"
+                            )}
+                          >
+                            <span className="block font-bold">{op.count}x</span>
+                            <span className="block">
+                              {formatBRL(op.installmentValue)}
+                            </span>
+                            {op.hasInterest && (
+                              <span className="block text-[10px] text-muted-foreground">
+                                total {formatBRL(op.total)}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <Button
                     type="submit"
                     className="h-14 w-full text-lg"
@@ -1021,7 +1105,7 @@ export function CadastroWizard() {
                     ) : (
                       <CreditCard className="h-5 w-5" />
                     )}
-                    Pagar R$ {valor} com cartão
+                    Pagar R$ {formatBRL(parcelaAtual.total)} com cartão
                   </Button>
                 </form>
               )}

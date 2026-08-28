@@ -186,9 +186,14 @@ export type AsaasCardInput = {
   /** E-mail do titular — obrigatório no Asaas (payWithCreditCard). */
   holderEmail: string
   holderCpf?: string
-  holderPostalCode?: string
-  holderAddressNumber?: string
+  /** CEP do titular — obrigatório no Asaas (payWithCreditCard). */
+  holderPostalCode: string
+  /** Número do endereço do titular — obrigatório no Asaas. */
+  holderAddressNumber: string
   holderPhone?: string
+  /** Parcelamento: nº de parcelas e valor de cada (2+ parcelas no cartão). */
+  installmentCount?: number
+  installmentValue?: number
   /** IP do comprador (análise antifraude). */
   remoteIp?: string
 }
@@ -219,12 +224,22 @@ export async function payAsaasCard(
         // ("Informe o email do titular do cartão.").
         email: card.holderEmail.slice(0, 100),
         ...(card.holderCpf ? { cpfCnpj: card.holderCpf } : {}),
-        ...(card.holderPostalCode ? { postalCode: card.holderPostalCode } : {}),
-        ...(card.holderAddressNumber
-          ? { addressNumber: card.holderAddressNumber.slice(0, 20) }
-          : {}),
+        // Sem CEP e número o Asaas recusa a transação
+        // ("Informe o CEP do titular do cartão.").
+        postalCode: card.holderPostalCode.replace(/\D/g, ""),
+        addressNumber: card.holderAddressNumber.slice(0, 20),
         ...(card.holderPhone ? { mobilePhone: card.holderPhone } : {}),
       },
+    }
+    // Parcelado: parcela × quantidade precisa ser exatamente o valor da
+    // cobrança (o valor é atualizado antes, via updateAsaasPaymentValue).
+    if (
+      card.installmentCount &&
+      card.installmentCount > 1 &&
+      card.installmentValue
+    ) {
+      body.installmentCount = card.installmentCount
+      body.installmentValue = card.installmentValue
     }
     if (card.remoteIp) body.remoteIp = card.remoteIp
 
@@ -251,6 +266,41 @@ export async function payAsaasCard(
     return {
       ok: false,
       error: "Falha ao conectar no Asaas ao processar o cartão.",
+    }
+  }
+}
+
+/**
+ * Atualiza o valor de uma cobrança PENDENTE no Asaas. Usado no parcelamento
+ * com juros: o total precisa existir na cobrança antes do payWithCreditCard,
+ * pois o gateway exige parcela × quantidade = valor da cobrança.
+ */
+export async function updateAsaasPaymentValue(
+  providerPaymentId: string,
+  value: number,
+  apiKey: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { response } = await asaasFetch(
+      apiKey,
+      `/payments/${providerPaymentId}`,
+      { method: "PUT", body: JSON.stringify({ value }) }
+    )
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as {
+        errors?: { description?: string }[]
+      }
+      return {
+        ok: false,
+        error:
+          data.errors?.[0]?.description ?? `Asaas respondeu ${response.status}`,
+      }
+    }
+    return { ok: true }
+  } catch {
+    return {
+      ok: false,
+      error: "Falha ao conectar no Asaas ao atualizar a cobrança.",
     }
   }
 }

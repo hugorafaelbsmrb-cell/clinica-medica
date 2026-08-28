@@ -15,10 +15,12 @@ import { getClinicSettings } from "@/lib/clinic"
 import { getPaymentSettings } from "@/lib/payments/settings"
 import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
 import { paymentPageUrl } from "@/lib/payments/url"
+import { buildInstallmentOptions } from "@/lib/payments/installments"
 import {
   createAsaasCharge,
   getAsaasPaymentStatus,
   payAsaasCard,
+  updateAsaasPaymentValue,
 } from "@/lib/payments/asaas"
 import {
   createStripeCheckout,
@@ -174,6 +176,12 @@ export type CardChargeInput = {
   ccv: string
   /** E-mail do titular — obrigatório no Asaas para payWithCreditCard. */
   holderEmail: string
+  /** CEP do titular — obrigatório no Asaas para payWithCreditCard. */
+  holderPostalCode: string
+  /** Número do endereço do titular — obrigatório no Asaas. */
+  holderAddressNumber: string
+  /** Parcelamento escolhido no checkout (1 = à vista). */
+  installmentCount?: number
 }
 
 /**
@@ -233,6 +241,57 @@ export async function payChargeWithCard(
       ? payment.patient.cpf.replace(/\D/g, "")
       : undefined
 
+  // Parcelamento escolhido no checkout (1 = à vista, sem juros). Com
+  // juros, o total é recalculado e a cobrança é atualizada no Asaas antes
+  // do payWithCreditCard — o gateway exige parcela × quantidade = valor.
+  const installmentCount = Math.min(
+    12,
+    Math.max(1, Math.round(card.installmentCount ?? 1))
+  )
+  let installmentValue = Number(payment.amount)
+
+  if (installmentCount > 1 && payment.installments !== installmentCount) {
+    const option = buildInstallmentOptions(
+      Number(payment.amount),
+      settings.jurosParcelamento
+    ).find((o) => o.count === installmentCount)
+    if (!option) {
+      return {
+        success: false,
+        message: "Parcelamento indisponível para este valor.",
+      }
+    }
+    // Atualiza o valor no Asaas primeiro: se falhar, nada mudou localmente
+    // e o cliente pode tentar de novo.
+    const updated = await updateAsaasPaymentValue(
+      payment.providerPaymentId,
+      option.total,
+      settings.asaasApiKey
+    )
+    if (!updated.ok) {
+      return {
+        success: false,
+        message:
+          updated.error ??
+          "Não foi possível aplicar o parcelamento. Tente novamente.",
+      }
+    }
+    // Guarda o parcelamento na cobrança local; o total com juros é aplicado
+    // no lançamento financeiro quando o pagamento confirma (applyPaymentPaid).
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        installments: installmentCount,
+        installmentValue: option.installmentValue,
+      },
+    })
+    installmentValue = option.installmentValue
+  } else if (installmentCount > 1) {
+    // Parcelamento já aplicado numa tentativa anterior: reusa o valor.
+    installmentValue =
+      Number(payment.installmentValue ?? 0) || Number(payment.amount)
+  }
+
   const result = await payAsaasCard(payment.providerPaymentId, settings.asaasApiKey, {
     holderName: card.holderName,
     number: card.number,
@@ -241,9 +300,11 @@ export async function payChargeWithCard(
     ccv: card.ccv,
     holderEmail: card.holderEmail,
     holderCpf: cpf,
-    holderPostalCode: payment.patient?.zipCode?.replace(/\D/g, "") || undefined,
-    holderAddressNumber: payment.patient?.number ?? undefined,
+    holderPostalCode: card.holderPostalCode,
+    holderAddressNumber: card.holderAddressNumber,
     holderPhone: payment.patient?.phone?.replace(/\D/g, "") || undefined,
+    installmentCount,
+    installmentValue,
     remoteIp,
   })
 
@@ -621,6 +682,20 @@ async function applyPaymentPaid(paymentId: string, paidAt: Date): Promise<void> 
     APPLE_PAY: "APPLE_PAY",
   }
 
+  // Parcelado no checkout transparente, o valor nominal fica no banco e o
+  // total com juros (parcela × quantidade) é aplicado só aqui. Cobrança
+  // parcelada criada no painel já nasce com o total no valor nominal — a
+  // diferença de centavos de arredondamento é tolerada.
+  const installmentTotal =
+    payment.installments && payment.installmentValue
+      ? Number(payment.installmentValue) * payment.installments
+      : null
+  const settledValue =
+    installmentTotal !== null &&
+    Math.abs(installmentTotal - Number(payment.amount)) > 0.005
+      ? installmentTotal
+      : Number(payment.amount)
+
   // Confirmação do horário reservado. Se o horário foi liberado por
   // expiração (sweep/webhook) e o pagamento confirmou depois, reativa a
   // consulta quando o slot continua livre; ocupado, registra a necessidade
@@ -665,7 +740,11 @@ async function applyPaymentPaid(paymentId: string, paidAt: Date): Promise<void> 
   await prisma.$transaction([
     prisma.payment.update({
       where: { id: payment.id },
-      data: { status: "PAGO", paidAt },
+      data: {
+        status: "PAGO",
+        paidAt,
+        ...(installmentTotal !== null ? { amount: settledValue } : {}),
+      },
     }),
     ...(payment.financialEntryId
       ? [
@@ -674,6 +753,7 @@ async function applyPaymentPaid(paymentId: string, paidAt: Date): Promise<void> 
             data: {
               status: "PAGO",
               paymentMethod: methodLabel[payment.method],
+              ...(installmentTotal !== null ? { value: settledValue } : {}),
             },
           }),
         ]
@@ -697,7 +777,8 @@ async function applyPaymentPaid(paymentId: string, paidAt: Date): Promise<void> 
       details: {
         provider: payment.provider,
         method: payment.method,
-        amount: Number(payment.amount),
+        amount: settledValue,
+        installments: payment.installments,
         financialEntryId: payment.financialEntryId,
         attendanceId: payment.attendanceId,
       },
