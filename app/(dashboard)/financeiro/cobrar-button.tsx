@@ -197,30 +197,36 @@ export function CobrarButton({
         )}
 
         {/* Resultado: PIX */}
-        {result?.method === "PIX" && resultQr && (
+        {result?.method === "PIX" && (resultQr || result.pixCopiaCola) && (
           <div className="flex flex-col gap-3 rounded-lg border p-4">
             <p className="text-sm font-medium">Cobrança PIX gerada</p>
             <div className="flex items-start gap-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={resultQr}
-                alt="QR code PIX"
-                className="h-32 w-32 rounded-md border"
-              />
+              {resultQr && (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={resultQr}
+                  alt="QR code PIX"
+                  className="h-32 w-32 rounded-md border"
+                />
+              )}
               <div className="flex min-w-0 flex-1 flex-col gap-2">
                 <p className="text-xs text-muted-foreground">
                   Envie o QR ou o código copia-e-cola para o paciente:
                 </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => handleCopy(result.pixCopiaCola ?? "", "Código PIX")}
-                >
-                  <Copy className="h-4 w-4" />
-                  Copiar copia-e-cola
-                </Button>
+                {result.pixCopiaCola && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() =>
+                      handleCopy(result.pixCopiaCola ?? "", "Código PIX")
+                    }
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copiar copia-e-cola
+                  </Button>
+                )}
                 <Button
                   type="button"
                   variant="outline"

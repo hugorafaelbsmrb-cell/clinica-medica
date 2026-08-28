@@ -245,33 +245,36 @@ export function CobrarPacienteButton({
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {result.method === "PIX" && result.pixQrCodeUrl && (
-              <div className="flex flex-col items-center gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={result.pixQrCodeUrl}
-                  alt="QR Code PIX"
-                  className="h-48 w-48 rounded-lg border bg-white p-2"
-                />
-                {result.pixCopiaCola && (
-                  <div className="flex w-full flex-col gap-2">
-                    <p className="break-all rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground">
-                      {result.pixCopiaCola}
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() =>
-                        handleCopy(result.pixCopiaCola ?? "", "Código PIX")
-                      }
-                    >
-                      <Copy className="h-4 w-4" />
-                      Copiar código PIX
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
+            {result.method === "PIX" &&
+              (result.pixQrCodeUrl || result.pixCopiaCola) && (
+                <div className="flex flex-col items-center gap-3">
+                  {result.pixQrCodeUrl && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={result.pixQrCodeUrl}
+                      alt="QR Code PIX"
+                      className="h-48 w-48 rounded-lg border bg-white p-2"
+                    />
+                  )}
+                  {result.pixCopiaCola && (
+                    <div className="flex w-full flex-col gap-2">
+                      <p className="break-all rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground">
+                        {result.pixCopiaCola}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                          handleCopy(result.pixCopiaCola ?? "", "Código PIX")
+                        }
+                      >
+                        <Copy className="h-4 w-4" />
+                        Copiar código PIX
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
 
             {result.paymentId && (
               <div className="flex flex-col gap-2">

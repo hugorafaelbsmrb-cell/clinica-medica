@@ -79,6 +79,7 @@ type AsaasPayment = {
   value?: number
   invoiceUrl?: string
   pixQrCodeUrl?: string
+  encodedImage?: string
   payload?: string
   paymentDate?: string
 }
@@ -87,6 +88,43 @@ function headers(apiKey: string): Record<string, string> {
   return {
     access_token: apiKey,
     "Content-Type": "application/json",
+  }
+}
+
+function dataUriForEncodedImage(
+  encoded: string | undefined
+): string | undefined {
+  if (!encoded) return undefined
+  // O Asaas devolve o QR em base64 puro; o <img> precisa de um data URI.
+  if (encoded.startsWith("data:")) return encoded
+  return `data:image/png;base64,${encoded}`
+}
+
+/**
+ * Busca o QR Code PIX de uma cobrança já criada
+ * (GET /payments/{id}/pixQrCode). Usado como fallback quando a resposta
+ * da criação vem sem payload/QR — comum logo após o cadastro da chave PIX
+ * ou quando o QR ainda não estava pronto.
+ */
+async function getAsaasPixQrCode(
+  providerPaymentId: string,
+  apiKey: string
+): Promise<{ payload?: string; encodedImage?: string } | null> {
+  try {
+    const { response } = await asaasFetch(
+      apiKey,
+      `/payments/${providerPaymentId}/pixQrCode`
+    )
+    if (!response.ok) return null
+    const data = (await response.json().catch(() => ({}))) as {
+      success?: boolean
+      payload?: string
+      encodedImage?: string
+    }
+    if (!data.success) return null
+    return { payload: data.payload, encodedImage: data.encodedImage }
+  } catch {
+    return null
   }
 }
 
@@ -156,12 +194,33 @@ export async function createAsaasCharge(
       return { ok: false, error: detail }
     }
 
+    let payload = data.payload
+    let qrUrl = data.pixQrCodeUrl ?? dataUriForEncodedImage(data.encodedImage)
+
+    // PIX sem QR/copia-e-cola na resposta: tenta o endpoint dedicado antes
+    // de concluir. Sem chave PIX cadastrada na conta, o Asaas cria a
+    // cobrança mas não devolve os dados do QR — aí a cobrança é inutilizável
+    // e avisamos com clareza em vez de mostrar um resultado vazio.
+    if (input.method === "PIX" && (!payload || !qrUrl)) {
+      const pix = await getAsaasPixQrCode(data.id, apiKey)
+      payload = payload ?? pix?.payload
+      qrUrl = qrUrl ?? dataUriForEncodedImage(pix?.encodedImage)
+    }
+
+    if (input.method === "PIX" && (!payload || !qrUrl)) {
+      return {
+        ok: false,
+        error:
+          "O Asaas criou a cobrança, mas não gerou o QR Code PIX. Cadastre uma chave PIX na conta Asaas (Configurações → Chaves Pix) e tente novamente.",
+      }
+    }
+
     return {
       ok: true,
       providerPaymentId: data.id,
       checkoutUrl: data.invoiceUrl,
-      pixCopiaCola: data.payload,
-      pixQrCodeUrl: data.pixQrCodeUrl,
+      pixCopiaCola: payload,
+      pixQrCodeUrl: qrUrl,
       externalStatus: data.status,
     }
   } catch {
@@ -407,7 +466,11 @@ function mapAsaasStatus(
   }
 }
 
-/** Testa a chave consultando o saldo da conta (valida a autenticação). */
+/**
+ * Testa a chave consultando o saldo da conta (valida a autenticação) e,
+ * de quebra, verifica se há chave PIX cadastrada — sem ela o Asaas não
+ * devolve QR Code nem copia-e-cola nas cobranças PIX.
+ */
 export async function testAsaasConnection(
   apiKey: string
 ): Promise<{ success: boolean; message: string }> {
@@ -429,12 +492,29 @@ export async function testAsaasConnection(
         message: `Asaas respondeu ${response.status}`,
       }
     }
+
+    const environmentLabel =
+      environment === "sandbox" ? "Asaas Sandbox" : "Asaas"
+
+    // Sem chave PIX cadastrada, cobranças PIX nascem sem QR/copia-e-cola.
+    try {
+      const pix = await asaasFetch(apiKey, "/pix/addressKeys")
+      const pixData = (await pix.response.json().catch(() => ({}))) as {
+        data?: unknown[]
+      }
+      if (pix.response.ok && (!pixData.data || pixData.data.length === 0)) {
+        return {
+          success: false,
+          message: `Chave válida (${environmentLabel}), mas a conta não tem chave PIX cadastrada — sem ela o sistema não gera QR Code nem copia-e-cola. Cadastre em: Asaas → Configurações → Chaves Pix.`,
+        }
+      }
+    } catch {
+      // Consulta das chaves PIX falhou — a chave da API continua válida.
+    }
+
     return {
       success: true,
-      message:
-        environment === "sandbox"
-          ? "Chave válida — conexão com o Asaas Sandbox OK"
-          : "Chave válida — conexão com o Asaas OK",
+      message: `Chave válida — conexão com o ${environmentLabel} OK`,
     }
   } catch {
     return {
