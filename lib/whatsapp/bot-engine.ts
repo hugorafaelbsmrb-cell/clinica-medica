@@ -51,21 +51,21 @@ function extractDigits(text: string): string {
 }
 
 const OPCOES_MENU = [
-  "1 - 📅 Agendar uma consulta",
-  "2 - 🔎 Ver minha consulta",
-  "3 - 🔁 Remarcar consulta",
-  "4 - 🕒 Horário de atendimento",
-  "5 - 👩‍⚕️ Falar com um atendente",
+  "1️⃣ Agendar uma consulta 📅",
+  "2️⃣ Ver minha consulta 🔎",
+  "3️⃣ Remarcar consulta 🔁",
+  "4️⃣ Horário de atendimento 🕒",
+  "5️⃣ Falar com um atendente 👩‍⚕️",
 ]
 
 const MENU_FOOTER =
-  'Digite o número da opção que deseja, ou escreva a palavra (ex.: "agendar").'
+  '👉 Digite o número da opção que deseja, ou escreva a palavra (ex.: "agendar").'
 
 function menuReply(ctx: BotContext): string {
   const boasVindas = ctx.msgBoasVindas?.trim()
   const saudacao = boasVindas
     ? boasVindas
-    : `Olá! Sou o assistente virtual da ${ctx.clinicName}. Como posso ajudar?`
+    : `Olá! 👋 Sou o assistente virtual da ${ctx.clinicName}. Como posso ajudar?`
   return [saudacao, "", ...OPCOES_MENU, "", MENU_FOOTER].join("\n")
 }
 
