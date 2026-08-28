@@ -138,8 +138,6 @@ export type PublicAgendaResult = {
     applePay: boolean
     dinheiro: boolean
   }
-  /** Juros mensais repassados ao cliente no cartão parcelado (%). */
-  jurosParcelamento: number
 }
 
 /**
@@ -232,7 +230,6 @@ export async function getPublicAgenda(
           Boolean(paymentSettings.stripeSecretKey),
         dinheiro: paymentSettings.dinheiroEnabled,
       },
-      jurosParcelamento: paymentSettings.jurosParcelamento,
     }
   }
 
@@ -255,7 +252,6 @@ export async function getPublicAgenda(
           Boolean(paymentSettings.stripeSecretKey),
         dinheiro: paymentSettings.dinheiroEnabled,
       },
-      jurosParcelamento: paymentSettings.jurosParcelamento,
     }
   }
 
@@ -290,7 +286,6 @@ export async function getPublicAgenda(
         Boolean(paymentSettings.stripeSecretKey),
       dinheiro: paymentSettings.dinheiroEnabled,
     },
-    jurosParcelamento: paymentSettings.jurosParcelamento,
   }
 }
 

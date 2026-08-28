@@ -3,7 +3,6 @@ import { notFound } from "next/navigation"
 import { HeartPulse } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
-import { getPaymentSettings } from "@/lib/payments/settings"
 import {
   PagamentoPublicoForm,
   type PagamentoPublicoData,
@@ -38,7 +37,6 @@ export default async function PagarPage({
   if (!payment) notFound()
 
   const clinic = await getClinicSettings()
-  const paymentSettings = await getPaymentSettings()
 
   const data: PagamentoPublicoData = {
     token: payment.id,
@@ -51,7 +49,6 @@ export default async function PagarPage({
     checkoutUrl: payment.checkoutUrl,
     scheduledAt: payment.attendance?.scheduledAt.toISOString() ?? null,
     patientName: payment.patient?.name ?? null,
-    jurosParcelamento: paymentSettings.jurosParcelamento,
   }
 
   return (

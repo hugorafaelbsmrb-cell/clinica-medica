@@ -9,6 +9,7 @@
  * Os cartões são sempre ordenados pelo horário do atendimento.
  */
 import { useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
@@ -21,6 +22,7 @@ import {
   CarFront,
   FileText,
   History,
+  List,
   Loader2,
   MapPin,
   MessageCircle,
@@ -79,7 +81,15 @@ function formatMoney(value: number): string {
   return value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })
 }
 
-function DayCard({ attendance }: { attendance: DayCardData }) {
+function DayCard({
+  attendance,
+  onStarted,
+  onCompleted,
+}: {
+  attendance: DayCardData
+  onStarted?: () => void
+  onCompleted?: () => void
+}) {
   const router = useRouter()
   // Atendimento já realizado: aparece como registro do dia, sem ação.
   const done = attendance.status === "REALIZADO"
@@ -115,6 +125,7 @@ function DayCard({ attendance }: { attendance: DayCardData }) {
     if (result.success) {
       setStarted(true)
       setExpanded(true)
+      onStarted?.()
       toast.success(result.message)
       router.refresh()
     } else {
@@ -127,6 +138,7 @@ function DayCard({ attendance }: { attendance: DayCardData }) {
     const result = await completeAttendance(attendance.id)
     setBusy(null)
     if (result.success) {
+      onCompleted?.()
       toast.success(result.message)
       router.refresh()
     } else {
@@ -345,7 +357,7 @@ function DayCard({ attendance }: { attendance: DayCardData }) {
                 variant="outline"
                 className="h-12 text-base"
                 render={
-                  <a href={`/prescricoes/novo?atendimento=${attendance.id}`} />
+                  <Link href={`/prescricoes/novo?atendimento=${attendance.id}`} />
                 }
               >
                 <FileText className="h-5 w-5" />
@@ -355,7 +367,7 @@ function DayCard({ attendance }: { attendance: DayCardData }) {
                 variant="outline"
                 className="h-12 text-base"
                 render={
-                  <a
+                  <Link
                     href={`/planos-terapeuticos/novo?atendimento=${attendance.id}`}
                   />
                 }
@@ -369,7 +381,7 @@ function DayCard({ attendance }: { attendance: DayCardData }) {
             <Button
               variant="outline"
               className="h-12 w-full text-base"
-              render={<a href={`/pacientes/${attendance.patientId}`} />}
+              render={<Link href={`/pacientes/${attendance.patientId}`} />}
             >
               <History className="h-5 w-5" />
               Histórico do paciente
@@ -450,11 +462,39 @@ export function DayCards({ attendances }: { attendances: DayCardData[] }) {
       new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
   )
 
+  // Modo foco: ao iniciar um atendimento (ou quando já existe um em
+  // andamento), só o cartão ativo fica visível — os demais atendimentos
+  // somem para não confundir o médico durante a consulta.
+  const [focusedId, setFocusedId] = useState<string | null>(
+    () => sorted.find((attendance) => attendance.status === "EM_ATENDIMENTO")?.id ?? null
+  )
+  const focusedCard = focusedId
+    ? sorted.find((attendance) => attendance.id === focusedId)
+    : null
+  const visible = focusedCard ? [focusedCard] : sorted
+
   return (
-    <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-      {sorted.map((attendance) => (
-        <DayCard key={attendance.id} attendance={attendance} />
-      ))}
+    <div className="flex flex-col gap-4">
+      {focusedCard && (
+        <Button
+          variant="outline"
+          className="h-12 w-full text-base lg:w-80"
+          onClick={() => setFocusedId(null)}
+        >
+          <List className="h-5 w-5" />
+          Ver todos os atendimentos
+        </Button>
+      )}
+      <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+        {visible.map((attendance) => (
+          <DayCard
+            key={attendance.id}
+            attendance={attendance}
+            onStarted={() => setFocusedId(attendance.id)}
+            onCompleted={() => setFocusedId(null)}
+          />
+        ))}
+      </div>
     </div>
   )
 }

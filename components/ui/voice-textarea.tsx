@@ -32,6 +32,7 @@ type SpeechRecognitionLike = {
   onend: (() => void) | null
   start(): void
   stop(): void
+  abort(): void
 }
 
 function getRecognitionCtor():
@@ -73,6 +74,32 @@ export function VoiceTextarea({
   const [text, setText] = useState(value ?? defaultValue ?? "")
   const [listening, setListening] = useState(false)
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
+  // Controle interno da sessão de ditado: evita toast duplicado quando o
+  // reconhecimento termina por erro ou por ação do usuário.
+  const hasResultRef = useRef(false)
+  const errorRef = useRef(false)
+  const manuallyStoppedRef = useRef(false)
+  const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function clearWatchdog() {
+    if (watchdogRef.current) {
+      clearTimeout(watchdogRef.current)
+      watchdogRef.current = null
+    }
+  }
+
+  // Ao desmontar (ex.: troca de página), aborta o reconhecimento para não
+  // segurar o microfone nem disparar eventos em componente desmontado.
+  useEffect(() => {
+    return () => {
+      clearWatchdog()
+      try {
+        recognitionRef.current?.abort()
+      } catch {
+        // reconhecimento já encerrado — nada a fazer
+      }
+    }
+  }, [])
 
   // Mantém o modo controlado sincronizado quando o valor vem de fora
   // (ex.: resumo gerado pela IA substituindo o texto atual).
@@ -94,6 +121,7 @@ export function VoiceTextarea({
 
   function handleToggleMic() {
     if (listening) {
+      manuallyStoppedRef.current = true
       recognitionRef.current?.stop()
       setListening(false)
       return
@@ -110,6 +138,10 @@ export function VoiceTextarea({
     recognition.continuous = false
     recognition.interimResults = false
 
+    hasResultRef.current = false
+    errorRef.current = false
+    manuallyStoppedRef.current = false
+
     recognition.onresult = (event) => {
       const transcript = Array.from(event.results)
         .filter((result) => result.isFinal)
@@ -117,6 +149,7 @@ export function VoiceTextarea({
         .join(" ")
         .trim()
       if (!transcript) return
+      hasResultRef.current = true
       setText((current) => {
         const merged = current.trim() ? `${current.trim()} ${transcript}` : transcript
         onValueChange?.(merged)
@@ -125,22 +158,46 @@ export function VoiceTextarea({
     }
 
     recognition.onerror = (event) => {
+      errorRef.current = true
+      setListening(false)
+      clearWatchdog()
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
         toast.error("Microfone bloqueado — libere a permissão no navegador")
       } else if (event.error === "no-speech") {
         toast.error("Não ouvi nada — fale mais perto do microfone")
+      } else if (event.error === "network") {
+        toast.error("Sem conexão com o serviço de voz — verifique a internet e tente novamente")
       } else if (event.error !== "aborted") {
         toast.error("Falha no reconhecimento de voz — tente novamente")
       }
     }
 
-    recognition.onend = () => setListening(false)
+    recognition.onend = () => {
+      setListening(false)
+      clearWatchdog()
+      // Terminou sem capturar nada e sem erro reportado: avisa o usuário
+      // em vez de deixá-lo achando que o microfone travou.
+      if (!hasResultRef.current && !errorRef.current && !manuallyStoppedRef.current) {
+        toast.warning("Nenhum texto capturado — toque no microfone e fale novamente")
+      }
+    }
     recognitionRef.current = recognition
 
     try {
       recognition.start()
       setListening(true)
       toast.info("Ouvindo... fale agora")
+      // Watchdog: alguns navegadores não disparam onend; para a escuta
+      // sozinha para o botão não ficar travado.
+      clearWatchdog()
+      watchdogRef.current = setTimeout(() => {
+        try {
+          recognition.stop()
+        } catch {
+          // já encerrado
+        }
+        setListening(false)
+      }, 30_000)
     } catch {
       setListening(false)
       toast.error("Não foi possível iniciar o microfone")

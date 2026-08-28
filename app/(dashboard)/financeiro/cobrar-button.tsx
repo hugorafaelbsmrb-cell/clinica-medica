@@ -26,6 +26,7 @@ import {
 import {
   createPaymentForEntry,
   refreshPayment,
+  sendPaymentLinkByWhatsApp,
   type CreatePaymentResult,
 } from "@/lib/actions/pagamentos"
 import { paymentPageUrl } from "@/lib/payments/url"
@@ -87,6 +88,7 @@ export function CobrarButton({
   const [result, setResult] = useState<CreatePaymentResult | null>(null)
   const [pendingCreate, startCreate] = useTransition()
   const [pendingCheck, startCheck] = useTransition()
+  const [pendingSend, startSend] = useTransition()
 
   const pendingPayment =
     existingPayment && existingPayment.status === "PENDENTE"
@@ -125,10 +127,15 @@ export function CobrarButton({
     else toast.error("Não foi possível copiar — selecione manualmente")
   }
 
-  const shareText = (url: string) =>
-    `https://wa.me/?text=${encodeURIComponent(
-      `Olá! Segue o link para pagamento de ${formatCurrency(value)} (${description}): ${url}`
-    )}`
+  // Envia o link pelo WhatsApp via API (W-API) — o usuário permanece na página.
+  function handleSendWhatsApp(paymentId: string | null) {
+    if (!paymentId) return
+    startSend(async () => {
+      const res = await sendPaymentLinkByWhatsApp(paymentId)
+      if (res.success) toast.success(res.message)
+      else toast.error(res.message)
+    })
+  }
 
   const resultPaymentId = result?.paymentId ?? pendingPayment?.id ?? null
   // Sempre a página de pagamento do próprio sistema (transparente),
@@ -225,15 +232,15 @@ export function CobrarButton({
                   Copiar link
                 </Button>
                 {resultUrl && (
-                  <a
-                    href={shareText(resultUrl)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                  <button
+                    type="button"
+                    disabled={pendingSend}
+                    onClick={() => handleSendWhatsApp(resultPaymentId)}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                   >
                     <MessageCircle className="h-3.5 w-3.5" />
-                    Enviar pelo WhatsApp
-                  </a>
+                    {pendingSend ? "Enviando..." : "Enviar pelo WhatsApp"}
+                  </button>
                 )}
               </div>
             </div>
@@ -256,15 +263,15 @@ export function CobrarButton({
                 <Copy className="h-4 w-4" />
                 Copiar link
               </Button>
-              <a
-                href={shareText(resultUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+              <button
+                type="button"
+                disabled={pendingSend}
+                onClick={() => handleSendWhatsApp(resultPaymentId)}
+                className="flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
               >
                 <MessageCircle className="h-4 w-4" />
-                Enviar pelo WhatsApp
-              </a>
+                {pendingSend ? "Enviando..." : "Enviar pelo WhatsApp"}
+              </button>
             </div>
           )}
 
@@ -293,15 +300,15 @@ export function CobrarButton({
                 <ExternalLink className="h-4 w-4" />
                 Copiar link
               </Button>
-              <a
-                href={shareText(resultUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+              <button
+                type="button"
+                disabled={pendingSend}
+                onClick={() => handleSendWhatsApp(resultPaymentId)}
+                className="flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
               >
                 <MessageCircle className="h-3.5 w-3.5" />
-                WhatsApp
-              </a>
+                {pendingSend ? "Enviando..." : "WhatsApp"}
+              </button>
             </div>
           </div>
         )}

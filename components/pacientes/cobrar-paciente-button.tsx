@@ -28,6 +28,7 @@ import { Field, FieldLabel } from "@/components/ui/field"
 import {
   createStandaloneCharge,
   refreshPayment,
+  sendPaymentLinkByWhatsApp,
   type CreatePaymentResult,
 } from "@/lib/actions/pagamentos"
 import { paymentPageUrl } from "@/lib/payments/url"
@@ -98,6 +99,7 @@ export function CobrarPacienteButton({
   const [error, setError] = useState("")
   const [pending, startCharge] = useTransition()
   const [pendingCheck, startCheck] = useTransition()
+  const [pendingSend, startSend] = useTransition()
 
   function reset() {
     setResult(null)
@@ -142,6 +144,16 @@ export function CobrarPacienteButton({
     else toast.error("Não foi possível copiar — selecione manualmente")
   }
 
+  // Envia o link pelo WhatsApp via API (W-API) — o usuário permanece na página.
+  function handleSendWhatsApp() {
+    if (!result?.paymentId) return
+    startSend(async () => {
+      const res = await sendPaymentLinkByWhatsApp(result.paymentId ?? "")
+      if (res.success) toast.success(res.message)
+      else toast.error(res.message)
+    })
+  }
+
   // Simula a aprovação de uma cobrança em modo teste (gateway sem chave)
   function handleSimulate() {
     if (!result?.paymentId) return
@@ -156,11 +168,6 @@ export function CobrarPacienteButton({
       }
     })
   }
-
-  const shareText = (url: string) =>
-    `https://wa.me/?text=${encodeURIComponent(
-      `Olá, ${patientName}! Segue o link para pagamento (${description}): ${url}`
-    )}`
 
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
@@ -285,16 +292,15 @@ export function CobrarPacienteButton({
                 <Button
                   type="button"
                   variant="secondary"
-                  render={
-                    <a
-                      href={shareText(paymentPageUrl(result.paymentId))}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    />
-                  }
+                  onClick={handleSendWhatsApp}
+                  disabled={pendingSend}
                 >
-                  <MessageCircle className="h-4 w-4" />
-                  Enviar pelo WhatsApp
+                  {pendingSend ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <MessageCircle className="h-4 w-4" />
+                  )}
+                  {pendingSend ? "Enviando..." : "Enviar pelo WhatsApp"}
                 </Button>
               </div>
             )}

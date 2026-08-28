@@ -380,8 +380,11 @@ export function PagamentosForm({
             </div>
             <p className="text-xs text-muted-foreground">
               Valores sugeridos por complexidade no modal de iniciar
-              acompanhamento (o médico pode editar na hora) e os juros
-              mensais repassados ao paciente ao parcelar no cartão.
+              acompanhamento e o juro mensal adicional nas parcelas geradas
+              pelo painel. No checkout online (link de pagamento), a taxa do
+              cartão do Asaas é repassada ao cliente automaticamente:
+              2,99% + R$ 0,49 à vista, 3,49% + R$ 0,49 de 2 a 6x e
+              3,99% + R$ 0,49 de 7 a 12x.
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field>
@@ -418,7 +421,7 @@ export function PagamentosForm({
                 />
               </Field>
               <Field>
-                <FieldLabel>Juros do parcelamento (% ao mês)</FieldLabel>
+                <FieldLabel>Juros do parcelamento no painel (% ao mês)</FieldLabel>
                 <Input
                   name="jurosParcelamento"
                   type="text"

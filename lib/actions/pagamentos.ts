@@ -14,6 +14,8 @@ import { cancelPendingPayment } from "@/lib/payments/cancellation"
 import { invalidatePaymentSettingsCache } from "@/lib/payments/settings"
 import { testAsaasConnection } from "@/lib/payments/asaas"
 import { testStripeConnection } from "@/lib/payments/stripe"
+import { paymentPageUrl } from "@/lib/payments/url"
+import { sendImmediateMessage } from "@/lib/whatsapp/message-service"
 import type { PaymentMethodType } from "@/lib/payments/types"
 
 export type ActionState = {
@@ -330,6 +332,83 @@ export async function refreshPayment(
   const result = await refreshPaymentStatus(paymentId)
   revalidatePath("/financeiro")
   return { success: result.success, message: result.message }
+}
+
+/**
+ * Reenvia o link de pagamento pelo WhatsApp (via API/W-API), sem abrir o
+ * aplicativo no navegador. Usado no "Gerar cobrança" do financeiro e nos
+ * diálogos de cobrança do painel. O paciente pode vir do vínculo direto
+ * da cobrança ou do lançamento financeiro (atendimento).
+ */
+export async function sendPaymentLinkByWhatsApp(
+  paymentId: string
+): Promise<ActionState> {
+  const session = await auth()
+  if (!session?.user) return { success: false, message: "Sessão expirada" }
+  requireRole(session, ["ADMIN", "FINANCEIRO", "MEDICO", "SECRETARIA"])
+
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    include: {
+      patient: {
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          whatsappEnabled: true,
+          lgpdConsent: true,
+        },
+      },
+      financialEntry: {
+        select: {
+          attendance: {
+            select: {
+              patient: {
+                select: {
+                  id: true,
+                  name: true,
+                  phone: true,
+                  whatsappEnabled: true,
+                  lgpdConsent: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+  if (!payment) return { success: false, message: "Cobrança não encontrada" }
+
+  const patient = payment.patient ?? payment.financialEntry?.attendance?.patient ?? null
+  if (!patient) {
+    return { success: false, message: "Cobrança sem paciente vinculado" }
+  }
+  if (!patient.phone) {
+    return { success: false, message: "Paciente sem telefone cadastrado" }
+  }
+  if (!patient.whatsappEnabled) {
+    return { success: false, message: "Paciente sem WhatsApp habilitado no cadastro" }
+  }
+  if (!patient.lgpdConsent) {
+    return { success: false, message: "Paciente sem consentimento LGPD para contato" }
+  }
+
+  const url = paymentPageUrl(payment.id)
+  const content = `Olá, ${
+    patient.name.split(" ")[0]
+  }! Segue o link para pagamento: ${url}`
+  const result = await sendImmediateMessage(
+    patient.id,
+    "LINK_PAGAMENTO",
+    content,
+    undefined,
+    [{ type: "URL", label: "Pagar agora", url }]
+  )
+
+  return result.ok
+    ? { success: true, message: "Link de pagamento enviado pelo WhatsApp" }
+    : { success: false, message: result.error ?? "Falha ao enviar pelo WhatsApp" }
 }
 
 const standaloneChargeSchema = z.object({

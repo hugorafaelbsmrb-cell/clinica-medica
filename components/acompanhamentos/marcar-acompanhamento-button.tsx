@@ -45,7 +45,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Field, FieldLabel } from "@/components/ui/field"
-import { refreshPayment } from "@/lib/actions/pagamentos"
+import { refreshPayment, sendPaymentLinkByWhatsApp } from "@/lib/actions/pagamentos"
 import {
   createFollowUpProgram,
   type CreateFollowUpResult,
@@ -139,6 +139,7 @@ export function MarcarAcompanhamentoButton({
   const [error, setError] = useState("")
   const [pending, startCharge] = useTransition()
   const [pendingCheck, startCheck] = useTransition()
+  const [pendingSend, startSend] = useTransition()
 
   const sugestoes: Record<Complexity, number | null> = {
     BAIXA: sugestaoBaixa,
@@ -226,6 +227,16 @@ export function MarcarAcompanhamentoButton({
     else toast.error("Não foi possível copiar — selecione manualmente")
   }
 
+  // Envia o link pelo WhatsApp via API (W-API) — o usuário permanece na página.
+  function handleSendWhatsApp() {
+    if (!result?.paymentId) return
+    startSend(async () => {
+      const res = await sendPaymentLinkByWhatsApp(result.paymentId ?? "")
+      if (res.success) toast.success(res.message)
+      else toast.error(res.message)
+    })
+  }
+
   // Simula a aprovação de uma cobrança em modo teste (gateway sem chave)
   function handleSimulate() {
     if (!result?.paymentId) return
@@ -240,11 +251,6 @@ export function MarcarAcompanhamentoButton({
       }
     })
   }
-
-  const shareText = (url: string) =>
-    `https://wa.me/?text=${encodeURIComponent(
-      `Olá, ${patientName}! Segue o link para pagamento do seu acompanhamento: ${url}`
-    )}`
 
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
@@ -514,16 +520,15 @@ export function MarcarAcompanhamentoButton({
                 <Button
                   type="button"
                   variant="secondary"
-                  render={
-                    <a
-                      href={shareText(paymentPageUrl(result.paymentId))}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    />
-                  }
+                  onClick={handleSendWhatsApp}
+                  disabled={pendingSend}
                 >
-                  <MessageCircle className="h-4 w-4" />
-                  Enviar pelo WhatsApp
+                  {pendingSend ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <MessageCircle className="h-4 w-4" />
+                  )}
+                  {pendingSend ? "Enviando..." : "Enviar pelo WhatsApp"}
                 </Button>
               </div>
             )}

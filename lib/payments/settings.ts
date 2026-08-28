@@ -26,7 +26,11 @@ export type PaymentSettings = {
   acompValorBaixa: number
   acompValorMedia: number
   acompValorAlta: number
-  /** Juros mensais repassados ao paciente no cartão parcelado (%). */
+  /**
+   * Juros mensais adicionais nas parcelas geradas pelo painel
+   * (acompanhamentos). No checkout online a taxa do cartão do Asaas
+   * (2,99%/3,49%/3,99% + R$ 0,49) é repassada automaticamente.
+   */
   jurosParcelamento: number
 }
 

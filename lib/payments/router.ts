@@ -241,20 +241,21 @@ export async function payChargeWithCard(
       ? payment.patient.cpf.replace(/\D/g, "")
       : undefined
 
-  // Parcelamento escolhido no checkout (1 = à vista, sem juros). Com
-  // juros, o total é recalculado e a cobrança é atualizada no Asaas antes
-  // do payWithCreditCard — o gateway exige parcela × quantidade = valor.
+  // Parcelamento escolhido no checkout. A taxa do cartão (Asaas) é repassada
+  // ao cliente em qualquer quantidade — inclusive à vista — e o total é
+  // recalculado com buildInstallmentOptions (mesma conta do seletor).
+  // O gateway exige parcela × quantidade = valor, então a cobrança é
+  // atualizada no Asaas antes do payWithCreditCard.
   const installmentCount = Math.min(
     12,
     Math.max(1, Math.round(card.installmentCount ?? 1))
   )
   let installmentValue = Number(payment.amount)
 
-  if (installmentCount > 1 && payment.installments !== installmentCount) {
-    const option = buildInstallmentOptions(
-      Number(payment.amount),
-      settings.jurosParcelamento
-    ).find((o) => o.count === installmentCount)
+  if (payment.installments !== installmentCount) {
+    const option = buildInstallmentOptions(Number(payment.amount)).find(
+      (o) => o.count === installmentCount
+    )
     if (!option) {
       return {
         success: false,
@@ -263,21 +264,24 @@ export async function payChargeWithCard(
     }
     // Atualiza o valor no Asaas primeiro: se falhar, nada mudou localmente
     // e o cliente pode tentar de novo.
-    const updated = await updateAsaasPaymentValue(
-      payment.providerPaymentId,
-      option.total,
-      settings.asaasApiKey
-    )
-    if (!updated.ok) {
-      return {
-        success: false,
-        message:
-          updated.error ??
-          "Não foi possível aplicar o parcelamento. Tente novamente.",
+    if (Math.abs(option.total - Number(payment.amount)) > 0.005) {
+      const updated = await updateAsaasPaymentValue(
+        payment.providerPaymentId,
+        option.total,
+        settings.asaasApiKey
+      )
+      if (!updated.ok) {
+        return {
+          success: false,
+          message:
+            updated.error ??
+            "Não foi possível aplicar o parcelamento. Tente novamente.",
+        }
       }
     }
-    // Guarda o parcelamento na cobrança local; o total com juros é aplicado
-    // no lançamento financeiro quando o pagamento confirma (applyPaymentPaid).
+    // Guarda o parcelamento na cobrança local (1 = à vista com taxa); o
+    // total é aplicado no lançamento financeiro quando o pagamento confirma
+    // (applyPaymentPaid).
     await prisma.payment.update({
       where: { id: payment.id },
       data: {
@@ -286,7 +290,7 @@ export async function payChargeWithCard(
       },
     })
     installmentValue = option.installmentValue
-  } else if (installmentCount > 1) {
+  } else {
     // Parcelamento já aplicado numa tentativa anterior: reusa o valor.
     installmentValue =
       Number(payment.installmentValue ?? 0) || Number(payment.amount)

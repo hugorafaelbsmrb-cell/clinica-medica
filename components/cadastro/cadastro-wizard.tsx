@@ -879,14 +879,17 @@ export function CadastroWizard() {
     const valor = paymentData.amount.toLocaleString("pt-BR", {
       minimumFractionDigits: 2,
     })
-    // Opções de parcelamento no cartão (juros por conta do cliente)
-    const parcelamentoOptions = buildInstallmentOptions(
-      paymentData.amount,
-      agenda?.jurosParcelamento ?? 2.99
-    )
+    // Opções de parcelamento no cartão (taxa do cartão por conta do cliente)
+    const parcelamentoOptions = buildInstallmentOptions(paymentData.amount)
     const parcelaAtual =
       parcelamentoOptions.find((o) => o.count === parcelas) ??
-      parcelamentoOptions[0]
+      parcelamentoOptions[0] ??
+      {
+        count: 1,
+        installmentValue: paymentData.amount,
+        total: paymentData.amount,
+        hasInterest: false,
+      }
     const formatBRL = (v: number) =>
       v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })
     // Outras formas de pagamento liberadas (exceto a atual) para a troca
@@ -1063,10 +1066,14 @@ export function CadastroWizard() {
                     />
                   </div>
 
-                  {parcelamentoOptions.length > 1 && (
+                  {parcelamentoOptions.length > 0 && (
                     <div className="flex flex-col gap-2">
                       <p className="text-sm font-medium">
-                        Parcelamento no cartão (juros por sua conta):
+                        Parcelamento no cartão (taxa por sua conta):
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        À vista 2,99% + R$ 0,49 · 2–6x 3,49% + R$ 0,49 · 7–12x
+                        3,99% + R$ 0,49
                       </p>
                       <div className="grid grid-cols-3 gap-2">
                         {parcelamentoOptions.map((op) => (
