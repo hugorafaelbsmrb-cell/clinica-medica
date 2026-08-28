@@ -10,7 +10,7 @@
  *  - POST /message/send-text     → body { phone, message }
  *  - POST /message/send-document → body { phone, document (base64|URL), extension, fileName, caption }
  *  - POST /message/send-image    → body { phone, image (base64), caption }
- *  - POST /message/send-buttons-action → body { phone, message, buttonActions: [{ type, buttonText, url|phone }] }
+ *  - POST /message/send-button-actions → body { phone, message, buttonActions: [{ type, buttonText, url|phone }] }
  *  - GET  /contacts/phone-exists → query { phoneNumber } → { exists: boolean, phoneNumber, lid }
  *  - Webhook de mensagem recebida → evento "webhookReceived"
  */
@@ -93,7 +93,7 @@ export class WApiProvider implements WhatsAppProvider {
   }
 
   /**
-   * POST /message/send-buttons-action (plano PRO da W-API): envia o texto
+   * POST /message/send-button-actions (plano PRO da W-API): envia o texto
    * com botões de ação, ex.: botão URL que abre o link de pagamento direto
    * no WhatsApp. Máximo 3 botões por mensagem.
    */
@@ -102,7 +102,7 @@ export class WApiProvider implements WhatsAppProvider {
     message: string,
     buttons: WhatsAppButton[]
   ): Promise<SendResult> {
-    return this.post("/message/send-buttons-action", {
+    return this.post("/message/send-button-actions", {
       phone,
       message,
       buttonActions: buttons.slice(0, 3).map((button) => ({

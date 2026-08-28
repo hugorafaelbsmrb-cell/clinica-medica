@@ -51,27 +51,22 @@ function extractDigits(text: string): string {
 }
 
 const OPCOES_MENU = [
-  "1 - Agendar uma consulta",
-  "2 - Ver minha consulta",
-  "3 - Remarcar consulta",
-  "4 - Endereço",
-  "5 - Horário de atendimento",
-  "6 - Telefone e contato",
-  "7 - Falar com um atendente",
+  "1 - 📅 Agendar uma consulta",
+  "2 - 🔎 Ver minha consulta",
+  "3 - 🔁 Remarcar consulta",
+  "4 - 🕒 Horário de atendimento",
+  "5 - 👩‍⚕️ Falar com um atendente",
 ]
+
+const MENU_FOOTER =
+  'Digite o número da opção que deseja, ou escreva a palavra (ex.: "agendar").'
 
 function menuReply(ctx: BotContext): string {
   const boasVindas = ctx.msgBoasVindas?.trim()
   const saudacao = boasVindas
     ? boasVindas
     : `Olá! Sou o assistente virtual da ${ctx.clinicName}. Como posso ajudar?`
-  return [
-    saudacao,
-    "",
-    ...OPCOES_MENU,
-    "",
-    'Responda com o número ou escreva a palavra (ex.: "agendar").',
-  ].join("\n")
+  return [saudacao, "", ...OPCOES_MENU, "", MENU_FOOTER].join("\n")
 }
 
 function pedirCpf(ctx: BotContext, intro: string): BotResult {
@@ -123,6 +118,20 @@ function respostaHorario(ctx: BotContext): BotResult {
     reply: ctx.horarioAtendimento
       ? `Nosso horário de atendimento:\n${ctx.horarioAtendimento}`
       : `O horário de atendimento ainda não foi cadastrado no sistema. Escreva "atendente" para falar com a nossa equipe.`,
+    nextState: "MENU",
+    needsAttention: false,
+  }
+}
+
+/** Valores/preços: direciona para o cadastro, onde os valores aparecem. */
+function respostaValores(ctx: BotContext): BotResult {
+  return {
+    reply: [
+      "Fico feliz em ajudar! 🤗",
+      "Os valores variam conforme o tipo de atendimento. Para conhecer os valores e já garantir a sua consulta, faça o cadastro rapidinho:",
+      `${ctx.baseUrl}/cadastro`,
+      'Se preferir, escreva "atendente" para falar com a nossa equipe. 💙',
+    ].join("\n"),
     nextState: "MENU",
     needsAttention: false,
   }
@@ -226,7 +235,7 @@ export function runBot(
     }
   }
 
-  // 2) Opções numeradas do menu (texto exatamente "1".."7")
+  // 2) Opções numeradas do menu (texto exatamente "1".."5")
   if (digits.length === 1 && text === digits) {
     switch (digits) {
       case "1":
@@ -242,12 +251,8 @@ export function runBot(
           "Para remarcar uma consulta, me envie o seu CPF."
         )
       case "4":
-        return respostaEndereco(ctx)
-      case "5":
         return respostaHorario(ctx)
-      case "6":
-        return respostaContato(ctx)
-      case "7":
+      case "5":
         return respostaAtendente(ctx)
     }
   }
@@ -293,7 +298,22 @@ export function runBot(
     )
   }
 
-  // 6) Endereço
+  // 6) Valores e preços (antes de "atendente", que pode aparecer na frase)
+  if (
+    hasAny(text, [
+      "valor",
+      "preco",
+      "custo",
+      "quanto custa",
+      "quanto e",
+      "quanto sai",
+      "quanto fica",
+    ])
+  ) {
+    return respostaValores(ctx)
+  }
+
+  // 7) Endereço
   if (
     hasAny(text, [
       "endereco",
@@ -307,7 +327,7 @@ export function runBot(
     return respostaEndereco(ctx)
   }
 
-  // 7) Falar com um humano (antes de "horário", pois "atendente" contém "atende")
+  // 8) Falar com um humano (antes de "horário", pois "atendente" contém "atende")
   if (
     hasAny(text, [
       "atendente",
@@ -326,7 +346,7 @@ export function runBot(
     return respostaAtendente(ctx)
   }
 
-  // 8) Horário de atendimento
+  // 9) Horário de atendimento
   if (
     hasAny(text, [
       "horario",
@@ -341,12 +361,12 @@ export function runBot(
     return respostaHorario(ctx)
   }
 
-  // 9) Telefone/contato
+  // 10) Telefone/contato
   if (hasAny(text, ["telefone", "contato", "email", "e-mail", "ligar", "ligacao"])) {
     return respostaContato(ctx)
   }
 
-  // 10) Saúde: o bot nunca dá orientação médica
+  // 11) Saúde: o bot nunca dá orientação médica
   if (
     hasAny(text, [
       "dor",
@@ -374,7 +394,7 @@ export function runBot(
     return respostaSaude(ctx)
   }
 
-  // 11) Saudação
+  // 12) Saudação
   if (
     hasAny(text, ["bom dia", "boa tarde", "boa noite", "tudo bem", "tudo bom"]) ||
     /^(oi|ola|hey|opa|eai|e ai)(\s|$)/.test(text)
@@ -382,7 +402,7 @@ export function runBot(
     return { reply: menuReply(ctx), nextState: "MENU", needsAttention: false }
   }
 
-  // 12) Conversa leve
+  // 13) Conversa leve
   if (hasAny(text, ["obrigado", "obrigada", "valeu", "agradecido", "grato"])) {
     return { reply: RESPOSTA_OBRIGADO, nextState: "MENU", needsAttention: false }
   }
@@ -393,19 +413,19 @@ export function runBot(
     return { reply: RESPOSTA_TCHAU, nextState: "MENU", needsAttention: false }
   }
 
-  // 13) "menu" explícito
+  // 14) "menu" explícito
   if (text === "menu" || hasAny(text, ["opcoes", "inicio"])) {
     return { reply: menuReply(ctx), nextState: "MENU", needsAttention: false }
   }
 
-  // 14) Fallback
+  // 15) Fallback
   return {
     reply: [
       "Não entendi sua mensagem. Posso ajudar com:",
       "",
       ...OPCOES_MENU,
       "",
-      'Se preferir, escreva "atendente" para falar com a nossa equipe.',
+      MENU_FOOTER,
     ].join("\n"),
     nextState: "MENU",
     needsAttention: false,
