@@ -31,7 +31,7 @@ export default async function PagarPage({
     where: { id: token },
     include: {
       attendance: { select: { scheduledAt: true } },
-      patient: { select: { name: true } },
+      patient: { select: { name: true, zipCode: true } },
     },
   })
   if (!payment) notFound()
@@ -49,6 +49,7 @@ export default async function PagarPage({
     checkoutUrl: payment.checkoutUrl,
     scheduledAt: payment.attendance?.scheduledAt.toISOString() ?? null,
     patientName: payment.patient?.name ?? null,
+    patientZipCode: payment.patient?.zipCode ?? null,
   }
 
   return (

@@ -44,6 +44,17 @@ const cadastroSchema = z.object({
   number: z.string().trim().min(1, "Informe o número"),
   neighborhood: z.string().trim().min(2, "Informe o bairro"),
   city: z.string().trim().min(2, "Informe a cidade"),
+  // CEP obrigatório: validado na tela via ViaCEP — sem ele o Asaas
+  // recusa o cartão e o médico não navega até a casa.
+  zipCode: z
+    .string()
+    .transform((value) => value.replace(/\D/g, ""))
+    .refine((value) => /^\d{8}$/.test(value), "Informe um CEP válido"),
+  state: z
+    .string()
+    .trim()
+    .optional()
+    .refine((value) => !value || /^[A-Za-z]{2}$/.test(value), "UF inválida"),
   latitude: z
     .string()
     .optional()
@@ -131,6 +142,8 @@ export async function cadastroPublico(
     number: formData.get("number"),
     neighborhood: formData.get("neighborhood"),
     city: formData.get("city"),
+    zipCode: formData.get("zipCode") ?? "",
+    state: formData.get("state") ?? "",
     latitude: formData.get("latitude") ?? "",
     longitude: formData.get("longitude") ?? "",
     consultationReason: formData.get("consultationReason") ?? "",
@@ -203,6 +216,8 @@ export async function cadastroPublico(
         number: data.number,
         neighborhood: data.neighborhood,
         city: data.city,
+        zipCode: data.zipCode,
+        state: data.state ? data.state.toUpperCase() : null,
         latitude: data.latitude ?? null,
         longitude: data.longitude ?? null,
         locationSource: hasGps ? "GPS" : null,

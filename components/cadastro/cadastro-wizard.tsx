@@ -44,6 +44,8 @@ import {
   type CadastroState,
 } from "@/lib/actions/cadastro-publico"
 import { validateWhatsAppNumber } from "@/lib/actions/whatsapp-validate"
+import { buscarCep } from "@/lib/actions/cep"
+import { normalizeUf } from "@/lib/geo"
 import {
   agendarPublico,
   getConsultasByCpf,
@@ -208,6 +210,15 @@ export function CadastroWizard() {
   const [gpsStatus, setGpsStatus] = useState<
     "idle" | "loading" | "done" | "error"
   >("idle")
+  // Endereço via CEP (obrigatório): valida a existência antes de avançar
+  const [cep, setCep] = useState("")
+  const [uf, setUf] = useState("")
+  const [cepStatus, setCepStatus] = useState<
+    "idle" | "loading" | "ok" | "notfound" | "error"
+  >("idle")
+  // true = campos preenchidos automaticamente (GPS ou CEP)
+  const [addressLocked, setAddressLocked] = useState(false)
+  const cepInputRef = useRef<HTMLInputElement>(null)
   const [whatsapp, setWhatsapp] = useState<"sim" | "nao">("nao")
   const [lgpd, setLgpd] = useState(false)
   const [error, setError] = useState("")
@@ -271,6 +282,9 @@ export function CadastroWizard() {
   // Dados do titular exigidos pelo Asaas (endereço) e parcelamento
   const [cardHolderCep, setCardHolderCep] = useState("")
   const [cardHolderNumero, setCardHolderNumero] = useState("")
+  const [cardCepStatus, setCardCepStatus] = useState<
+    "idle" | "loading" | "ok" | "notfound" | "error"
+  >("idle")
   const [parcelas, setParcelas] = useState(1)
   const [cardPayPending, startCardPayment] = useTransition()
   // Seletor de troca de forma de pagamento na tela de pagamento
@@ -299,6 +313,16 @@ export function CadastroWizard() {
       if (paymentPollRef.current) clearInterval(paymentPollRef.current)
     }
   }, [phase, paymentData, existingPatient])
+
+  // Preenche o CEP do titular no cartão com o CEP já validado no cadastro
+  useEffect(() => {
+    if (phase === "pagamento" && metodoPagamento === "CARTAO") {
+      if (!cardHolderCep && cepStatus === "ok" && cep) {
+        setCardHolderCep(cep)
+        setCardCepStatus("ok")
+      }
+    }
+  }, [phase, metodoPagamento, cardHolderCep, cep, cepStatus])
 
   const [state, cadastroFormAction, pending] = useActionState<
     CadastroState | null,
@@ -414,6 +438,16 @@ export function CadastroWizard() {
         setError("Por favor, informe a cidade.")
         return
       }
+      // CEP é obrigatório: sem ele o Asaas recusa o cartão e o médico
+      // não tem endereço confiável para navegar até a casa.
+      if (cepStatus === "notfound") {
+        setError("Este CEP não foi encontrado — confira o número digitado.")
+        return
+      }
+      if (cepStatus !== "ok") {
+        setError("Informe seu CEP para validarmos o endereço.")
+        return
+      }
     }
     setCadStep((current) => Math.min(current + 1, CAD_STEPS.length - 1))
   }
@@ -456,22 +490,89 @@ export function CadastroWizard() {
               setNeighborhood(parts.neighborhood ?? "")
             }
             if (!city.trim()) setCity(parts.city ?? "")
+            // CEP vindo do GPS: valida o endereço e já deixa o CEP
+            // pronto para o pagamento no cartão.
+            if (!cep) {
+              const postcode = (parts.postcode ?? "").replace(/\D/g, "")
+              if (postcode.length === 8) {
+                setCep(maskCep(postcode))
+                setCepStatus("ok")
+                setAddressLocked(true)
+              }
+            }
+            if (!uf.trim()) setUf(normalizeUf(parts.state))
             toast.success(
               "Endereço preenchido pela sua localização — confira os dados."
             )
           })
           .catch(() => {
-            /* sem reverse geocode, o endereço fica para preenchimento manual */
+            /* sem reverse geocode, o CEP fica para preenchimento manual */
           })
       },
       () => {
         setGpsStatus("error")
         toast.error(
-          "Não foi possível capturar sua localização. Você pode continuar sem ela."
+          "Não foi possível capturar sua localização. Informe seu CEP abaixo para completarmos o endereço."
         )
+        // Leva o foco direto para o CEP (modo manual).
+        cepInputRef.current?.focus()
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     )
+  }
+
+  // Dispara o GPS automaticamente ao entrar na tela de endereço (uma vez)
+  const autoGpsRef = useRef(false)
+  useEffect(() => {
+    if (cadStep === 2 && !autoGpsRef.current) {
+      autoGpsRef.current = true
+      handleUseMyLocation()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cadStep])
+
+  // CEP do endereço: ao completar os 8 dígitos, busca na ViaCEP e
+  // preenche rua/bairro/cidade/UF automaticamente (modo manual).
+  function handleCepChange(value: string) {
+    const masked = maskCep(value)
+    setCep(masked)
+    setCepStatus("idle")
+    const digits = masked.replace(/\D/g, "")
+    if (digits.length === 8) {
+      setCepStatus("loading")
+      buscarCep(digits)
+        .then((result) => {
+          if (result.success && result.address) {
+            setStreet(result.address.street)
+            setNeighborhood(result.address.neighborhood)
+            setCity(result.address.city)
+            setUf(result.address.uf)
+            setCepStatus("ok")
+            setAddressLocked(true)
+            toast.success("Endereço preenchido pelo CEP — confira os dados.")
+          } else {
+            setCepStatus("notfound")
+            toast.error(result.message ?? "CEP não encontrado")
+          }
+        })
+        .catch(() => setCepStatus("error"))
+    }
+  }
+
+  // CEP do titular no cartão: valida a existência antes de enviar ao
+  // Asaas (CEP inexistente recusa a transação).
+  function handleCardCepChange(value: string) {
+    const masked = maskCep(value)
+    setCardHolderCep(masked)
+    const digits = masked.replace(/\D/g, "")
+    if (digits.length === 8) {
+      setCardCepStatus("loading")
+      buscarCep(digits)
+        .then((result) => setCardCepStatus(result.success ? "ok" : "notfound"))
+        .catch(() => setCardCepStatus("error"))
+    } else {
+      setCardCepStatus("idle")
+    }
   }
 
   // Verifica na W-API se o número informado está registrado no WhatsApp
@@ -794,6 +895,15 @@ export function CadastroWizard() {
       toast.error("Informe o número do endereço do titular.")
       return
     }
+    // O Asaas valida a existência do CEP — conferimos antes de enviar.
+    if (cardCepStatus === "notfound") {
+      toast.error("Este CEP não foi encontrado — confira o número digitado.")
+      return
+    }
+    if (cardCepStatus === "loading") {
+      toast.error("Aguarde a consulta do CEP terminar.")
+      return
+    }
     startCardPayment(async () => {
       const result = await pagarComCartaoAgendamento({
         attendanceId: paymentData.attendanceId,
@@ -1083,7 +1193,7 @@ export function CadastroWizard() {
                     <Input
                       placeholder="CEP do titular"
                       value={cardHolderCep}
-                      onChange={(e) => setCardHolderCep(maskCep(e.target.value))}
+                      onChange={(e) => handleCardCepChange(e.target.value)}
                       inputMode="numeric"
                       autoComplete="postal-code"
                       className="h-12"
@@ -1096,6 +1206,12 @@ export function CadastroWizard() {
                       className="h-12"
                     />
                   </div>
+                  {cardCepStatus === "notfound" && (
+                    <p className="flex items-start gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                      Este CEP não foi encontrado — confira o número.
+                    </p>
+                  )}
 
                   {parcelamentoOptions.length > 0 && (
                     <div className="flex flex-col gap-2">
@@ -1444,6 +1560,8 @@ export function CadastroWizard() {
             <input type="hidden" name="number" value={number} />
             <input type="hidden" name="neighborhood" value={neighborhood} />
             <input type="hidden" name="city" value={city} />
+            <input type="hidden" name="zipCode" value={cep.replace(/\D/g, "")} />
+            <input type="hidden" name="state" value={uf} />
             <input type="hidden" name="latitude" value={gps ? String(gps.lat) : ""} />
             <input
               type="hidden"
@@ -1626,9 +1744,9 @@ export function CadastroWizard() {
                     Onde você mora?
                   </h2>
                   <p className="text-muted-foreground">
-                    Use sua localização atual — é o jeito mais rápido e o
-                    médico navega direto até sua casa. Ou digite o endereço
-                    abaixo.
+                    Buscamos sua localização automaticamente para preencher o
+                    endereço — o médico navega direto até sua casa. Se não
+                    funcionar, digite seu CEP abaixo.
                   </p>
                 </div>
                 {/* GPS como forma padrão: o paciente está em casa agora */}
@@ -1643,6 +1761,11 @@ export function CadastroWizard() {
                       <>
                         <Loader2 className="h-5 w-5 animate-spin" />
                         Capturando...
+                      </>
+                    ) : gpsStatus === "done" ? (
+                      <>
+                        <LocateFixed className="h-5 w-5" />
+                        Tentar capturar novamente
                       </>
                     ) : (
                       <>
@@ -1659,10 +1782,55 @@ export function CadastroWizard() {
                   )}
                   {gpsStatus === "error" && (
                     <p className="rounded-lg bg-amber-500/10 px-4 py-3 text-base font-medium text-amber-600">
-                      Não foi possível capturar a localização. O endereço
-                      digitado já basta.
+                      Não foi possível capturar a localização. Informe seu CEP
+                      abaixo para completarmos o endereço.
                     </p>
                   )}
+                </div>
+                {/* CEP obrigatório: valida o endereço e o pagamento no cartão */}
+                <div className="flex flex-col gap-2 rounded-xl border-2 border-primary/40 bg-primary/5 p-4">
+                  <label htmlFor="cadastro-cep" className="text-lg font-medium">
+                    CEP *
+                  </label>
+                  <Input
+                    id="cadastro-cep"
+                    ref={cepInputRef}
+                    value={cep}
+                    onChange={(event) => handleCepChange(event.target.value)}
+                    placeholder="00000-000"
+                    inputMode="numeric"
+                    maxLength={9}
+                    autoComplete="postal-code"
+                    className="h-14 text-lg"
+                  />
+                  {cepStatus === "loading" && (
+                    <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Buscando endereço...
+                    </p>
+                  )}
+                  {cepStatus === "ok" && (
+                    <p className="flex items-start gap-2 text-sm font-medium text-green-600">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                      CEP encontrado: {street}, {neighborhood} — {city}
+                      {uf ? `/${uf}` : ""}
+                    </p>
+                  )}
+                  {cepStatus === "notfound" && (
+                    <p className="flex items-start gap-2 text-sm font-medium text-red-600">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                      CEP não encontrado — confira o número digitado.
+                    </p>
+                  )}
+                  {cepStatus === "error" && (
+                    <p className="text-sm text-muted-foreground">
+                      Não foi possível consultar o CEP agora. Tente novamente
+                      em instantes.
+                    </p>
+                  )}
+                  <p className="text-sm text-muted-foreground">
+                    Digite só os números — o endereço é preenchido sozinho.
+                  </p>
                 </div>
                 <div className="flex flex-col gap-2">
                   <label htmlFor="cadastro-rua" className="text-lg font-medium">
@@ -1673,7 +1841,8 @@ export function CadastroWizard() {
                     value={street}
                     onChange={(event) => setStreet(event.target.value)}
                     placeholder="Ex.: Rua das Flores"
-                    className="h-14 text-lg"
+                    className={cn("h-14 text-lg", addressLocked && "bg-muted")}
+                    readOnly={addressLocked}
                     autoComplete="street-address"
                   />
                 </div>
@@ -1704,7 +1873,8 @@ export function CadastroWizard() {
                     value={neighborhood}
                     onChange={(event) => setNeighborhood(event.target.value)}
                     placeholder="Ex.: Centro"
-                    className="h-14 text-lg"
+                    className={cn("h-14 text-lg", addressLocked && "bg-muted")}
+                    readOnly={addressLocked}
                   />
                 </div>
                 <div className="flex flex-col gap-2">
@@ -1719,9 +1889,19 @@ export function CadastroWizard() {
                     value={city}
                     onChange={(event) => setCity(event.target.value)}
                     placeholder="Ex.: São Paulo"
-                    className="h-14 text-lg"
+                    className={cn("h-14 text-lg", addressLocked && "bg-muted")}
+                    readOnly={addressLocked}
                   />
                 </div>
+                {addressLocked && (
+                  <button
+                    type="button"
+                    onClick={() => setAddressLocked(false)}
+                    className="text-left text-sm font-medium text-primary underline-offset-2 hover:underline"
+                  >
+                    Editar endereço manualmente
+                  </button>
+                )}
               </div>
             )}
 

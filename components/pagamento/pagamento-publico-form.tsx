@@ -38,6 +38,8 @@ export type PagamentoPublicoData = {
   checkoutUrl: string | null
   scheduledAt: string | null
   patientName: string | null
+  /** CEP já cadastrado do paciente — pré-preenche o CEP do titular. */
+  patientZipCode: string | null
 }
 
 const WEEKDAY_LABELS = [
@@ -131,7 +133,9 @@ export function PagamentoPublicoForm({ data }: { data: PagamentoPublicoData }) {
   const [cardExpiry, setCardExpiry] = useState("")
   const [cardCvv, setCardCvv] = useState("")
   // Dados do titular exigidos pelo Asaas (endereço) e parcelamento
-  const [cardHolderCep, setCardHolderCep] = useState("")
+  const [cardHolderCep, setCardHolderCep] = useState(
+    data.patientZipCode ?? ""
+  )
   const [cardHolderNumero, setCardHolderNumero] = useState("")
   const [parcelas, setParcelas] = useState(1)
   // Seletor de troca de forma de pagamento

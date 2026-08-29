@@ -69,6 +69,7 @@ export async function reverseGeocodeAddress(
         village?: string
         municipality?: string
         state?: string
+        postcode?: string
       }
     }
     const address = data.address
@@ -86,6 +87,7 @@ export async function reverseGeocodeAddress(
         address.municipality ??
         null,
       state: address.state ?? null,
+      postcode: address.postcode ?? null,
     }
   } catch {
     return null
@@ -127,9 +129,50 @@ export type AddressParts = {
   neighborhood?: string | null
   city?: string | null
   state?: string | null
+  postcode?: string | null
 }
 
-/** Monta o endereço por extenso para geocodificação ou busca no mapa. */
+/**
+ * Normaliza o nome da UF para a sigla de 2 letras: "São Paulo" → "SP".
+ * Já vindo em sigla (ex.: ViaCEP devolve "SP"), retorna como está.
+ * Usado para uniformizar o campo de estado vindo do GPS (Nominatim) e do CEP.
+ */
+export function normalizeUf(value?: string | null): string {
+  const raw = (value ?? "").trim()
+  if (!raw) return ""
+  const upper = raw.toUpperCase()
+  if (/^[A-Z]{2}$/.test(upper)) return upper
+  const UF_MAP: Record<string, string> = {
+    ACRE: "AC",
+    ALAGOAS: "AL",
+    AMAPÁ: "AP",
+    AMAZONAS: "AM",
+    BAHIA: "BA",
+    CEARÁ: "CE",
+    "DISTRITO FEDERAL": "DF",
+    "ESPÍRITO SANTO": "ES",
+    GOIÁS: "GO",
+    MARANHÃO: "MA",
+    "MATO GROSSO": "MT",
+    "MATO GROSSO DO SUL": "MS",
+    "MINAS GERAIS": "MG",
+    PARÁ: "PA",
+    PARAÍBA: "PB",
+    PARANÁ: "PR",
+    PERNAMBUCO: "PE",
+    PIAUÍ: "PI",
+    "RIO DE JANEIRO": "RJ",
+    "RIO GRANDE DO NORTE": "RN",
+    "RIO GRANDE DO SUL": "RS",
+    RONDÔNIA: "RO",
+    RORAIMA: "RR",
+    "SANTA CATARINA": "SC",
+    "SÃO PAULO": "SP",
+    SERGIPE: "SE",
+    TOCANTINS: "TO",
+  }
+  return UF_MAP[upper] ?? raw
+}
 export function buildAddress(parts: AddressParts): string {
   const street =
     parts.street && parts.number
