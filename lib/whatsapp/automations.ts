@@ -149,7 +149,9 @@ async function processCadastroIncompleto(
     const result = await sendTextSmart(
       provider,
       normalizePhone(attempt.phone),
-      content
+      content,
+      undefined,
+      "Fazer agendamento"
     )
 
     if (result.ok) {

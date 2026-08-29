@@ -588,7 +588,9 @@ export async function processPendingMessages(
         undefined,
         message.type === "LINK_PAGAMENTO" || message.type === "LEMBRETE_PAGAMENTO"
           ? "Pagar agora"
-          : "Abrir link"
+          : message.content.includes("/cadastro")
+            ? "Fazer agendamento"
+            : "Abrir link"
       )
     }
 
