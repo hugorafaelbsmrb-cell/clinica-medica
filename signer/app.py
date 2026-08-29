@@ -1,12 +1,15 @@
 """
 Microserviço de assinatura PAdES (ICP-Brasil) — pyhanko + Flask.
 
-Dois modos de assinatura:
+Três modos de assinatura:
 1. A1 local: recebe o PDF + o .pfx/.p12 já descriptografado (chave existe
    apenas em memória durante a requisição).
 2. Bird ID em nuvem: recebe o PDF + o certificado (PEM) conectado no
    onboarding; a assinatura é obtida por push (/async-signature) aprovado
    pelo médico no app Bird ID — a chave privada nunca sai da nuvem.
+3. Bird ID por sessão: recebe o PDF + o certificado (PEM) + o token da
+   sessão signature_session; a assinatura é síncrona (/v0/oauth/signature),
+   sem push por documento — o médico digitou o OTP ao abrir a sessão.
 
 Conformidade ICP-Brasil:
 - A cadeia do certificado é validada contra as ACs Raiz oficiais (arquivos
@@ -290,6 +293,90 @@ class BirdIdPushSigner(signers.Signer):
         digest_hex = hashlib.sha256(data).hexdigest()
         self.push_attempted = True
         return _birdid_push_sign(self._cpf, self._message, digest_hex)
+
+
+# ---------------------------------------------------------------------------
+# Bird ID em nuvem (assinatura síncrona por sessão signature_session)
+# ---------------------------------------------------------------------------
+
+class BirdIdSessionError(Exception):
+    """Token de sessão Bird ID inválido/expirado ou erro na assinatura síncrona."""
+
+    def __init__(self, message: str, invalid_token: bool = False):
+        super().__init__(message)
+        self.invalid_token = invalid_token
+
+
+def _birdid_session_sign(alias: str, session_token: str, digest_hex: str) -> bytes:
+    """
+    Assina o hash via POST /v0/oauth/signature usando o token da sessão
+    signature_session (resposta imediata, sem push). Formato RAW: PKCS#1
+    v1.5 direto sobre o hash SHA-256 (OID 2.16.840.1.101.3.4.2.1).
+    """
+    payload = {
+        "certificate_alias": alias,
+        "hashes": [
+            {
+                "id": "1",
+                "alias": alias,
+                "hash": digest_hex,
+                "hash_algorithm": "2.16.840.1.101.3.4.2.1",
+                "signature_format": "RAW",
+            }
+        ],
+    }
+    try:
+        resp = requests.post(
+            f"{BIRDID_BASE_URL}/v0/oauth/signature",
+            json=payload,
+            headers={"Authorization": f"Bearer {session_token}"},
+            timeout=20,
+        )
+    except requests.RequestException as exc:
+        raise BirdIdSessionError(f"Bird ID indisponível: {exc}") from exc
+    if resp.status_code in (401, 403):
+        raise BirdIdSessionError(
+            "sessão de assinatura inválida ou expirada (abra uma nova sessão)",
+            invalid_token=True,
+        )
+    if resp.status_code not in (200, 201):
+        logging.warning("Bird ID recusou a assinatura síncrona: HTTP %s %s", resp.status_code, resp.text[:200])
+        raise BirdIdSessionError(
+            f"Bird ID recusou a assinatura síncrona (HTTP {resp.status_code})"
+        )
+    try:
+        signatures = resp.json().get("signatures") or []
+    except ValueError:
+        signatures = []
+    if not signatures:
+        raise BirdIdSessionError("Bird ID não retornou a assinatura síncrona")
+    raw = signatures[0].get("raw_signature") or signatures[0].get("rawSignature")
+    if not raw:
+        raise BirdIdSessionError("Bird ID retornou assinatura síncrona vazia")
+    return _decode_signature(raw)
+
+
+class BirdIdSessionSigner(signers.Signer):
+    """
+    Signer cuja operação criptográfica acontece na nuvem Bird ID via token
+    de sessão signature_session — resposta imediata, sem push por documento.
+    O CMS/PAdES completo é montado pelo próprio pyhanko.
+    """
+
+    def __init__(self, signing_cert, cert_registry, alias: str, session_token: str):
+        super().__init__(
+            prefer_pss=False,
+            signing_cert=signing_cert,
+            cert_registry=cert_registry,
+        )
+        self._alias = alias
+        self._session_token = session_token
+
+    async def async_sign_raw(self, data, digest_algorithm, dry_run=False):
+        if dry_run:
+            return bytes(256)  # placeholder RSA-2048 (estimativa de tamanho)
+        digest_hex = hashlib.sha256(data).hexdigest()
+        return _birdid_session_sign(self._alias, self._session_token, digest_hex)
 
 
 def _verify_signature_matches_cert(signed_pdf: bytes, cert):
@@ -583,6 +670,127 @@ def sign_cloud():
 
     signed = out.getvalue()
     logging.info("PDF assinado em nuvem: userId=%s level=%s bytes=%d", user_id, level, len(signed))
+    response = send_file(io.BytesIO(signed), mimetype="application/pdf")
+    response.headers["X-Signature-Level"] = level
+    return response
+
+
+@app.post("/sign-session")
+def sign_session():
+    """
+    Assina o PDF com o certificado em nuvem Bird ID usando a sessão
+    signature_session do médico (POST /v0/oauth/signature): resposta
+    imediata, sem push por documento. PAdES B-LT com carimbo ACT Serpro;
+    fallback B-B. Token de sessão inválido/expirado → HTTP 401.
+    """
+    pdf_file = request.files.get("pdf")
+    cert_pem = (request.form.get("certPem") or "").strip()
+    alias = (request.form.get("alias") or "").strip()
+    session_token = (request.form.get("sessionToken") or "").strip()
+    doctor_name = (request.form.get("doctorName") or "Medico").strip()[:120]
+    reason = (request.form.get("reason") or "Assinatura de documento medico").strip()[:200]
+    user_id = (request.form.get("userId") or "").strip()[:80]
+
+    if pdf_file is None:
+        return jsonify({"error": "PDF ausente"}), 400
+    if not cert_pem:
+        return jsonify({"error": "Certificado ausente"}), 400
+    if not alias:
+        return jsonify({"error": "Alias do certificado ausente"}), 400
+    if not session_token:
+        return jsonify({"error": "Token de sessão ausente"}), 400
+
+    pdf_bytes = pdf_file.read()
+    if len(pdf_bytes) > MAX_PDF_BYTES:
+        return jsonify({"error": "PDF muito grande"}), 400
+
+    try:
+        cert = _load_cert_from_pem(cert_pem)
+    except Exception as exc:
+        logging.warning("Falha ao ler o certificado PEM: %s", exc)
+        return jsonify({"error": "Não foi possível ler o certificado do médico"}), 400
+
+    # Cadeia ICP-Brasil obrigatória (fail-closed); intermediários via AIA.
+    intermediates = _fetch_aia_chain(cert)
+    icp_ok, icp_detail = _check_icp_cert_chain(cert, intermediates)
+    if not icp_ok:
+        logging.warning("Certificado em nuvem recusado (ICP-Brasil): %s", icp_detail)
+        return jsonify(
+            {"error": f"Certificado não é ICP-Brasil válido: {icp_detail}"}
+        ), 400
+
+    cert_store = SimpleCertificateStore()
+    cert_store.register_multiple([cert] + intermediates)
+    session_signer = BirdIdSessionSigner(cert, cert_store, alias, session_token)
+
+    level = "B-B"
+    try:
+        # PAdES B-LT: carimbo de tempo certificado (ACT Serpro) + revogações.
+        signing_vc = ValidationContext(
+            trust_roots=ICP_ROOTS,
+            other_certs=intermediates,
+            allow_fetching=True,
+        )
+        meta = signers.PdfSignatureMetadata(
+            field_name=FIELD_NAME,
+            md_algorithm="sha256",
+            name=doctor_name,
+            reason=reason,
+            subfilter=fields.SigSeedSubFilter.PADES,
+            embed_validation_info=True,
+            validation_context=signing_vc,
+        )
+        timestamper = HTTPTimeStamper(
+            TSA_URL, https=TSA_URL.startswith("https"), timeout=10
+        )
+        w = IncrementalPdfFileWriter(io.BytesIO(pdf_bytes))
+        out = signers.sign_pdf(
+            w, meta, signer=session_signer, timestamper=timestamper, bytes_reserved=8192 * 12
+        )
+        level = "B-LT"
+    except BirdIdSessionError as exc:
+        # Token inválido/expirado → 401 para o Node marcar a sessão EXPIRED;
+        # erro geral do Bird ID → 502 e o Node tenta o fluxo de push.
+        if exc.invalid_token:
+            logging.info("Sessão Bird ID inválida: %s", exc)
+            return jsonify({"error": str(exc)}), 401
+        logging.warning("Assinatura síncrona falhou: %s", exc)
+        return jsonify({"error": str(exc)}), 502
+    except Exception as exc:
+        logging.warning("B-LT indisponível no fluxo por sessão: %s", exc)
+        try:
+            meta = signers.PdfSignatureMetadata(
+                field_name=FIELD_NAME,
+                md_algorithm="sha256",
+                name=doctor_name,
+                reason=reason,
+                subfilter=fields.SigSeedSubFilter.PADES,
+                embed_validation_info=False,
+            )
+            w = IncrementalPdfFileWriter(io.BytesIO(pdf_bytes))
+            out = signers.sign_pdf(w, meta, signer=session_signer, bytes_reserved=8192 * 4)
+        except BirdIdSessionError as exc2:
+            if exc2.invalid_token:
+                logging.info("Sessão Bird ID inválida (B-B): %s", exc2)
+                return jsonify({"error": str(exc2)}), 401
+            logging.warning("Assinatura síncrona falhou (B-B): %s", exc2)
+            return jsonify({"error": str(exc2)}), 502
+        except Exception as exc2:
+            logging.warning("B-B por sessão falhou: %s", exc2)
+            return jsonify({"error": "Falha na assinatura por sessão"}), 502
+
+    # Verificação pós-assinatura: garante que a nuvem assinou com a chave do
+    # certificado validado antes de devolver o PDF.
+    try:
+        _verify_signature_matches_cert(out.getvalue(), cert)
+    except Exception as exc:
+        logging.error("Verificação pós-assinatura falhou: %s", exc)
+        return jsonify(
+            {"error": "Assinatura recebida não confere com o certificado do médico"}
+        ), 502
+
+    signed = out.getvalue()
+    logging.info("PDF assinado por sessão: userId=%s level=%s bytes=%d", user_id, level, len(signed))
     response = send_file(io.BytesIO(signed), mimetype="application/pdf")
     response.headers["X-Signature-Level"] = level
     return response

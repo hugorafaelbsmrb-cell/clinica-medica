@@ -133,6 +133,89 @@ export async function discoverBirdIdCertificate(
 }
 
 // ---------------------------------------------------------------------------
+// Sessão de assinatura (OAuth2 Password + OTP do app).
+// O médico digita o código de 6 dígitos exibido no app Bird ID e o sistema
+// abre uma sessão signature_session: as assinaturas seguintes saem em
+// silêncio (POST /v0/oauth/signature), sem push por documento, enquanto o
+// token valer. O token é guardado criptografado e nunca vai para o cliente.
+// ---------------------------------------------------------------------------
+
+/** Validade da sessão de assinatura (env BIRDID_SESSION_LIFETIME, segundos). */
+export function getBirdIdSessionLifetime(): number {
+  const raw = Number(process.env.BIRDID_SESSION_LIFETIME)
+  const value = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 28_800 // 8h
+  // Limite do Bird ID para pessoa física: 7 dias (604800s).
+  return Math.min(Math.max(value, 300), 604_800)
+}
+
+export type BirdIdSessionToken = {
+  accessToken: string
+  expiresIn: number
+  scope: string
+}
+
+/**
+ * Abre uma sessão de assinatura com o OTP do app Bird ID.
+ * Erro 401/400 → código inválido ou expirado; erro de escopo → o Wings não
+ * liberou signature_session para a aplicação.
+ */
+export async function openBirdIdOtpSession(opts: {
+  cpf: string
+  otp: string
+}): Promise<BirdIdSessionToken> {
+  const body = {
+    client_id: BIRDID_CLIENT_ID,
+    client_secret: BIRDID_CLIENT_SECRET,
+    username: opts.cpf,
+    password: opts.otp,
+    grant_type: "password",
+    scope: "signature_session",
+    lifetime: getBirdIdSessionLifetime(),
+  }
+  const res = await fetch(`${BIRDID_BASE_URL}/v0/oauth/pwd_authorize`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15_000),
+  })
+  const data = await res.json().catch(() => null)
+  if (!res.ok || !data?.access_token) {
+    if (res.status === 401 || res.status === 400 || res.status === 403) {
+      throw new Error(
+        "Código OTP inválido ou expirado — confira o código exibido no app Bird ID"
+      )
+    }
+    throw new Error(data?.message ?? `Bird ID recusou a abertura da sessão (HTTP ${res.status})`)
+  }
+  const accessToken = String(data.access_token)
+  const expiresIn = Number(data.expires_in)
+  const scope = String(data.scope ?? "")
+  if (!Number.isFinite(expiresIn) || expiresIn <= 0) {
+    throw new Error("Bird ID retornou uma sessão sem validade")
+  }
+  if (!scope.split(/\s+/).includes("signature_session")) {
+    throw new Error(
+      "A permissão de assinatura por sessão não está liberada para esta aplicação (Wings)"
+    )
+  }
+  return { accessToken, expiresIn, scope }
+}
+
+/** Revoga a sessão no Bird ID (best-effort; falha não impede o encerramento). */
+export async function revokeBirdIdSession(accessToken: string): Promise<void> {
+  try {
+    await fetch(`${BIRDID_BASE_URL}/v0/oauth/revoke`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: accessToken }),
+      signal: AbortSignal.timeout(10_000),
+    })
+  } catch (error) {
+    console.warn("[BirdID] Falha ao revogar a sessão no Bird ID:", error)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Estado do OAuth (state + verifier) guardado em cookie httpOnly assinado.
 // O verifier nunca sai do servidor; a assinatura HMAC impede adulteração e
 // o vínculo com o userId impede reuso do cookie por outra sessão.

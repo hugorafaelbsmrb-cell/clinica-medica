@@ -8,7 +8,7 @@ import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
-import { getActiveCertificate, getActiveBirdIdCredential } from "@/lib/signing/certificate"
+import { getActiveCertificate, getActiveBirdIdCredential, getActiveBirdIdSession } from "@/lib/signing/certificate"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -47,10 +47,11 @@ export default async function PrescricaoDetalhePage({
 
   // Download assinado disponível quando a clínica habilitou a assinatura
   // digital e o médico tem certificado válido (Bird ID ou A1).
-  const [clinic, certificate, birdId] = await Promise.all([
+  const [clinic, certificate, birdId, birdIdSession] = await Promise.all([
     getClinicSettings(),
     getActiveCertificate(prescription.doctorId),
     getActiveBirdIdCredential(prescription.doctorId),
+    getActiveBirdIdSession(prescription.doctorId),
   ])
   const canSign =
     (clinic.enableDigitalSignature ?? false) &&
@@ -102,8 +103,9 @@ export default async function PrescricaoDetalhePage({
           </div>
           {birdId && (
             <p className="max-w-xs text-right text-xs text-muted-foreground">
-              A assinatura usa o certificado em nuvem Bird ID — ao baixar,
-              aprove a solicitação no app do Bird ID.
+              {birdIdSession
+                ? "A assinatura usa o certificado em nuvem Bird ID com sessão ativa — sai assinado automaticamente."
+                : "A assinatura usa o certificado em nuvem Bird ID — ao baixar, aprove a solicitação no app do Bird ID."}
             </p>
           )}
         </div>

@@ -13,6 +13,7 @@ import {
   BadgeCheck,
   Cloud,
   FileKey2,
+  KeyRound,
   Trash2,
   TriangleAlert,
   Unplug,
@@ -24,7 +25,9 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldLabel } from "@/components/ui/field"
 import {
+  closeBirdIdSession,
   disconnectMyBirdId,
+  openBirdIdSession,
   removeMyCertificate,
   uploadMyCertificate,
   type CertActionState,
@@ -47,6 +50,10 @@ export type CertificateInitialData = {
     cpf: string
     alias: string
   } | null
+  birdIdSession: {
+    expiresAt: Date
+    lastUsedAt: Date | null
+  } | null
   birdIdConfigured: boolean
   clinicEnabled: boolean
   notice?: { type: "success" | "error"; message: string } | null
@@ -61,8 +68,13 @@ export function CertificateForm({
     uploadMyCertificate,
     null
   )
+  const [sessionState, sessionAction, sessionPending] = useActionState<
+    CertActionState | null,
+    FormData
+  >(openBirdIdSession, null)
   const [removing, setRemoving] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
+  const [closingSession, setClosingSession] = useState(false)
   const [cpf, setCpf] = useState("")
 
   useEffect(() => {
@@ -72,6 +84,14 @@ export function CertificateForm({
       toast.error(state.message)
     }
   }, [state])
+
+  useEffect(() => {
+    if (sessionState?.success) {
+      toast.success(sessionState.message)
+    } else if (sessionState && !sessionState.success) {
+      toast.error(sessionState.message)
+    }
+  }, [sessionState])
 
   // Toast do resultado do onboarding OAuth (?birdid=ok|erro na URL).
   // O ref evita disparar de novo quando a página é revalidada (server
@@ -113,6 +133,18 @@ export function CertificateForm({
     }
   }
 
+  async function handleCloseSession() {
+    if (!confirm("Encerrar a sessão de assinatura Bird ID?")) return
+    setClosingSession(true)
+    try {
+      const result = await closeBirdIdSession()
+      if (result.success) toast.success(result.message)
+      else toast.error(result.message)
+    } finally {
+      setClosingSession(false)
+    }
+  }
+
   // O link de conexão só habilita com 11 dígitos (o servidor também valida).
   const cpfDigits = cpf.replace(/\D/g, "")
   const cpfReady = cpfDigits.length === 11
@@ -146,10 +178,81 @@ export function CertificateForm({
                 </p>
               </div>
 
+              <div className="flex flex-col gap-3 rounded-md border p-4">
+                <p className="text-sm font-medium">Sessão de assinatura</p>
+                {initial.birdIdSession ? (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-2 rounded-md border border-green-200 bg-green-50 p-4 dark:border-green-900 dark:bg-green-950/40">
+                      <div className="flex items-center gap-2">
+                        <KeyRound className="h-5 w-5 text-green-600 dark:text-green-400" />
+                        <p className="text-sm font-medium">Sessão ativa</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Ativa até{" "}
+                        {format(initial.birdIdSession.expiresAt, "dd/MM/yyyy HH:mm", {
+                          locale: ptBR,
+                        })}
+                        {" "}
+                        — os PDFs saem assinados automaticamente, sem push no
+                        celular.
+                      </p>
+                      {initial.birdIdSession.lastUsedAt && (
+                        <p className="text-xs text-muted-foreground">
+                          Última assinatura:{" "}
+                          {format(initial.birdIdSession.lastUsedAt, "dd/MM/yyyy HH:mm", {
+                            locale: ptBR,
+                          })}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCloseSession}
+                        disabled={closingSession}
+                      >
+                        <Unplug className="h-4 w-4" />
+                        {closingSession ? "Encerrando..." : "Encerrar sessão"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <form action={sessionAction} className="flex flex-col gap-3">
+                    <p className="text-xs text-muted-foreground">
+                      Abra o app Bird ID e digite o código de 6 dígitos exibido
+                      na tela principal (válido por 30 segundos). Enquanto a
+                      sessão estiver ativa, as assinaturas saem sem aprovação
+                      por push.
+                    </p>
+                    <Field>
+                      <FieldLabel>Código OTP do app</FieldLabel>
+                      <Input
+                        name="otp"
+                        placeholder="000000"
+                        inputMode="numeric"
+                        maxLength={6}
+                        autoComplete="one-time-code"
+                        required
+                      />
+                    </Field>
+                    <div className="flex items-center gap-2">
+                      <Button type="submit" size="sm" disabled={sessionPending}>
+                        <KeyRound className="h-4 w-4" />
+                        {sessionPending ? "Abrindo..." : "Abrir sessão de assinatura"}
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </div>
+
               <p className="text-xs text-muted-foreground">
-                Ao baixar uma prescrição ou plano assinado, aprove a
-                solicitação no app do Bird ID. Se você também tiver um
-                certificado A1, a assinatura em nuvem tem precedência.
+                {initial.birdIdSession
+                  ? "Sem necessidade de aprovação no app enquanto a sessão estiver ativa."
+                  : "Sem sessão ativa, ao baixar uma prescrição ou plano assinado, aprove a solicitação no app do Bird ID."}{" "}
+                Se você também tiver um certificado A1, a assinatura em nuvem
+                tem precedência.
               </p>
 
               {!initial.clinicEnabled && (

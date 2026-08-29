@@ -42,7 +42,7 @@ export default async function MinhaAssinaturaPage({
   const session = requireRole(await auth(), ["ADMIN", "MEDICO"])
   const query = await searchParams
 
-  const [user, clinic, activeCertificate, birdIdCredential] = await Promise.all([
+  const [user, clinic, activeCertificate, birdIdCredential, birdIdSession] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: {
@@ -60,6 +60,10 @@ export default async function MinhaAssinaturaPage({
     }),
     prisma.birdIdCredential.findFirst({
       where: { userId: session.user.id, status: "ACTIVE" },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.birdIdSession.findFirst({
+      where: { userId: session.user.id, status: "ACTIVE", expiresAt: { gt: new Date() } },
       orderBy: { createdAt: "desc" },
     }),
   ])
@@ -114,6 +118,12 @@ export default async function MinhaAssinaturaPage({
                 validTo: birdIdCredential.validTo,
                 cpf: birdIdCredential.cpf,
                 alias: birdIdCredential.alias,
+              }
+            : null,
+          birdIdSession: birdIdSession
+            ? {
+                expiresAt: birdIdSession.expiresAt,
+                lastUsedAt: birdIdSession.lastUsedAt,
               }
             : null,
           birdIdConfigured,

@@ -8,8 +8,9 @@
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
-import { encryptSecret } from "@/lib/signing/crypto"
+import { encryptSecret, decryptSecret } from "@/lib/signing/crypto"
 import { inspectPfx } from "@/lib/signing/signer-client"
+import { openBirdIdOtpSession, revokeBirdIdSession } from "@/lib/signing/birdid-client"
 
 export type CertActionState = {
   success: boolean
@@ -156,5 +157,113 @@ export async function disconnectMyBirdId(): Promise<CertActionState> {
   return {
     success: true,
     message: removed.count > 0 ? "Bird ID desconectado" : "Nenhuma conexão Bird ID ativa",
+  }
+}
+
+/**
+ * Abre uma sessão de assinatura Bird ID com o OTP do app (6 dígitos).
+ * Enquanto a sessão valer, os PDFs saem assinados sem push por documento.
+ * Uma sessão ativa por médico: abrir uma nova revoga a anterior.
+ */
+export async function openBirdIdSession(
+  _prev: CertActionState | null,
+  formData: FormData
+): Promise<CertActionState> {
+  const session = await auth()
+  if (!session?.user) return { success: false, message: "Sessão expirada" }
+
+  const otp = (formData.get("otp")?.toString() ?? "").replace(/\D/g, "")
+  if (!/^\d{6}$/.test(otp)) {
+    return { success: false, message: "Informe o código de 6 dígitos exibido no app Bird ID" }
+  }
+
+  // O médico precisa ter o Bird ID conectado (CPF é o username no Bird ID).
+  const credential = await prisma.birdIdCredential.findFirst({
+    where: { userId: session.user.id, status: "ACTIVE" },
+    orderBy: { createdAt: "desc" },
+  })
+  if (!credential) {
+    return { success: false, message: "Conecte o Bird ID antes de abrir uma sessão de assinatura" }
+  }
+
+  let token
+  try {
+    token = await openBirdIdOtpSession({ cpf: credential.cpf, otp })
+  } catch (error) {
+    // Pequeno atraso para dificultar força bruta no OTP (6 dígitos).
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    const message = error instanceof Error ? error.message : "Não foi possível abrir a sessão"
+    return { success: false, message }
+  }
+
+  await prisma.$transaction([
+    prisma.birdIdSession.updateMany({
+      where: { userId: session.user.id, status: "ACTIVE" },
+      data: { status: "REVOKED" },
+    }),
+    prisma.birdIdSession.create({
+      data: {
+        userId: session.user.id,
+        encryptedToken: encryptSecret(token.accessToken),
+        scope: token.scope,
+        expiresAt: new Date(Date.now() + token.expiresIn * 1000),
+      },
+    }),
+    prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        action: "CREATE",
+        entity: "BirdIdSession",
+        details: { scope: token.scope },
+      },
+    }),
+  ])
+
+  revalidatePath("/minha-assinatura")
+  return {
+    success: true,
+    message: "Sessão de assinatura aberta — os PDFs saem assinados sem push",
+  }
+}
+
+/** Encerra a sessão de assinatura Bird ID ativa do médico logado. */
+export async function closeBirdIdSession(): Promise<CertActionState> {
+  const session = await auth()
+  if (!session?.user) return { success: false, message: "Sessão expirada" }
+
+  const active = await prisma.birdIdSession.findFirst({
+    where: { userId: session.user.id, status: "ACTIVE" },
+    orderBy: { createdAt: "desc" },
+  })
+
+  const closed = await prisma.birdIdSession.updateMany({
+    where: { userId: session.user.id, status: "ACTIVE" },
+    data: { status: "REVOKED" },
+  })
+
+  // Revoga o token no Bird ID (best-effort; o banco já encerrou a sessão).
+  if (active) {
+    try {
+      const accessToken = decryptSecret(active.encryptedToken).toString("utf8")
+      await revokeBirdIdSession(accessToken)
+    } catch (error) {
+      console.warn("[BirdID] Não foi possível revogar o token no Bird ID:", error)
+    }
+  }
+
+  if (closed.count > 0) {
+    await prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        action: "DELETE",
+        entity: "BirdIdSession",
+      },
+    })
+  }
+
+  revalidatePath("/minha-assinatura")
+  return {
+    success: true,
+    message: closed.count > 0 ? "Sessão de assinatura encerrada" : "Nenhuma sessão ativa",
   }
 }

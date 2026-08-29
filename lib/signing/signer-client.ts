@@ -48,6 +48,26 @@ export type CloudSignRequest = {
   userId: string
 }
 
+export type SessionSignRequest = {
+  pdf: Buffer
+  certPem: string
+  /** Alias do certificado na conta Bird ID (certificate_alias). */
+  alias: string
+  /** Access token da sessão signature_session (já descriptografado). */
+  sessionToken: string
+  doctorName: string
+  reason: string
+  userId: string
+}
+
+/** Token de sessão Bird ID inválido/expirado (HTTP 401 do signer). */
+export class BirdIdSessionExpiredError extends Error {
+  constructor(message = "Sessão de assinatura Bird ID expirada") {
+    super(message)
+    this.name = "BirdIdSessionExpiredError"
+  }
+}
+
 async function postMultipart(
   path: string,
   fields: Record<string, string>,
@@ -155,6 +175,40 @@ export async function signPdfCloudWithSigner(
   if (!res.ok) {
     const body = await res.json().catch(() => null)
     throw new Error(body?.error ?? `Falha na assinatura em nuvem (HTTP ${res.status})`)
+  }
+  const level = res.headers.get("x-signature-level") ?? "B-B"
+  return { pdf: Buffer.from(await res.arrayBuffer()), level }
+}
+
+/**
+ * Assina o PDF com o certificado em nuvem Bird ID usando a sessão
+ * signature_session do médico (POST /v0/oauth/signature): resposta
+ * imediata, sem push por documento. Token inválido (401) lança
+ * BirdIdSessionExpiredError para a sessão ser marcada EXPIRED.
+ */
+export async function signPdfSessionWithSigner(
+  input: SessionSignRequest
+): Promise<SignResult> {
+  const res = await postMultipart(
+    "/sign-session",
+    {
+      certPem: input.certPem,
+      alias: input.alias,
+      sessionToken: input.sessionToken,
+      doctorName: input.doctorName,
+      reason: input.reason,
+      userId: input.userId,
+    },
+    { pdf: { data: input.pdf, filename: "documento.pdf" } },
+    AbortSignal.timeout(120_000)
+  )
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    const message = body?.error ?? `Falha na assinatura por sessão (HTTP ${res.status})`
+    if (res.status === 401) {
+      throw new BirdIdSessionExpiredError(message)
+    }
+    throw new Error(message)
   }
   const level = res.headers.get("x-signature-level") ?? "B-B"
   return { pdf: Buffer.from(await res.arrayBuffer()), level }

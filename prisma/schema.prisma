@@ -150,6 +150,7 @@ model User {
   followUpEvaluations FollowUpEvaluation[]
   certificates        MedicalCertificate[]
   birdIdCredentials   BirdIdCredential[]
+  birdIdSessions      BirdIdSession[]
   patients            Patient[]            @relation("PatientDoctor")
 }
 
@@ -742,6 +743,28 @@ model BirdIdCredential {
   status           String   @default("ACTIVE") // ACTIVE | REVOKED (desativado ao desconectar)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+/**
+ * Sessão de assinatura Bird ID (OAuth2 Password + scope signature_session).
+ * O médico digita o OTP do app uma vez e as assinaturas saem em silêncio
+ * enquanto a sessão valer (sem push por documento). O access_token fica
+ * criptografado com AES-256-GCM usando CERT_ENCRYPTION_KEY (fora do banco).
+ */
+model BirdIdSession {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  encryptedToken String    @db.Text // base64: iv.tag.cipher (access_token)
+  scope          String // escopo retornado pelo Bird ID (ex.: signature_session)
+  expiresAt      DateTime
+  status         String    @default("ACTIVE") // ACTIVE | EXPIRED | REVOKED
+  lastUsedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([userId])
   @@index([status])

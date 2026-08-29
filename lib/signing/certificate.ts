@@ -10,7 +10,12 @@
  */
 import { prisma } from "@/lib/prisma"
 import { decryptSecret } from "./crypto"
-import { signPdfCloudWithSigner, signPdfWithSigner } from "./signer-client"
+import {
+  BirdIdSessionExpiredError,
+  signPdfCloudWithSigner,
+  signPdfSessionWithSigner,
+  signPdfWithSigner,
+} from "./signer-client"
 
 /** Certificado digital ativo do médico (fora do prazo = null). */
 export async function getActiveCertificate(userId: string | null | undefined) {
@@ -40,6 +45,18 @@ export async function getActiveBirdIdCredential(
   return credential
 }
 
+/** Sessão de assinatura Bird ID ativa do médico (fora do prazo = null). */
+export async function getActiveBirdIdSession(userId: string | null | undefined) {
+  if (!userId) return null
+  const now = new Date()
+  const session = await prisma.birdIdSession.findFirst({
+    where: { userId, status: "ACTIVE", expiresAt: { gt: now } },
+    orderBy: { createdAt: "desc" },
+  })
+  if (!session) return null
+  return session
+}
+
 /**
  * Assina o PDF do documento quando habilitado e há certificado válido.
  * Retorna { signed: true, pdf } com a assinatura PAdES embutida ou
@@ -65,17 +82,74 @@ export async function signPdfIfEnabled(input: {
       : "Plano terapêutico"
   const reason = input.reason ?? defaultReason
 
-  // Certificado em nuvem Bird ID tem precedência: assinatura por push,
-  // aprovada pelo médico no app a cada documento. Falha (recusa, tempo
-  // esgotado, serviço fora) cai no fallback SEM assinatura — nunca troca
-  // silenciosamente para o A1, para o médico saber o que está assinando.
+  // Certificado em nuvem Bird ID tem precedência sobre o A1. Ordem:
+  // 1) sessão signature_session ativa → assinatura síncrona, sem push;
+  // 2) senão, push aprovado no app a cada documento.
+  // Falha (recusa, tempo esgotado, serviço fora) cai no fallback SEM
+  // assinatura — nunca troca silenciosamente para o A1, para o médico
+  // saber o que está assinando.
   const birdId = await getActiveBirdIdCredential(input.doctorId)
   if (birdId) {
+    const certPem = decryptSecret(birdId.encryptedCertPem).toString("utf8")
+    const message = input.patientName
+      ? `${reason} — paciente ${input.patientName}`
+      : reason
+
+    const birdIdSession = await getActiveBirdIdSession(input.doctorId)
+    if (birdIdSession) {
+      try {
+        const sessionToken = decryptSecret(birdIdSession.encryptedToken).toString("utf8")
+        const signed = await signPdfSessionWithSigner({
+          pdf: input.pdf,
+          certPem,
+          alias: birdId.alias,
+          sessionToken,
+          doctorName: input.doctorName ?? "Médico",
+          reason,
+          userId: input.doctorId ?? "",
+        })
+        await prisma.$transaction([
+          prisma.birdIdSession.update({
+            where: { id: birdIdSession.id },
+            data: { lastUsedAt: new Date() },
+          }),
+          prisma.auditLog.create({
+            data: {
+              userId: input.actorId ?? null,
+              action: "SIGN",
+              entity: input.documentType,
+              entityId: input.documentId ?? null,
+              patientId: input.patientId ?? null,
+              details: {
+                method: "birdid-session",
+                certificateId: birdId.id,
+                serialNumber: birdId.serialNumber,
+                level: signed.level,
+              },
+            },
+          }),
+        ])
+        return { signed: true, pdf: signed.pdf }
+      } catch (error) {
+        // Sessão inválida/expirada → marca EXPIRED e tenta o push; outro
+        // erro → mantém a sessão e também tenta o push (o médico aprova
+        // no app e o documento não fica sem assinatura por isso).
+        if (error instanceof BirdIdSessionExpiredError) {
+          await prisma.birdIdSession
+            .updateMany({
+              where: { id: birdIdSession.id, status: "ACTIVE" },
+              data: { status: "EXPIRED" },
+            })
+            .catch(() => null)
+        }
+        console.error(
+          `[Assinatura] Falha na assinatura por sessão de ${input.documentType} (fallback para push):`,
+          error
+        )
+      }
+    }
+
     try {
-      const certPem = decryptSecret(birdId.encryptedCertPem).toString("utf8")
-      const message = input.patientName
-        ? `${reason} — paciente ${input.patientName}`
-        : reason
       const signed = await signPdfCloudWithSigner({
         pdf: input.pdf,
         certPem,
