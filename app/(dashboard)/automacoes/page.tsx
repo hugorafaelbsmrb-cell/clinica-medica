@@ -33,8 +33,9 @@ export default async function AutomacoesPage() {
       <MensagensForm
         initial={{
           autoCadastroEnabled: clinic.autoCadastroEnabled ?? true,
-          autoCadastroDelayHours: clinic.autoCadastroDelayHours ?? 24,
           autoCadastroMsg: clinic.autoCadastroMsg ?? "",
+          autoCadastroFollowUp2Msg: clinic.autoCadastroFollowUp2Msg ?? "",
+          autoCadastroFollowUp3Msg: clinic.autoCadastroFollowUp3Msg ?? "",
           autoTratamentoEnabled: clinic.autoTratamentoEnabled ?? true,
           autoTratamentoIntervalDays: clinic.autoTratamentoIntervalDays ?? 7,
           autoTratamentoMsg: clinic.autoTratamentoMsg ?? "",

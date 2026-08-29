@@ -34,8 +34,9 @@ import {
 
 export type MensagensInitialData = {
   autoCadastroEnabled: boolean
-  autoCadastroDelayHours: number
   autoCadastroMsg: string
+  autoCadastroFollowUp2Msg: string
+  autoCadastroFollowUp3Msg: string
   autoTratamentoEnabled: boolean
   autoTratamentoIntervalDays: number
   autoTratamentoMsg: string
@@ -119,10 +120,13 @@ export function MensagensForm({
   const [cadastroEnabled, setCadastroEnabled] = useState(
     initial.autoCadastroEnabled
   )
-  const [cadastroDelay, setCadastroDelay] = useState(
-    String(initial.autoCadastroDelayHours)
-  )
   const [cadastroMsg, setCadastroMsg] = useState(initial.autoCadastroMsg)
+  const [cadastroMsg2, setCadastroMsg2] = useState(
+    initial.autoCadastroFollowUp2Msg
+  )
+  const [cadastroMsg3, setCadastroMsg3] = useState(
+    initial.autoCadastroFollowUp3Msg
+  )
 
   const [tratamentoEnabled, setTratamentoEnabled] = useState(
     initial.autoTratamentoEnabled
@@ -237,7 +241,8 @@ export function MensagensForm({
             As mensagens são verificadas a cada 10 minutos pelo agendador do
             sistema e enviadas só para pacientes com WhatsApp habilitado e
             consentimento LGPD. Use <code>{"{{nome}}"}</code> para incluir o
-            primeiro nome do paciente. Vazio = usa o texto padrão.
+            primeiro nome do paciente e <code>{"{{link}}"}</code> para o link
+            do cadastro/pagamento. Vazio = usa o texto padrão.
           </p>
 
           <div className="flex flex-col gap-4">
@@ -245,31 +250,39 @@ export function MensagensForm({
             <Section
               icon={<UserPlus className="h-4 w-4 text-primary" />}
               title="Cadastro incompleto"
-              description="Quem iniciou o pré-cadastro online, informou o telefone e não finalizou. O lembrete sai depois do tempo definido abaixo."
+              description="Quem iniciou o pré-cadastro online, informou o telefone e não finalizou. Os lembretes saem em 30 minutos, 1 hora e 2 horas após o início."
               enabled={cadastroEnabled}
               onToggle={setCadastroEnabled}
               fieldName="autoCadastroEnabled"
             >
               <Field>
-                <FieldLabel>Esperar (horas)</FieldLabel>
-                <Input
-                  name="autoCadastroDelayHours"
-                  type="number"
-                  min={1}
-                  value={cadastroDelay}
-                  onChange={(event) => setCadastroDelay(event.target.value)}
-                  className="w-32"
-                  inputMode="numeric"
-                />
-              </Field>
-              <Field>
-                <FieldLabel>Mensagem</FieldLabel>
+                <FieldLabel>1º lembrete (30 minutos)</FieldLabel>
                 <Textarea
                   name="autoCadastroMsg"
                   value={cadastroMsg}
                   onChange={(event) => setCadastroMsg(event.target.value)}
                   rows={3}
-                  placeholder="Olá {{nome}}! Percebemos que você começou seu cadastro... (padrão)"
+                  placeholder="Olá {{nome}}! 😊 Seu cadastro ficou no meio do caminho... (padrão)"
+                />
+              </Field>
+              <Field>
+                <FieldLabel>2º lembrete (1 hora)</FieldLabel>
+                <Textarea
+                  name="autoCadastroFollowUp2Msg"
+                  value={cadastroMsg2}
+                  onChange={(event) => setCadastroMsg2(event.target.value)}
+                  rows={3}
+                  placeholder="Oi {{nome}}! 💙 Cuidar da saúde é o melhor presente... (padrão)"
+                />
+              </Field>
+              <Field>
+                <FieldLabel>3º lembrete (2 horas)</FieldLabel>
+                <Textarea
+                  name="autoCadastroFollowUp3Msg"
+                  value={cadastroMsg3}
+                  onChange={(event) => setCadastroMsg3(event.target.value)}
+                  rows={3}
+                  placeholder="{{nome}}, deixar a saúde para depois pode sair caro... (padrão)"
                 />
               </Field>
             </Section>

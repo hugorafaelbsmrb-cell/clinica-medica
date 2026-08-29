@@ -34,6 +34,7 @@ import {
   type AddressParts,
 } from "@/lib/geo"
 import type { PaymentMethodType } from "@/lib/payments/types"
+import { isValidCpf } from "@/lib/cpf"
 
 const WEEKDAY_LABELS = [
   "domingo",
@@ -310,6 +311,21 @@ const agendarSchema = z.object({
     .default("PRESENCIAL"),
   /** Médico escolhido pelo paciente no wizard. */
   doctorId: z.string().min(1).optional(),
+  /** CPF informado na confirmação, quando o passo 0 ficou em branco.
+   *  Necessário para gerar a cobrança (o gateway exige CPF válido). */
+  cpf: z
+    .string()
+    .optional()
+    .or(z.literal(""))
+    .transform((value) => (value ?? "").replace(/\D/g, ""))
+    .refine(
+      (value) => value.length === 0 || value.length === 11,
+      "Informe um CPF válido com 11 números"
+    )
+    .refine(
+      (value) => value.length === 0 || isValidCpf(value),
+      "Este CPF não é válido — confira os números digitados"
+    ),
 })
 
 export type AgendarState = {
@@ -458,6 +474,26 @@ export async function agendarPublico(
   // atendimento para recebimento no ato (o médico confirma depois).
   const cobrar = price > 0 && !isCash
 
+  // O gateway exige CPF válido do cliente/titular para gerar a cobrança:
+  // vale o do cadastro ou, em branco, o informado agora na confirmação.
+  const inputCpf = parsed.data.cpf ?? ""
+  const cpfValido = (value: string): boolean =>
+    value.length === 11 && isValidCpf(value)
+  const patientCpf = patient.cpf?.replace(/\D/g, "")
+  const effectiveCpf =
+    patientCpf && cpfValido(patientCpf)
+      ? patientCpf
+      : cpfValido(inputCpf)
+        ? inputCpf
+        : null
+  if (cobrar && !effectiveCpf) {
+    return {
+      success: false,
+      message:
+        "Para concluir o agendamento, informe seu CPF — ele é necessário para gerar o pagamento.",
+    }
+  }
+
   // A forma de pagamento escolhida precisa continuar liberada pelo admin.
   // Sem cobrança (preço zero) o meio é irrelevante — nada é cobrado online.
   if (cobrar || isCash) {
@@ -550,6 +586,15 @@ export async function agendarPublico(
         })
       }
 
+      // CPF informado agora na confirmação: guarda os dígitos no cadastro
+      // para a cobrança e o reconhecimento nos próximos agendamentos.
+      if (cobrar && effectiveCpf === inputCpf && !patient.cpf) {
+        await tx.patient.update({
+          where: { id: patientId },
+          data: { cpf: inputCpf },
+        })
+      }
+
       await tx.auditLog.create({
         data: {
           action: "CREATE",
@@ -611,7 +656,7 @@ export async function agendarPublico(
         amountCents: Math.round(price * 100),
         description: `Consulta — ${patient.name}`,
         customerName: patient.name,
-        customerCpf: patient.cpf ?? undefined,
+        customerCpf: effectiveCpf ?? undefined,
         financialEntryId: entry.id,
         attendanceId: attendance.id,
         patientId,

@@ -21,6 +21,8 @@ export type ClinicInfo = {
   autoCadastroEnabled?: boolean
   autoCadastroDelayHours?: number
   autoCadastroMsg?: string | null
+  autoCadastroFollowUp2Msg?: string | null
+  autoCadastroFollowUp3Msg?: string | null
   autoTratamentoEnabled?: boolean
   autoTratamentoIntervalDays?: number
   autoTratamentoMsg?: string | null
@@ -90,6 +92,8 @@ export async function getClinicSettings(): Promise<ClinicInfo> {
         autoCadastroEnabled: settings.autoCadastroEnabled,
         autoCadastroDelayHours: settings.autoCadastroDelayHours,
         autoCadastroMsg: settings.autoCadastroMsg,
+        autoCadastroFollowUp2Msg: settings.autoCadastroFollowUp2Msg,
+        autoCadastroFollowUp3Msg: settings.autoCadastroFollowUp3Msg,
         autoTratamentoEnabled: settings.autoTratamentoEnabled,
         autoTratamentoIntervalDays: settings.autoTratamentoIntervalDays,
         autoTratamentoMsg: settings.autoTratamentoMsg,

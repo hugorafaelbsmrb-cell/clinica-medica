@@ -2,8 +2,8 @@
  * Automações de mensagens do WhatsApp (cron).
  *
  * Executadas pelo worker /api/cron/send-messages a cada 10 minutos:
- *  1. Cadastro incompleto — lembra quem iniciou o pré-cadastro online,
- *     informou o telefone e não finalizou.
+ *  1. Cadastro incompleto — lembretes em 30 min, 1h e 2h para quem
+ *     iniciou o pré-cadastro online e não finalizou.
  *  2. Tratamento — mensagem periódica para pacientes em tratamento
  *     (com consulta realizada nos últimos 90 dias).
  *  3. Aniversário — mensagem no dia do aniversário do paciente.
@@ -39,7 +39,6 @@ export type AutomationCounts = {
 /** Template padrão de cada automação (quando o admin deixa vazio). */
 export function defaultAutomationMessage(
   kind:
-    | "cadastro"
     | "tratamento"
     | "aniversario"
     | "reativacao"
@@ -50,8 +49,6 @@ export function defaultAutomationMessage(
     | "pagamentoconfirmado"
 ): string {
   switch (kind) {
-    case "cadastro":
-      return "Olá {{nome}}! Percebemos que você começou seu cadastro na clínica e não finalizou. Se precisar de ajuda ou preferir fazer pelo WhatsApp, é só responder esta mensagem."
     case "tratamento":
       return "Olá {{nome}}! Aqui é da clínica. Esperamos que esteja tudo bem com você. Qualquer dúvida sobre o seu tratamento, é só responder por aqui."
     case "aniversario":
@@ -71,23 +68,36 @@ export function defaultAutomationMessage(
   }
 }
 
+/** Marcos do follow-up de cadastro em minutos após o início (30 min, 1h e 2h). */
+const CADASTRO_FOLLOW_UP_MINUTES = [30, 60, 120] as const
+
+/** Template padrão de cada lembrete do cadastro incompleto (admin edita). */
+function defaultCadastroFollowUpMessage(stage: 1 | 2 | 3): string {
+  switch (stage) {
+    case 1:
+      return "Olá {{nome}}! 😊 Seu cadastro ficou no meio do caminho, mas sua saúde não precisa esperar. Faltam poucos passos para garantir sua consulta. Continue por aqui: {{link}}"
+    case 2:
+      return "Oi {{nome}}! 💙 Cuidar da saúde é o melhor presente que você pode se dar hoje. Sua consulta está a poucos cliques — vamos concluir seu cadastro? {{link}}"
+    case 3:
+      return "{{nome}}, deixar a saúde para depois pode sair caro. 🩺 Nossa equipe está pronta para cuidar de você — termine seu cadastro em 2 minutinhos e garanta seu horário: {{link}}"
+  }
+}
+
 /**
- * 1) Cadastro incompleto: tenta enviar lembrete para tentativas antigas
- *    não convertidas e ainda não contatadas. Envio direto (sem paciente).
+ * 1) Cadastro incompleto: lembretes em 30 minutos, 1 hora e 2 horas após
+ *    o início do pré-cadastro (mesmo padrão do follow-up de pagamento).
+ *    Envio direto (sem paciente). Após o 3º lembrete, encerra sem cancelar.
  */
 async function processCadastroIncompleto(
   clinic: Awaited<ReturnType<typeof getClinicSettings>>,
   now: Date
 ): Promise<number> {
   if (!clinic.autoCadastroEnabled) return 0
-  const delayHours = clinic.autoCadastroDelayHours ?? 24
-  const cutoff = new Date(now.getTime() - delayHours * 60 * 60 * 1000)
 
   const attempts = await prisma.registrationAttempt.findMany({
     where: {
       converted: false,
-      contacted: false,
-      createdAt: { lte: cutoff },
+      followUpStage: { lte: 3 },
       phone: { not: "" },
     },
     orderBy: { createdAt: "asc" },
@@ -96,13 +106,44 @@ async function processCadastroIncompleto(
   if (attempts.length === 0) return 0
 
   const provider = await getWhatsAppProvider()
-  const msg = clinic.autoCadastroMsg?.trim() || defaultAutomationMessage("cadastro")
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL ?? "https://painel.medicoemdomicilio.com"
+  const link = `${baseUrl}/cadastro`
+  const msgs = [
+    clinic.autoCadastroMsg?.trim() || defaultCadastroFollowUpMessage(1),
+    clinic.autoCadastroFollowUp2Msg?.trim() || defaultCadastroFollowUpMessage(2),
+    clinic.autoCadastroFollowUp3Msg?.trim() || defaultCadastroFollowUpMessage(3),
+  ]
 
   let sent = 0
   for (const attempt of attempts) {
-    const content = renderTemplate(msg, {
+    const ageMinutes = (now.getTime() - attempt.createdAt.getTime()) / 60000
+    const stage = attempt.followUpStage
+
+    // No máximo um avanço por execução do cron (se o cron perdeu
+    // execuções, o lembrete anterior é pulado).
+    let nextStage: number | null = null
+    if (
+      stage === 0 &&
+      ageMinutes >= CADASTRO_FOLLOW_UP_MINUTES[0] &&
+      ageMinutes < CADASTRO_FOLLOW_UP_MINUTES[1]
+    ) {
+      nextStage = 1
+    } else if (
+      stage <= 1 &&
+      ageMinutes >= CADASTRO_FOLLOW_UP_MINUTES[1] &&
+      ageMinutes < CADASTRO_FOLLOW_UP_MINUTES[2]
+    ) {
+      nextStage = 2
+    } else if (stage <= 2 && ageMinutes >= CADASTRO_FOLLOW_UP_MINUTES[2]) {
+      nextStage = 3
+    }
+    if (nextStage === null) continue
+
+    const content = renderTemplate(msgs[nextStage - 1], {
       nome: attempt.name?.split(" ")[0] || "paciente",
       data: now.toLocaleDateString("pt-BR"),
+      link,
     })
     const result = await sendTextSmart(
       provider,
@@ -113,7 +154,12 @@ async function processCadastroIncompleto(
     if (result.ok) {
       await prisma.registrationAttempt.update({
         where: { id: attempt.id },
-        data: { contacted: true, contactedAt: now },
+        data: {
+          contacted: true,
+          contactedAt: now,
+          // Após o 3º lembrete (2h), encerra: sem cancelamento e sem novos envios.
+          followUpStage: nextStage === 3 ? 4 : nextStage,
+        },
       })
       sent++
     }

@@ -38,6 +38,8 @@ export async function saveMensagensAutomation(
 
   const msgSchema = z.object({
     cadastro: z.string().max(2000).optional(),
+    cadastro2: z.string().max(2000).optional(),
+    cadastro3: z.string().max(2000).optional(),
     tratamento: z.string().max(2000).optional(),
     aniversario: z.string().max(2000).optional(),
     reativacao: z.string().max(2000).optional(),
@@ -51,6 +53,8 @@ export async function saveMensagensAutomation(
   })
   const parsed = msgSchema.safeParse({
     cadastro: formData.get("autoCadastroMsg"),
+    cadastro2: formData.get("autoCadastroFollowUp2Msg"),
+    cadastro3: formData.get("autoCadastroFollowUp3Msg"),
     tratamento: formData.get("autoTratamentoMsg"),
     aniversario: formData.get("autoAniversarioMsg"),
     reativacao: formData.get("autoReativacaoMsg"),
@@ -72,8 +76,9 @@ export async function saveMensagensAutomation(
   const data = parsed.data
   const fields = {
     autoCadastroEnabled: flag(formData, "autoCadastroEnabled"),
-    autoCadastroDelayHours: intField(formData, "autoCadastroDelayHours", 24),
     autoCadastroMsg: data.cadastro?.trim() || null,
+    autoCadastroFollowUp2Msg: data.cadastro2?.trim() || null,
+    autoCadastroFollowUp3Msg: data.cadastro3?.trim() || null,
     autoTratamentoEnabled: flag(formData, "autoTratamentoEnabled"),
     autoTratamentoIntervalDays: intField(
       formData,

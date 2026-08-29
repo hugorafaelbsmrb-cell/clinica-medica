@@ -178,8 +178,10 @@ model ClinicSettings {
 
   // Automações de mensagens (painel Automações)
   autoCadastroEnabled        Boolean @default(true) // lembrete para quem iniciou o cadastro e não finalizou
-  autoCadastroDelayHours     Int     @default(24) // horas de espera após iniciar o cadastro
-  autoCadastroMsg            String? @db.Text
+  autoCadastroDelayHours     Int     @default(24) // legado: o follow-up agora usa estágios fixos de 30min/1h/2h
+  autoCadastroMsg            String? @db.Text // 1º lembrete (30 min após iniciar)
+  autoCadastroFollowUp2Msg   String? @db.Text // 2º lembrete (1h após iniciar)
+  autoCadastroFollowUp3Msg   String? @db.Text // 3º lembrete (2h após iniciar)
   autoTratamentoEnabled      Boolean @default(true) // mensagem periódica para pacientes em tratamento
   autoTratamentoIntervalDays Int     @default(7) // periodicidade em dias
   autoTratamentoMsg          String? @db.Text
@@ -538,8 +540,9 @@ model RegistrationAttempt {
   name        String?
   phone       String    @unique
   converted   Boolean   @default(false) // virou paciente cadastrado
-  contacted   Boolean   @default(false) // já recebeu o lembrete
+  contacted   Boolean   @default(false) // já recebeu o lembrete (legado)
   contactedAt DateTime?
+  followUpStage Int     @default(0) // follow-up: 0=nenhum, 1=30min, 2=1h, 3=2h, 4=finalizado
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 

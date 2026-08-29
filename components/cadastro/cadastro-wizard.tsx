@@ -318,6 +318,22 @@ export function CadastroWizard() {
     }
   }, [state])
 
+  // Máscara + validação em tempo real do CPF (usada no passo 0 e na
+  // confirmação do agendamento, quando o pagamento exige CPF).
+  function handleCpfChange(raw: string) {
+    const masked = maskCpf(raw)
+    const digits = masked.replace(/\D/g, "")
+    setCpf(masked)
+    setCpfStatus("idle")
+    setCpfValidity(
+      digits.length === 11
+        ? isValidCpf(digits)
+          ? "valid"
+          : "invalid"
+        : "idle"
+    )
+  }
+
   // Avança no cadastro; no passo 0, tenta reconhecer pelo CPF
   async function nextCadastro() {
     setError("")
@@ -606,6 +622,12 @@ export function CadastroWizard() {
       )
       return
     }
+    if (tipoConsultaPreco > 0 && metodoPagamento !== "DINHEIRO" && !cpfValido) {
+      setAgendarError(
+        "Para concluir o agendamento, informe seu CPF — ele é necessário para gerar o pagamento."
+      )
+      return
+    }
 
     startAgendar(async () => {
       const result = await agendarPublico({
@@ -615,6 +637,7 @@ export function CadastroWizard() {
         method: metodoPagamento,
         type: tipoConsulta || "PRESENCIAL",
         doctorId: selectedDoctorId || undefined,
+        cpf: cpfValido ? cpfDigits : "",
         lgpdConsent:
           existingPatient && !existingPatient.lgpdConsent ? lgpdAgend : true,
         teleconsent: tipoConsulta === "TELECONSULTA" ? teleconsent : true,
@@ -821,6 +844,14 @@ export function CadastroWizard() {
   const tipoConsultaPreco = tipoConsultaInfo?.price ?? 0
   const medicoNome =
     agenda?.doctors.find((d) => d.id === selectedDoctorId)?.name ?? ""
+
+  // CPF digitado no passo 0 (ou na confirmação). Obrigatório para gerar o
+  // pagamento online — o gateway exige CPF válido do cliente/titular.
+  // Pacientes existentes são reconhecidos pelo CPF e sempre têm um válido.
+  const cpfDigits = cpf.replace(/\D/g, "")
+  const cpfValido = cpfDigits.length === 11 && isValidCpf(cpfDigits)
+  const exigeCpfPagamento =
+    tipoConsultaPreco > 0 && metodoPagamento !== "DINHEIRO" && !cpfValido
 
   // Meios de pagamento liberados para o cliente (admin + gateways).
   // Dinheiro só vale para presencial/domiciliar (pago no atendimento).
@@ -1472,24 +1503,12 @@ export function CadastroWizard() {
                 </div>
                 <div className="flex flex-col gap-2 rounded-xl border-2 border-primary/40 bg-primary/5 p-4">
                   <label htmlFor="cadastro-cpf" className="text-lg font-medium">
-                    Já é paciente? Informe seu CPF
+                    Informe seu CPF
                   </label>
                   <Input
                     id="cadastro-cpf"
                     value={cpf}
-                    onChange={(event) => {
-                      const masked = maskCpf(event.target.value)
-                      const cpfDigits = masked.replace(/\D/g, "")
-                      setCpf(masked)
-                      setCpfStatus("idle")
-                      setCpfValidity(
-                        cpfDigits.length === 11
-                          ? isValidCpf(cpfDigits)
-                            ? "valid"
-                            : "invalid"
-                          : "idle"
-                      )
-                    }}
+                    onChange={(event) => handleCpfChange(event.target.value)}
                     placeholder="000.000.000-00"
                     inputMode="numeric"
                     maxLength={14}
@@ -1514,7 +1533,8 @@ export function CadastroWizard() {
                   )}
                   <p className="text-sm text-muted-foreground">
                     Digite só os números — os pontos e o traço entram sozinhos.
-                    Se você já é paciente, seu CPF leva direto ao agendamento.
+                    Já é paciente? Seu CPF leva direto ao agendamento. Primeira
+                    consulta? Ele é necessário para confirmar o pagamento.
                   </p>
                 </div>
                 {cpfStatus === "checking" && (
@@ -2149,6 +2169,47 @@ export function CadastroWizard() {
                   </div>
                 )}
 
+                {exigeCpfPagamento && (
+                  <div className="flex flex-col gap-2 rounded-xl border-2 border-primary/40 bg-primary/5 p-4">
+                    <label
+                      htmlFor="agendamento-cpf"
+                      className="text-base font-medium"
+                    >
+                      Seu CPF para gerar o pagamento *
+                    </label>
+                    <Input
+                      id="agendamento-cpf"
+                      value={cpf}
+                      onChange={(event) => handleCpfChange(event.target.value)}
+                      placeholder="000.000.000-00"
+                      inputMode="numeric"
+                      maxLength={14}
+                      className={cn(
+                        "h-14 text-lg",
+                        cpfValidity === "invalid" &&
+                          "border-red-500 focus-visible:ring-red-500"
+                      )}
+                      autoComplete="off"
+                    />
+                    {cpfValidity === "valid" && (
+                      <p className="flex items-center gap-2 text-sm font-medium text-green-600">
+                        <CheckCircle2 className="h-4 w-4" />
+                        CPF válido
+                      </p>
+                    )}
+                    {cpfValidity === "invalid" && (
+                      <p className="flex items-center gap-2 text-sm font-medium text-red-600">
+                        <AlertTriangle className="h-4 w-4" />
+                        Este CPF não parece correto — confira os números digitados
+                      </p>
+                    )}
+                    <p className="text-sm font-medium text-amber-700">
+                      Para concluir o agendamento, informe seu CPF — ele é
+                      necessário para gerar o pagamento.
+                    </p>
+                  </div>
+                )}
+
                 {tipoConsulta === "TELECONSULTA" && (
                   <div className="flex flex-col gap-2">
                     <label
@@ -2233,7 +2294,7 @@ export function CadastroWizard() {
                 <Button
                   type="button"
                   onClick={confirmarAgendamento}
-                  disabled={agendarPending}
+                  disabled={agendarPending || exigeCpfPagamento}
                   className="h-14 w-full text-lg"
                 >
                   {agendarPending ? (
