@@ -869,6 +869,7 @@ async function queuePaymentConfirmedMessage(
     renderTemplate(msg, {
       nome: patient.name.split(" ")[0],
       valor: amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 }),
+      clinica: clinic.name,
     })
   )
 }

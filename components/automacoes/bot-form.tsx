@@ -83,7 +83,9 @@ export function BotForm({ initial }: { initial: BotInitialData }) {
             horário, contato e falar com atendente). Envia o link de cadastro
             para novos agendamentos, consulta agendamentos pelo CPF do
             próprio número e avisa a equipe no painel quando alguém pede um
-            atendente. Ele nunca dá orientação médica.
+            atendente. Ele nunca dá orientação médica. Use{" "}
+            <code>{"{{clinica}}"}</code> para incluir o nome da clínica
+            cadastrado no sistema (Dados da clínica).
           </p>
 
           {/* Liga/desliga */}
@@ -120,7 +122,7 @@ export function BotForm({ initial }: { initial: BotInitialData }) {
                 value={msgBoasVindas}
                 onChange={(event) => setMsgBoasVindas(event.target.value)}
                 rows={3}
-                placeholder='Olá! Sou o assistente virtual da clínica. Como posso ajudar? (padrão)'
+                placeholder='Olá! Sou o assistente virtual da {{clinica}}. Como posso ajudar? (padrão)'
               />
               <p className="text-xs text-muted-foreground">
                 Saudação do início da conversa. O menu de opções aparece logo

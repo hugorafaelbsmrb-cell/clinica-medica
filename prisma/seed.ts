@@ -89,7 +89,7 @@ async function main() {
     {
       name: "Primeiro contato",
       type: "PRIMEIRO_CONTATO" as const,
-      body: "Olá {{nome}}! Aqui é do Médico em Domicílio. Que bom ter você com a gente. Estamos à disposição para cuidar da sua saúde. Qualquer dúvida, é só responder por aqui.",
+      body: "Olá {{nome}}! Aqui é da {{clinica}}. Que bom ter você com a gente. Estamos à disposição para cuidar da sua saúde. Qualquer dúvida, é só responder por aqui.",
     },
     {
       name: "Acompanhamento de saúde",

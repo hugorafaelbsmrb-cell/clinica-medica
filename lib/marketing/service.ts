@@ -11,6 +11,7 @@
  *  4. Com o fan-out concluído e a fila zerada, a campanha vira CONCLUIDA.
  */
 import { prisma } from "@/lib/prisma"
+import { getClinicSettings } from "@/lib/clinic"
 import { renderTemplate } from "@/lib/whatsapp/message-service"
 
 /** Lote de fan-out por ciclo do cron (evita picos no WhatsApp). */
@@ -93,6 +94,7 @@ export async function countMarketingAudience(
 export async function queueDueMarketingCampaigns(
   now = new Date()
 ): Promise<{ started: number; queued: number }> {
+  const clinic = await getClinicSettings()
   const due = await prisma.marketingCampaign.findMany({
     where: { status: "AGENDADA", scheduledFor: { lte: now } },
     orderBy: { scheduledFor: "asc" },
@@ -127,6 +129,7 @@ export async function queueDueMarketingCampaigns(
     for (const patient of patients) {
       let content = renderTemplate(campaign.body, {
         nome: patient.name.split(" ")[0],
+        clinica: clinic.name,
       })
       if (campaign.linkUrl) {
         content = `${content}\n\n${campaign.linkUrl}`

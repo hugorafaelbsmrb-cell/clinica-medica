@@ -241,8 +241,9 @@ export function MensagensForm({
             As mensagens são verificadas a cada 10 minutos pelo agendador do
             sistema e enviadas só para pacientes com WhatsApp habilitado e
             consentimento LGPD. Use <code>{"{{nome}}"}</code> para incluir o
-            primeiro nome do paciente e <code>{"{{link}}"}</code> para o link
-            do cadastro/pagamento. Vazio = usa o texto padrão.
+            primeiro nome do paciente, <code>{"{{link}}"}</code> para o link
+            do cadastro/pagamento e <code>{"{{clinica}}"}</code> para o nome
+            da clínica cadastrado no sistema. Vazio = usa o texto padrão.
           </p>
 
           <div className="flex flex-col gap-4">

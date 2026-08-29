@@ -330,6 +330,7 @@ export async function startAttendance(id: string): Promise<ActionState> {
       const content = renderTemplate(msg, {
         nome: attendance.patient.name.split(" ")[0],
         data: now.toLocaleDateString("pt-BR"),
+        clinica: clinic.name,
       })
       const result = await sendImmediateMessage(
         attendance.patientId,

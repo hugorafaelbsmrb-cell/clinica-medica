@@ -57,7 +57,12 @@ export async function handleBotMessage(
 
   let reply = result.reply
   if (result.cpfLookup) {
-    reply = await buildCpfReply(result.cpfLookup, baseUrl, clinic.botMsgCpfNaoEncontrado)
+    reply = await buildCpfReply(
+      result.cpfLookup,
+      baseUrl,
+      clinic.name,
+      clinic.botMsgCpfNaoEncontrado
+    )
   }
 
   // Persiste o próximo estado da sessão
@@ -101,6 +106,7 @@ export async function handleBotMessage(
 async function buildCpfReply(
   cpf: string,
   baseUrl: string,
+  clinicName: string,
   msgNaoEncontrado?: string | null
 ): Promise<string> {
   const digits = cpf.replace(/\D/g, "")
@@ -116,7 +122,7 @@ async function buildCpfReply(
 
   if (!patient) {
     if (msgNaoEncontrado?.trim()) {
-      return msgNaoEncontrado.trim()
+      return msgNaoEncontrado.trim().replaceAll("{{clinica}}", clinicName)
     }
     return [
       "Não encontrei um cadastro com este CPF.",

@@ -218,7 +218,8 @@ export function CampaignForm({
             />
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
-                Use {"{{nome}}"} para o primeiro nome do paciente — cada mensagem
+                Use {"{{nome}}"} para o primeiro nome do paciente e{" "}
+                {"{{clinica}}"} para o nome da clínica — cada mensagem
                 sai personalizada.
               </p>
               <Button

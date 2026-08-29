@@ -11,6 +11,7 @@
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { prisma } from "@/lib/prisma"
+import { getClinicSettings } from "@/lib/clinic"
 import {
   getWhatsAppProvider,
   normalizePhone,
@@ -189,6 +190,7 @@ export async function queueFirstContact(patientId: string): Promise<void> {
   const patient = await prisma.patient.findUnique({ where: { id: patientId } })
   if (!patient?.phone || !patient.whatsappEnabled) return
 
+  const clinic = await getClinicSettings()
   const template = await prisma.messageTemplate.findFirst({
     where: { type: "PRIMEIRO_CONTATO", active: true },
   })
@@ -197,8 +199,9 @@ export async function queueFirstContact(patientId: string): Promise<void> {
     ? renderTemplate(template.body, {
         nome: patient.name.split(" ")[0],
         data: format(new Date(), "dd/MM/yyyy", { locale: ptBR }),
+        clinica: clinic.name,
       })
-    : `Olá ${patient.name.split(" ")[0]}! Aqui é do Médico em Domicílio. Que bom ter você com a gente!`
+    : `Olá ${patient.name.split(" ")[0]}! Aqui é da ${clinic.name}. Que bom ter você com a gente!`
 
   await enqueueMessage(patientId, "PRIMEIRO_CONTATO", content)
 }
@@ -299,12 +302,14 @@ export async function queueDueFollowUps(now = new Date()): Promise<number> {
     where: { type: "ACOMPANHAMENTO", active: true },
   })
 
+  const clinic = await getClinicSettings()
   let queued = 0
   for (const config of due) {
     const content = template
       ? renderTemplate(template.body, {
           nome: config.patient.name.split(" ")[0],
           data: format(now, "dd/MM/yyyy", { locale: ptBR }),
+          clinica: clinic.name,
         })
       : `Olá ${config.patient.name.split(" ")[0]}, tudo bem? Como está a sua saúde?`
 
@@ -353,6 +358,7 @@ export async function queueAppointmentConfirmation(
 
   const meetSentence = meetSentenceFor(meetLink)
 
+  const clinic = await getClinicSettings()
   const content = template
     ? withoutMeetSentence(
         renderTemplate(template.body, {
@@ -361,6 +367,7 @@ export async function queueAppointmentConfirmation(
           hora: format(attendance.scheduledAt, "HH:mm", { locale: ptBR }),
           link: manageLink,
           meet: meetLink ?? "",
+          clinica: clinic.name,
         })
       )
     : `Olá ${patient.name.split(" ")[0]}! Sua consulta está confirmada para ${format(
@@ -408,6 +415,7 @@ export async function queueAppointmentReminders(now = new Date()): Promise<numbe
     where: { type: "LEMBRETE_CONSULTA", active: true },
   })
 
+  const clinic = await getClinicSettings()
   let queued = 0
   for (const attendance of attendances) {
     // Evita duplicar lembrete para a mesma consulta
@@ -439,6 +447,7 @@ export async function queueAppointmentReminders(now = new Date()): Promise<numbe
             data: format(attendance.scheduledAt, "dd/MM/yyyy", { locale: ptBR }),
             hora: format(attendance.scheduledAt, "HH:mm", { locale: ptBR }),
             meet: meetLink ?? "",
+            clinica: clinic.name,
           })
         )
       : `Olá ${attendance.patient.name.split(" ")[0]}! Lembrete: sua consulta é ${whenLabel}, ${format(

@@ -37,6 +37,12 @@ yarn-error.log*
 .venv-signer/
 signer/__pycache__/
 signer/test-*
+signer/*.p12
+signer/*.pfx
+
+# backups e arquivos temporários locais
+.backup-entrega/
+.tmp-*
 
 # vercel
 .vercel

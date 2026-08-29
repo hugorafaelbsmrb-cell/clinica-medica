@@ -50,6 +50,11 @@ function extractDigits(text: string): string {
   return text.replace(/\D/g, "")
 }
 
+/** Substitui {{clinica}} pelo nome cadastrado da clínica no sistema. */
+function applyClinicName(text: string, ctx: BotContext): string {
+  return text.replaceAll("{{clinica}}", ctx.clinicName)
+}
+
 const OPCOES_MENU = [
   "1️⃣ Agendar uma consulta 📅",
   "2️⃣ Ver minha consulta 🔎",
@@ -64,7 +69,7 @@ const MENU_FOOTER =
 function menuReply(ctx: BotContext): string {
   const boasVindas = ctx.msgBoasVindas?.trim()
   const saudacao = boasVindas
-    ? boasVindas
+    ? applyClinicName(boasVindas, ctx)
     : `Olá! 👋 Sou o assistente virtual da ${ctx.clinicName}. Como posso ajudar?`
   return [saudacao, "", ...OPCOES_MENU, "", MENU_FOOTER].join("\n")
 }
@@ -84,7 +89,7 @@ function pedirCpf(ctx: BotContext, intro: string): BotResult {
 function respostaAgendar(ctx: BotContext): BotResult {
   if (ctx.msgAgendar?.trim()) {
     return {
-      reply: ctx.msgAgendar.trim(),
+      reply: applyClinicName(ctx.msgAgendar.trim(), ctx),
       nextState: "MENU",
       needsAttention: false,
     }
@@ -152,7 +157,7 @@ function respostaContato(ctx: BotContext): BotResult {
 function respostaAtendente(ctx: BotContext): BotResult {
   if (ctx.msgAtendente?.trim()) {
     return {
-      reply: ctx.msgAtendente.trim(),
+      reply: applyClinicName(ctx.msgAtendente.trim(), ctx),
       nextState: "MENU",
       needsAttention: true,
     }
@@ -169,7 +174,11 @@ function respostaAtendente(ctx: BotContext): BotResult {
 
 function respostaSaude(ctx: BotContext): BotResult {
   if (ctx.msgSaude?.trim()) {
-    return { reply: ctx.msgSaude.trim(), nextState: "MENU", needsAttention: false }
+    return {
+      reply: applyClinicName(ctx.msgSaude.trim(), ctx),
+      nextState: "MENU",
+      needsAttention: false,
+    }
   }
   const contato = ctx.phone
     ? `Fale com a clínica pelo telefone ${ctx.phone} ou escreva "atendente".`

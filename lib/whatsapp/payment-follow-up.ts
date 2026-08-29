@@ -140,6 +140,7 @@ export async function processAgendamentoFollowUps(
             data: format(attendance.scheduledAt, "dd/MM/yyyy", { locale: ptBR }),
             hora: format(attendance.scheduledAt, "HH:mm", { locale: ptBR }),
             link: `${baseUrl}/cadastro`,
+            clinica: clinic.name,
           }),
           now
         )
@@ -181,6 +182,7 @@ export async function processAgendamentoFollowUps(
             minimumFractionDigits: 2,
           }),
           link: paymentPageUrl(payment.id),
+          clinica: clinic.name,
         }),
         now
       )

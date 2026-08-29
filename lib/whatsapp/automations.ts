@@ -50,9 +50,9 @@ export function defaultAutomationMessage(
 ): string {
   switch (kind) {
     case "tratamento":
-      return "Olá {{nome}}! Aqui é da clínica. Esperamos que esteja tudo bem com você. Qualquer dúvida sobre o seu tratamento, é só responder por aqui."
+      return "Olá {{nome}}! Aqui é da {{clinica}}. Esperamos que esteja tudo bem com você. Qualquer dúvida sobre o seu tratamento, é só responder por aqui."
     case "aniversario":
-      return "Olá {{nome}}! A equipe da clínica deseja um feliz aniversário! Muita saúde e um excelente ano novo de vida. 🎉"
+      return "Olá {{nome}}! A equipe da {{clinica}} deseja um feliz aniversário! Muita saúde e um excelente ano novo de vida. 🎉"
     case "reativacao":
       return "Olá {{nome}}! Faz um tempo que não nos vemos. Que tal agendar uma consulta para cuidar da sua saúde? É só responder por aqui."
     case "agradecimento":
@@ -144,6 +144,7 @@ async function processCadastroIncompleto(
       nome: attempt.name?.split(" ")[0] || "paciente",
       data: now.toLocaleDateString("pt-BR"),
       link,
+      clinica: clinic.name,
     })
     const result = await sendTextSmart(
       provider,
@@ -213,6 +214,7 @@ async function processTratamentoPeriodico(
       renderTemplate(msg, {
         nome: patient.name.split(" ")[0],
         data: now.toLocaleDateString("pt-BR"),
+        clinica: clinic.name,
       }),
       now
     )
@@ -272,6 +274,7 @@ async function processAniversario(
       renderTemplate(msg, {
         nome: patient.name.split(" ")[0],
         data: now.toLocaleDateString("pt-BR"),
+        clinica: clinic.name,
       }),
       now
     )
@@ -335,6 +338,7 @@ async function processReativacao(
       renderTemplate(msg, {
         nome: patient.name.split(" ")[0],
         data: now.toLocaleDateString("pt-BR"),
+        clinica: clinic.name,
       }),
       now
     )
@@ -394,6 +398,7 @@ async function processPagamentosPendentes(
           minimumFractionDigits: 2,
         }),
         link,
+        clinica: clinic.name,
       }),
       now
     )
@@ -458,6 +463,7 @@ export async function queuePaymentLinkMessage(
         minimumFractionDigits: 2,
       }),
       link,
+      clinica: clinic.name,
     }),
     undefined,
     // Botão "Pagar agora" só com link http(s); copia-e-cola PIX segue no texto.
@@ -489,6 +495,7 @@ export async function queueThankYouMessage(patientId: string): Promise<boolean> 
     renderTemplate(msg, {
       nome: patient.name.split(" ")[0],
       data: new Date().toLocaleDateString("pt-BR"),
+      clinica: clinic.name,
     }),
     new Date()
   )
