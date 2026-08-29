@@ -23,6 +23,10 @@ export type ClinicInfo = {
   autoCadastroMsg?: string | null
   autoCadastroFollowUp2Msg?: string | null
   autoCadastroFollowUp3Msg?: string | null
+  autoWhatsappFollowUpEnabled?: boolean
+  autoWhatsappFollowUpMsg?: string | null
+  autoWhatsappFollowUp2Msg?: string | null
+  autoWhatsappFollowUp3Msg?: string | null
   autoTratamentoEnabled?: boolean
   autoTratamentoIntervalDays?: number
   autoTratamentoMsg?: string | null
@@ -94,6 +98,10 @@ export async function getClinicSettings(): Promise<ClinicInfo> {
         autoCadastroMsg: settings.autoCadastroMsg,
         autoCadastroFollowUp2Msg: settings.autoCadastroFollowUp2Msg,
         autoCadastroFollowUp3Msg: settings.autoCadastroFollowUp3Msg,
+        autoWhatsappFollowUpEnabled: settings.autoWhatsappFollowUpEnabled,
+        autoWhatsappFollowUpMsg: settings.autoWhatsappFollowUpMsg,
+        autoWhatsappFollowUp2Msg: settings.autoWhatsappFollowUp2Msg,
+        autoWhatsappFollowUp3Msg: settings.autoWhatsappFollowUp3Msg,
         autoTratamentoEnabled: settings.autoTratamentoEnabled,
         autoTratamentoIntervalDays: settings.autoTratamentoIntervalDays,
         autoTratamentoMsg: settings.autoTratamentoMsg,

@@ -30,6 +30,7 @@ import {
 
 export type AutomationCounts = {
   cadastro: number
+  whatsapp: number
   tratamento: number
   aniversario: number
   reativacao: number
@@ -70,6 +71,21 @@ export function defaultAutomationMessage(
 
 /** Marcos do follow-up de cadastro em minutos após o início (30 min, 1h e 2h). */
 const CADASTRO_FOLLOW_UP_MINUTES = [30, 60, 120] as const
+
+/** Marcos do follow-up do contato do WhatsApp em minutos após a última mensagem. */
+const WHATSAPP_FOLLOW_UP_MINUTES = [30, 60, 120] as const
+
+/** Template padrão de cada lembrete do contato que só mandou mensagem. */
+function defaultWhatsappFollowUpMessage(stage: 1 | 2 | 3): string {
+  switch (stage) {
+    case 1:
+      return "Oi! 😊 Você falou com a gente aqui no WhatsApp e sumiu — mas a sua saúde não precisa esperar. Que tal agendar sua consulta? É rapidinho: {{link}}"
+    case 2:
+      return "Cuidar de você é o melhor investimento de hoje. 💙 A {{clinica}} está pronta para te atender — garanta seu horário em 2 minutinhos: {{link}}"
+    case 3:
+      return "Deixar a saúde para depois pode sair caro. 🩺 Nossa equipe está esperando por você — agende agora: {{link}}"
+  }
+}
 
 /** Template padrão de cada lembrete do cadastro incompleto (admin edita). */
 function defaultCadastroFollowUpMessage(stage: 1 | 2 | 3): string {
@@ -161,6 +177,115 @@ async function processCadastroIncompleto(
           contacted: true,
           contactedAt: now,
           // Após o 3º lembrete (2h), encerra: sem cancelamento e sem novos envios.
+          followUpStage: nextStage === 3 ? 4 : nextStage,
+        },
+      })
+      sent++
+    }
+  }
+
+  return sent
+}
+
+/**
+ * 1b) Contato do WhatsApp: quem mandou mensagem (sem ser paciente) e
+ *     ficou em silêncio recebe lembretes de agendamento em 30 min, 1h e 2h
+ *     após a última mensagem — mesmo padrão do cadastro incompleto.
+ */
+async function processWhatsAppContacts(
+  clinic: Awaited<ReturnType<typeof getClinicSettings>>,
+  now: Date
+): Promise<number> {
+  if (!clinic.autoWhatsappFollowUpEnabled) return 0
+
+  const contacts = await prisma.whatsAppContact.findMany({
+    where: { converted: false, followUpStage: { lte: 3 } },
+    orderBy: { lastMessageAt: "asc" },
+    take: 20,
+  })
+  if (contacts.length === 0) return 0
+
+  const phones = contacts.map((c) => c.phone)
+  // Evita duplicar lembretes: quem já é paciente ou tem tentativa de
+  // cadastro aberta é coberto por outros fluxos.
+  const [patients, attempts] = await Promise.all([
+    prisma.patient.findMany({
+      where: { phone: { in: phones } },
+      select: { phone: true },
+    }),
+    prisma.registrationAttempt.findMany({
+      where: { phone: { in: phones }, converted: false },
+      select: { phone: true },
+    }),
+  ])
+  const patientPhones = patients
+    .map((p) => p.phone ?? "")
+    .filter((p) => p !== "")
+  if (patientPhones.length > 0) {
+    // Contato já virou paciente: encerra o follow-up.
+    await prisma.whatsAppContact.updateMany({
+      where: { phone: { in: patientPhones }, converted: false },
+      data: { converted: true },
+    })
+  }
+  const skip = new Set([...patientPhones, ...attempts.map((a) => a.phone)])
+
+  const provider = await getWhatsAppProvider()
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL ?? "https://painel.medicoemdomicilio.com"
+  const link = `${baseUrl}/cadastro`
+  const msgs = [
+    clinic.autoWhatsappFollowUpMsg?.trim() || defaultWhatsappFollowUpMessage(1),
+    clinic.autoWhatsappFollowUp2Msg?.trim() || defaultWhatsappFollowUpMessage(2),
+    clinic.autoWhatsappFollowUp3Msg?.trim() || defaultWhatsappFollowUpMessage(3),
+  ]
+
+  let sent = 0
+  for (const contact of contacts) {
+    if (skip.has(contact.phone)) continue
+
+    const ageMinutes =
+      (now.getTime() - contact.lastMessageAt.getTime()) / 60000
+    const stage = contact.followUpStage
+
+    // No máximo um avanço por execução do cron.
+    let nextStage: number | null = null
+    if (
+      stage === 0 &&
+      ageMinutes >= WHATSAPP_FOLLOW_UP_MINUTES[0] &&
+      ageMinutes < WHATSAPP_FOLLOW_UP_MINUTES[1]
+    ) {
+      nextStage = 1
+    } else if (
+      stage <= 1 &&
+      ageMinutes >= WHATSAPP_FOLLOW_UP_MINUTES[1] &&
+      ageMinutes < WHATSAPP_FOLLOW_UP_MINUTES[2]
+    ) {
+      nextStage = 2
+    } else if (stage <= 2 && ageMinutes >= WHATSAPP_FOLLOW_UP_MINUTES[2]) {
+      nextStage = 3
+    }
+    if (nextStage === null) continue
+
+    const content = renderTemplate(msgs[nextStage - 1], {
+      nome: contact.name?.split(" ")[0] || "",
+      link,
+      clinica: clinic.name,
+    })
+    const result = await sendTextSmart(
+      provider,
+      normalizePhone(contact.phone),
+      content,
+      undefined,
+      "Fazer agendamento"
+    )
+
+    if (result.ok) {
+      await prisma.whatsAppContact.update({
+        where: { id: contact.id },
+        data: {
+          contactedAt: now,
+          // Após o 3º lembrete (2h), encerra o follow-up.
           followUpStage: nextStage === 3 ? 4 : nextStage,
         },
       })
@@ -423,12 +548,13 @@ export async function queueAutomationMessages(
   const clinic = await getClinicSettings()
 
   const cadastro = await processCadastroIncompleto(clinic, now)
+  const whatsapp = await processWhatsAppContacts(clinic, now)
   const tratamento = await processTratamentoPeriodico(clinic, now)
   const aniversario = await processAniversario(clinic, now)
   const reativacao = await processReativacao(clinic, now)
   const pagamentos = await processPagamentosPendentes(clinic, now)
 
-  return { cadastro, tratamento, aniversario, reativacao, pagamentos }
+  return { cadastro, whatsapp, tratamento, aniversario, reativacao, pagamentos }
 }
 
 /**

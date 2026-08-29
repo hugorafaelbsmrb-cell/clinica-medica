@@ -30,6 +30,31 @@ export async function handleBotMessage(
 
   const clinic = await getClinicSettings()
 
+  // Registra o contato para o follow-up de silêncio: quem só manda
+  // mensagem no WhatsApp (sem ser paciente) ganha lembretes de agendamento.
+  if (incomingMessageId === null) {
+    const hasAttempt = await prisma.registrationAttempt.findUnique({
+      where: { phone },
+      select: { id: true },
+    })
+    // Quem já iniciou o cadastro online tem o follow-up próprio — não
+    // duplicamos lembretes.
+    if (!hasAttempt) {
+      await prisma.whatsAppContact.upsert({
+        where: { phone },
+        // Nova mensagem zera o timer de silêncio.
+        update: { lastMessageAt: new Date(), followUpStage: 0 },
+        create: { phone },
+      })
+    }
+  } else {
+    // Já é paciente: encerra o follow-up do contato, se existir.
+    await prisma.whatsAppContact.updateMany({
+      where: { phone, converted: false },
+      data: { converted: true },
+    })
+  }
+
   // Bot desligado: a mensagem fica registrada no painel, mas sem resposta automática.
   if (clinic.botEnabled === false) return
 

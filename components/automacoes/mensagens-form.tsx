@@ -9,6 +9,7 @@ import {
   HeartPulse,
   History,
   MapPinned,
+  MessageCircle,
   ThumbsUp,
   UserPlus,
   Wallet,
@@ -37,6 +38,10 @@ export type MensagensInitialData = {
   autoCadastroMsg: string
   autoCadastroFollowUp2Msg: string
   autoCadastroFollowUp3Msg: string
+  autoWhatsappFollowUpEnabled: boolean
+  autoWhatsappFollowUpMsg: string
+  autoWhatsappFollowUp2Msg: string
+  autoWhatsappFollowUp3Msg: string
   autoTratamentoEnabled: boolean
   autoTratamentoIntervalDays: number
   autoTratamentoMsg: string
@@ -126,6 +131,19 @@ export function MensagensForm({
   )
   const [cadastroMsg3, setCadastroMsg3] = useState(
     initial.autoCadastroFollowUp3Msg
+  )
+
+  const [whatsappEnabled, setWhatsappEnabled] = useState(
+    initial.autoWhatsappFollowUpEnabled
+  )
+  const [whatsappMsg, setWhatsappMsg] = useState(
+    initial.autoWhatsappFollowUpMsg
+  )
+  const [whatsappMsg2, setWhatsappMsg2] = useState(
+    initial.autoWhatsappFollowUp2Msg
+  )
+  const [whatsappMsg3, setWhatsappMsg3] = useState(
+    initial.autoWhatsappFollowUp3Msg
   )
 
   const [tratamentoEnabled, setTratamentoEnabled] = useState(
@@ -288,7 +306,48 @@ export function MensagensForm({
               </Field>
             </Section>
 
-            {/* 2) Tratamento periódico */}
+            {/* 2) Mensagem no WhatsApp (quem só mandou mensagem) */}
+            <Section
+              icon={<MessageCircle className="h-4 w-4 text-primary" />}
+              title="Mensagem no WhatsApp"
+              description="Quem mandou mensagem no WhatsApp (sem ser paciente) e não continuou a conversa recebe lembretes para agendar, em 30 minutos, 1 hora e 2 horas após a última mensagem."
+              enabled={whatsappEnabled}
+              onToggle={setWhatsappEnabled}
+              fieldName="autoWhatsappFollowUpEnabled"
+            >
+              <Field>
+                <FieldLabel>1º lembrete (30 minutos)</FieldLabel>
+                <Textarea
+                  name="autoWhatsappFollowUpMsg"
+                  value={whatsappMsg}
+                  onChange={(event) => setWhatsappMsg(event.target.value)}
+                  rows={3}
+                  placeholder="Oi! 😊 Você falou com a gente aqui no WhatsApp e sumiu... (padrão)"
+                />
+              </Field>
+              <Field>
+                <FieldLabel>2º lembrete (1 hora)</FieldLabel>
+                <Textarea
+                  name="autoWhatsappFollowUp2Msg"
+                  value={whatsappMsg2}
+                  onChange={(event) => setWhatsappMsg2(event.target.value)}
+                  rows={3}
+                  placeholder="Cuidar de você é o melhor investimento de hoje... (padrão)"
+                />
+              </Field>
+              <Field>
+                <FieldLabel>3º lembrete (2 horas)</FieldLabel>
+                <Textarea
+                  name="autoWhatsappFollowUp3Msg"
+                  value={whatsappMsg3}
+                  onChange={(event) => setWhatsappMsg3(event.target.value)}
+                  rows={3}
+                  placeholder="Deixar a saúde para depois pode sair caro... (padrão)"
+                />
+              </Field>
+            </Section>
+
+            {/* 3) Tratamento periódico */}
             <Section
               icon={<HeartPulse className="h-4 w-4 text-primary" />}
               title="Pacientes em tratamento (mensagem periódica)"

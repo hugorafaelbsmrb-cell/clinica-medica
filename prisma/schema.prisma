@@ -182,6 +182,10 @@ model ClinicSettings {
   autoCadastroMsg            String? @db.Text // 1º lembrete (30 min após iniciar)
   autoCadastroFollowUp2Msg   String? @db.Text // 2º lembrete (1h após iniciar)
   autoCadastroFollowUp3Msg   String? @db.Text // 3º lembrete (2h após iniciar)
+  autoWhatsappFollowUpEnabled Boolean @default(true) // lembrete para quem só mandou mensagem no WhatsApp
+  autoWhatsappFollowUpMsg    String? @db.Text // 1º lembrete (30 min após a última mensagem)
+  autoWhatsappFollowUp2Msg   String? @db.Text // 2º lembrete (1h após a última mensagem)
+  autoWhatsappFollowUp3Msg   String? @db.Text // 3º lembrete (2h após a última mensagem)
   autoTratamentoEnabled      Boolean @default(true) // mensagem periódica para pacientes em tratamento
   autoTratamentoIntervalDays Int     @default(7) // periodicidade em dias
   autoTratamentoMsg          String? @db.Text
@@ -547,6 +551,25 @@ model RegistrationAttempt {
   updatedAt   DateTime  @updatedAt
 
   @@index([converted, contacted, createdAt])
+}
+
+/**
+ * Contato que só mandou mensagem no WhatsApp (sem ser paciente).
+ * Alimenta o follow-up por silêncio: lembretes de agendamento em
+ * 30 min, 1h e 2h após a última mensagem recebida.
+ */
+model WhatsAppContact {
+  id            String    @id @default(cuid())
+  phone         String    @unique
+  name          String?
+  lastMessageAt DateTime  @default(now()) // base do timer de silêncio
+  followUpStage Int       @default(0) // 0=nenhum, 1=30min, 2=1h, 3=2h, 4=finalizado
+  contactedAt   DateTime?
+  converted     Boolean   @default(false) // virou paciente cadastrado
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([converted, followUpStage, lastMessageAt])
 }
 
 model FinancialEntry {
