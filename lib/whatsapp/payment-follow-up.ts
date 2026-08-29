@@ -75,7 +75,8 @@ export async function processAgendamentoFollowUps(
     clinic.autoAgendamentoFollowUpMsg?.trim() || defaultFollowUpMessage()
   const msgCancelado =
     clinic.autoAgendamentoCanceladoMsg?.trim() || defaultCanceladoMessage()
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL ?? "https://painel.medicoemdomicilio.com"
 
   let lembretes = 0
   let cancelados = 0
