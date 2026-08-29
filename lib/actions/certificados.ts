@@ -131,3 +131,30 @@ export async function removeMyCertificate(): Promise<CertActionState> {
     message: removed.count > 0 ? "Certificado removido" : "Nenhum certificado ativo",
   }
 }
+
+/** Desconecta o certificado em nuvem Bird ID do médico logado. */
+export async function disconnectMyBirdId(): Promise<CertActionState> {
+  const session = await auth()
+  if (!session?.user) return { success: false, message: "Sessão expirada" }
+
+  const removed = await prisma.birdIdCredential.updateMany({
+    where: { userId: session.user.id, status: "ACTIVE" },
+    data: { status: "REVOKED" },
+  })
+
+  if (removed.count > 0) {
+    await prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        action: "DELETE",
+        entity: "BirdIdCredential",
+      },
+    })
+  }
+
+  revalidatePath("/minha-assinatura")
+  return {
+    success: true,
+    message: removed.count > 0 ? "Bird ID desconectado" : "Nenhuma conexão Bird ID ativa",
+  }
+}

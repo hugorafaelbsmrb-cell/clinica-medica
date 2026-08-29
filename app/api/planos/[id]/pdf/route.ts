@@ -55,6 +55,7 @@ export async function GET(
     documentType: "TherapeuticPlan",
     documentId: plan.id,
     patientId: plan.patientId,
+    patientName: plan.patient.name,
     actorId: session.user.id,
     pdf: generated,
   })

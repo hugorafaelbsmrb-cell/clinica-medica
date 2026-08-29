@@ -24,11 +24,13 @@ services:
 
   # Microserviço de assinatura digital ICP-Brasil (pyhanko + Flask).
   # Sem porta externa: só a aplicação Node o acessa, na rede interna.
+  # env_file repassa BIRDID_* (Bird ID em nuvem) e TSA_URL do .env.
   signer:
     build:
       context: ./signer
     container_name: clinica-medica-signer
     restart: unless-stopped
+    env_file: .env
     environment:
       TZ: America/Sao_Paulo
     healthcheck:

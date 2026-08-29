@@ -8,7 +8,7 @@ import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
-import { getActiveCertificate } from "@/lib/signing/certificate"
+import { getActiveCertificate, getActiveBirdIdCredential } from "@/lib/signing/certificate"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -46,12 +46,15 @@ export default async function PrescricaoDetalhePage({
   if (!prescription) notFound()
 
   // Download assinado disponível quando a clínica habilitou a assinatura
-  // digital e o médico tem certificado A1 válido.
-  const [clinic, certificate] = await Promise.all([
+  // digital e o médico tem certificado válido (Bird ID ou A1).
+  const [clinic, certificate, birdId] = await Promise.all([
     getClinicSettings(),
     getActiveCertificate(prescription.doctorId),
+    getActiveBirdIdCredential(prescription.doctorId),
   ])
-  const canSign = (clinic.enableDigitalSignature ?? false) && Boolean(certificate)
+  const canSign =
+    (clinic.enableDigitalSignature ?? false) &&
+    (Boolean(certificate) || Boolean(birdId))
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
@@ -75,26 +78,34 @@ export default async function PrescricaoDetalhePage({
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          {canSign && (
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex gap-2">
+            {canSign && (
+              <Button
+                render={
+                  <a href={`/api/prescricoes/${prescription.id}/pdf`} />
+                }
+              >
+                <Download className="h-4 w-4" />
+                Baixar PDF assinado
+              </Button>
+            )}
             <Button
+              variant="outline"
               render={
-                <a href={`/api/prescricoes/${prescription.id}/pdf`} />
+                <Link href={`/prescricoes/${prescription.id}/imprimir`} />
               }
             >
-              <Download className="h-4 w-4" />
-              Baixar PDF assinado
+              <Printer className="h-4 w-4" />
+              Imprimir / PDF
             </Button>
+          </div>
+          {birdId && (
+            <p className="max-w-xs text-right text-xs text-muted-foreground">
+              A assinatura usa o certificado em nuvem Bird ID — ao baixar,
+              aprove a solicitação no app do Bird ID.
+            </p>
           )}
-          <Button
-            variant="outline"
-            render={
-              <Link href={`/prescricoes/${prescription.id}/imprimir`} />
-            }
-          >
-            <Printer className="h-4 w-4" />
-            Imprimir / PDF
-          </Button>
         </div>
       </div>
 

@@ -149,6 +149,7 @@ model User {
   pushSubscriptions   PushSubscription[]
   followUpEvaluations FollowUpEvaluation[]
   certificates        MedicalCertificate[]
+  birdIdCredentials   BirdIdCredential[]
   patients            Patient[]            @relation("PatientDoctor")
 }
 
@@ -715,6 +716,32 @@ model MedicalCertificate {
   validTo           DateTime
   status            String   @default("ACTIVE") // ACTIVE | REVOKED (desativado ao trocar)
   uploadedAt        DateTime @default(now())
+
+  @@index([userId])
+  @@index([status])
+}
+
+/**
+ * Certificado em nuvem Bird ID (VaultID) conectado via OAuth2 ao médico.
+ * A chave privada nunca sai do Bird ID: a assinatura é aprovada por push
+ * no app do médico a cada documento. O certificado (PEM) fica criptografado
+ * com AES-256-GCM usando CERT_ENCRYPTION_KEY (fora do banco).
+ */
+model BirdIdCredential {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cpf              String // CPF do titular (username no Bird ID, vem do OAuth)
+  alias            String // alias do certificado na conta Bird ID
+  encryptedCertPem String   @db.Text // base64: iv.tag.cipher (certificado PEM)
+  subject          String
+  issuer           String
+  serialNumber     String?
+  validFrom        DateTime
+  validTo          DateTime
+  status           String   @default("ACTIVE") // ACTIVE | REVOKED (desativado ao desconectar)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([userId])
   @@index([status])
