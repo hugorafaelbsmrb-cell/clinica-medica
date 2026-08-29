@@ -66,10 +66,14 @@ export async function signPdfIfEnabled(input: {
         entity: input.documentType,
         entityId: input.documentId ?? null,
         patientId: input.patientId ?? null,
-        details: { certificateId: cert.id, serialNumber: cert.serialNumber },
+        details: {
+          certificateId: cert.id,
+          serialNumber: cert.serialNumber,
+          level: signed.level,
+        },
       },
     })
-    return { signed: true, pdf: signed }
+    return { signed: true, pdf: signed.pdf }
   } catch (error) {
     console.error(
       `[Assinatura] Falha ao assinar ${input.documentType} (fallback sem assinatura):`,

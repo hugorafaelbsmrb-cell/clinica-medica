@@ -16,6 +16,15 @@ export type CertificateInfo = {
   serialNumber?: string
   validFrom: string
   validTo: string
+  /** true quando a cadeia valida contra as ACs Raiz ICP-Brasil. */
+  icpBrasil?: boolean
+  chainMessage?: string
+}
+
+export type SignResult = {
+  pdf: Buffer
+  /** Nível PAdES efetivo: "B-LT" (carimbo + revogações) ou "B-B". */
+  level: string
 }
 
 export type SignRequest = {
@@ -71,8 +80,8 @@ export async function inspectPfx(
   return body as CertificateInfo
 }
 
-/** Assina o PDF com PAdES (B-LT quando possível, senão B-B). */
-export async function signPdfWithSigner(input: SignRequest): Promise<Buffer> {
+/** Assina o PDF com PAdES (B-LT com carimbo ICP quando possível, senão B-B). */
+export async function signPdfWithSigner(input: SignRequest): Promise<SignResult> {
   const res = await postMultipart(
     "/sign",
     {
@@ -90,5 +99,6 @@ export async function signPdfWithSigner(input: SignRequest): Promise<Buffer> {
     const body = await res.json().catch(() => null)
     throw new Error(body?.error ?? `Falha na assinatura (HTTP ${res.status})`)
   }
-  return Buffer.from(await res.arrayBuffer())
+  const level = res.headers.get("x-signature-level") ?? "B-B"
+  return { pdf: Buffer.from(await res.arrayBuffer()), level }
 }

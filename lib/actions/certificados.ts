@@ -57,6 +57,17 @@ export async function uploadMyCertificate(
     return { success: false, message: "Certificado fora da validade" }
   }
 
+  // Só aceita certificado cuja cadeia valida contra as ACs Raiz ICP-Brasil.
+  if (info.icpBrasil !== true) {
+    return {
+      success: false,
+      message:
+        info.chainMessage && info.chainMessage.trim()
+          ? `Certificado recusado: ${info.chainMessage}. Use um e-CPF A1 emitido por uma autoridade credenciada ICP-Brasil.`
+          : "Certificado recusado: não foi possível validar a cadeia ICP-Brasil. Use um e-CPF A1 emitido por uma autoridade credenciada.",
+    }
+  }
+
   // Um certificado ativo por usuário: desativa o anterior e grava o novo
   await prisma.$transaction([
     prisma.medicalCertificate.updateMany({
