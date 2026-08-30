@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { getIntegrationSettings } from "@/lib/integrations"
+import { listActiveBotPauses } from "@/lib/whatsapp/bot-pause"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -28,6 +29,7 @@ const STATUS_LABELS: Record<string, string> = {
   ENTREGUE: "Entregue",
   LIDA: "Lida",
   FALHA: "Falha",
+  SUPRIMIDA: "Suprimida (atendimento humano)",
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -43,23 +45,25 @@ export default async function WhatsAppPage() {
   const session = await auth()
   requireRole(session, ["ADMIN", "SECRETARIA"])
 
-  const [messages, templates, followUps, patients] = await Promise.all([
-    prisma.message.findMany({
-      include: { patient: true },
-      orderBy: [{ needsAttention: "desc" }, { createdAt: "desc" }],
-      take: 50,
-    }),
-    prisma.messageTemplate.findMany({ orderBy: { createdAt: "desc" } }),
-    prisma.followUpConfig.findMany({
-      include: { patient: true },
-      orderBy: { nextDueAt: "asc" },
-    }),
-    prisma.patient.findMany({
-      where: { whatsappEnabled: true, phone: { not: null } },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, phone: true },
-    }),
-  ])
+  const [messages, templates, followUps, patients, botPauses] =
+    await Promise.all([
+      prisma.message.findMany({
+        include: { patient: true },
+        orderBy: [{ needsAttention: "desc" }, { createdAt: "desc" }],
+        take: 50,
+      }),
+      prisma.messageTemplate.findMany({ orderBy: { createdAt: "desc" } }),
+      prisma.followUpConfig.findMany({
+        include: { patient: true },
+        orderBy: { nextDueAt: "asc" },
+      }),
+      prisma.patient.findMany({
+        where: { whatsappEnabled: true, phone: { not: null } },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, phone: true },
+      }),
+      listActiveBotPauses(),
+    ])
 
   const integrations = await getIntegrationSettings()
   const provider =
@@ -88,7 +92,59 @@ export default async function WhatsAppPage() {
         </TabsList>
 
         <TabsContent value="mensagens" className="pt-4">
-          <Card>
+          <div className="flex flex-col gap-4">
+            {botPauses.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    Conversas com bot pausado
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    Nessas conversas a equipe assumiu o atendimento: o bot e
+                    as mensagens automáticas ficam em silêncio e voltam
+                    sozinhos na data indicada.
+                  </p>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead className="hidden sm:table-cell">
+                          Telefone
+                        </TableHead>
+                        <TableHead>Motivo</TableHead>
+                        <TableHead>Bot volta em</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {botPauses.map((pause) => (
+                        <TableRow key={pause.phone}>
+                          <TableCell>
+                            {pause.patientName ?? "Número não cadastrado"}
+                          </TableCell>
+                          <TableCell className="hidden sm:table-cell">
+                            {pause.phone}
+                          </TableCell>
+                          <TableCell>
+                            {pause.reason === "pediu_atendente"
+                              ? "Pediu atendente"
+                              : "Atendimento humano"}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {format(pause.resumeAt, "dd/MM HH:mm", {
+                              locale: ptBR,
+                            })}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
             <CardHeader>
               <CardTitle className="text-base">Histórico de mensagens</CardTitle>
             </CardHeader>
@@ -149,6 +205,7 @@ export default async function WhatsAppPage() {
               )}
             </CardContent>
           </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="enviar" className="pt-4">

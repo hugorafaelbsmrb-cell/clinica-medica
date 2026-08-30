@@ -18,6 +18,7 @@ export type ClinicInfo = {
   botMsgCpfNaoEncontrado?: string | null
   botMsgBoasVindas?: string | null
   botMsgAgendar?: string | null
+  botPauseHours?: number
   autoCadastroEnabled?: boolean
   autoCadastroDelayHours?: number
   autoCadastroMsg?: string | null
@@ -93,6 +94,7 @@ export async function getClinicSettings(): Promise<ClinicInfo> {
         botMsgCpfNaoEncontrado: settings.botMsgCpfNaoEncontrado,
         botMsgBoasVindas: settings.botMsgBoasVindas,
         botMsgAgendar: settings.botMsgAgendar,
+        botPauseHours: settings.botPauseHours,
         autoCadastroEnabled: settings.autoCadastroEnabled,
         autoCadastroDelayHours: settings.autoCadastroDelayHours,
         autoCadastroMsg: settings.autoCadastroMsg,

@@ -27,6 +27,7 @@ import { saveBotSettings, type ActionState } from "@/lib/actions/configuracoes"
 
 export type BotInitialData = {
   botEnabled: boolean
+  botPauseHours: number
   botMsgAtendente: string
   botMsgSaude: string
   botMsgCpfNaoEncontrado: string
@@ -38,6 +39,7 @@ export function BotForm({ initial }: { initial: BotInitialData }) {
   const router = useRouter()
 
   const [botEnabled, setBotEnabled] = useState(initial.botEnabled)
+  const [pauseHours, setPauseHours] = useState(initial.botPauseHours)
   const [msgAtendente, setMsgAtendente] = useState(initial.botMsgAtendente)
   const [msgSaude, setMsgSaude] = useState(initial.botMsgSaude)
   const [msgCpfNaoEncontrado, setMsgCpfNaoEncontrado] = useState(
@@ -109,6 +111,30 @@ export function BotForm({ initial }: { initial: BotInitialData }) {
               value={botEnabled ? "on" : ""}
             />
           </div>
+
+          {/* Pausa ao assumir o atendimento */}
+          <Field>
+            <FieldLabel className="flex items-center gap-2">
+              <Bot className="h-4 w-4 text-muted-foreground" />
+              Pausa ao assumir o atendimento (horas)
+            </FieldLabel>
+            <input
+              type="number"
+              name="botPauseHours"
+              min={1}
+              max={168}
+              value={pauseHours}
+              onChange={(event) => setPauseHours(Number(event.target.value))}
+              className="h-9 w-28 rounded-md border bg-background px-3 text-sm"
+            />
+            <p className="text-xs text-muted-foreground">
+              Quando a equipe envia uma mensagem manual (ou o paciente pede
+              um atendente), o bot e as mensagens automáticas ficam em
+              silêncio para aquele número e voltam sozinhos depois desse
+              prazo sem a equipe responder. Cada mensagem manual renova o
+              prazo.
+            </p>
+          </Field>
 
           {/* Mensagens personalizadas */}
           <div className="flex flex-col gap-4">

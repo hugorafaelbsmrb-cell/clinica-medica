@@ -27,6 +27,7 @@ import {
   sendImmediateMessage,
   sendTextSmart,
 } from "./message-service"
+import { isPhonePaused, sweepExpiredBotPauses } from "./bot-pause"
 
 export type AutomationCounts = {
   cadastro: number
@@ -156,6 +157,10 @@ async function processCadastroIncompleto(
     }
     if (nextStage === null) continue
 
+    // Conversa em atendimento humano: não envia e não avança o estágio —
+    // o lembrete reaparece quando o bot voltar.
+    if (await isPhonePaused(attempt.phone)) continue
+
     const content = renderTemplate(msgs[nextStage - 1], {
       nome: attempt.name?.split(" ")[0] || "paciente",
       data: now.toLocaleDateString("pt-BR"),
@@ -266,6 +271,9 @@ async function processWhatsAppContacts(
       nextStage = 3
     }
     if (nextStage === null) continue
+
+    // Conversa em atendimento humano: não envia e não avança o estágio.
+    if (await isPhonePaused(contact.phone)) continue
 
     const content = renderTemplate(msgs[nextStage - 1], {
       nome: contact.name?.split(" ")[0] || "",
@@ -516,7 +524,9 @@ async function processPagamentosPendentes(
     }
 
     const link = paymentPageUrl(payment.id)
-    await enqueueMessage(
+    // Bot pausado: enqueueMessage retorna null e o lembrete não é marcado
+    // como enviado — reaparece no próximo cron, quando o bot voltar.
+    const queuedMessage = await enqueueMessage(
       patientId,
       "LEMBRETE_PAGAMENTO",
       renderTemplate(msg, {
@@ -529,6 +539,7 @@ async function processPagamentosPendentes(
       }),
       now
     )
+    if (!queuedMessage) continue
     await prisma.payment.update({
       where: { id: payment.id },
       data: { remindedAt: now },
@@ -545,6 +556,9 @@ async function processPagamentosPendentes(
 export async function queueAutomationMessages(
   now = new Date()
 ): Promise<AutomationCounts> {
+  // Retomada automática: apaga pausas cujo prazo já venceu.
+  await sweepExpiredBotPauses(now)
+
   const clinic = await getClinicSettings()
 
   const cadastro = await processCadastroIncompleto(clinic, now)

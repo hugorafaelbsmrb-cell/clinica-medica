@@ -173,7 +173,9 @@ export async function processAgendamentoFollowUps(
       where: { id: attendance.patientId },
     })
     if (patient?.phone && patient.whatsappEnabled && patient.lgpdConsent) {
-      await enqueueMessage(
+      // Bot pausado: enqueueMessage retorna null e o estágio não avança —
+      // o lembrete reaparece no próximo cron, quando o bot voltar.
+      const queued = await enqueueMessage(
         attendance.patientId,
         "LEMBRETE_PAGAMENTO",
         renderTemplate(msgFollowUp, {
@@ -186,6 +188,7 @@ export async function processAgendamentoFollowUps(
         }),
         now
       )
+      if (!queued) continue
     }
     await prisma.payment.update({
       where: { id: payment.id },

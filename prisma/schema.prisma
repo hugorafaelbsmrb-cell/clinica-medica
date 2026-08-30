@@ -67,6 +67,7 @@ enum MessageStatus {
   ENTREGUE
   LIDA
   FALHA
+  SUPRIMIDA // bloqueada pela pausa do bot (atendimento humano)
 }
 
 enum EntryType {
@@ -180,6 +181,7 @@ model ClinicSettings {
   botMsgCpfNaoEncontrado String? @db.Text // resposta personalizada de CPF não encontrado (vazio = padrão)
   botMsgBoasVindas       String? @db.Text // saudação inicial da conversa, antes do menu (vazio = padrão)
   botMsgAgendar          String? @db.Text // resposta ao pedido de novo agendamento (vazio = padrão com link de cadastro)
+  botPauseHours          Int     @default(24) // horas de silêncio do bot após a equipe assumir o atendimento
 
   // Automações de mensagens (painel Automações)
   autoCadastroEnabled        Boolean @default(true) // lembrete para quem iniciou o cadastro e não finalizou
@@ -462,6 +464,22 @@ model BotSession {
   phone     String   @id // número normalizado com DDI (ex.: 5511999990000)
   state     String   @default("MENU") // MENU | AGUARDANDO_CPF
   updatedAt DateTime @updatedAt
+}
+
+/**
+ * Pausa do bot por conversa: enquanto a linha existe (e resumeAt não
+ * venceu), nenhuma mensagem automática sai para aquele número — só o que
+ * a equipe escreve manualmente. A retomada é automática quando resumeAt
+ * passa; cada mensagem manual da equipe renova o prazo.
+ */
+model BotPause {
+  phone     String   @id // número normalizado com DDI
+  reason    String   @default("atendimento_humano") // "atendimento_humano" | "pediu_atendente"
+  resumeAt  DateTime // quando o bot volta a atender sozinho
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([resumeAt])
 }
 
 model MessageTemplate {

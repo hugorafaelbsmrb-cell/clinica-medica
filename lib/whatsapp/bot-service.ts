@@ -11,6 +11,7 @@ import { notifyAttendantNeeded } from "@/lib/notifications"
 import { getWhatsAppProvider, normalizePhone } from "./provider"
 import { sendTextSmart, extractLinks } from "./message-service"
 import { normalizeText, runBot, type BotState } from "./bot-engine"
+import { isPhonePaused, pauseBotForPhone } from "./bot-pause"
 
 const SESSION_TTL_MS = 15 * 60 * 1000 // sessão expira após 15 minutos
 
@@ -57,6 +58,11 @@ export async function handleBotMessage(
 
   // Bot desligado: a mensagem fica registrada no painel, mas sem resposta automática.
   if (clinic.botEnabled === false) return
+
+  // Conversa em atendimento humano (bot pausado): a mensagem fica
+  // registrada no painel, mas o bot permanece em silêncio até o prazo
+  // da pausa vencer (retomada automática).
+  if (await isPhonePaused(phone)) return
 
   // Estado da sessão (ignora sessões expiradas)
   let state: BotState = "MENU"
@@ -114,6 +120,13 @@ export async function handleBotMessage(
       flagged.patient.name,
       flagged.content
     )
+  }
+
+  // O paciente pediu um atendente: o bot se cala na conversa (pausa) e
+  // volta sozinho após o prazo configurado — a equipe não é incomodada
+  // por respostas automáticas enquanto assume o atendimento.
+  if (result.needsAttention) {
+    await pauseBotForPhone(phone, "pediu_atendente")
   }
 
   if (reply) {

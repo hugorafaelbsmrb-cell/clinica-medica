@@ -23,6 +23,7 @@ export default async function AutomacoesPage() {
       <BotForm
         initial={{
           botEnabled: clinic.botEnabled ?? true,
+          botPauseHours: clinic.botPauseHours ?? 24,
           botMsgAtendente: clinic.botMsgAtendente ?? "",
           botMsgSaude: clinic.botMsgSaude ?? "",
           botMsgCpfNaoEncontrado: clinic.botMsgCpfNaoEncontrado ?? "",

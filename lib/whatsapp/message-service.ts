@@ -19,6 +19,7 @@ import {
   type WhatsAppButton,
   type WhatsAppProvider,
 } from "./provider"
+import { isPhonePaused, pauseBotForPhone, refreshBotPause } from "./bot-pause"
 
 /** Substitui variáveis {{nome}}, {{data}} no corpo do template. */
 export function renderTemplate(
@@ -100,6 +101,7 @@ export async function enqueueMessage(
     | "PRIMEIRO_CONTATO"
     | "ACOMPANHAMENTO"
     | "MANUAL"
+    | "DOCUMENTO"
     | "CONFIRMACAO_AGENDAMENTO"
     | "LEMBRETE_CONSULTA"
     | "TRATAMENTO_PERIODICO"
@@ -115,6 +117,17 @@ export async function enqueueMessage(
   scheduledFor?: Date,
   attendanceId?: string
 ) {
+  // Conversa em atendimento humano: mensagem automatizada não sai. Os
+  // fluxos que controlam estágios (lembretes, follow-ups) conferem o
+  // retorno null para não avançar o marcador sem enviar.
+  if (type !== "MANUAL" && type !== "DOCUMENTO") {
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId },
+      select: { phone: true },
+    })
+    if (patient?.phone && (await isPhonePaused(patient.phone))) return null
+  }
+
   return prisma.message.create({
     data: {
       patientId,
@@ -152,6 +165,16 @@ export async function sendImmediateMessage(
   const patient = await prisma.patient.findUnique({ where: { id: patientId } })
   if (!patient?.phone) {
     return { ok: false, error: "Paciente sem telefone" }
+  }
+
+  // Pausa do bot (atendimento humano): só mensagens da equipe saem.
+  // Cada MANUAL enviada renova o prazo de silêncio do bot.
+  if (type !== "MANUAL") {
+    if (await isPhonePaused(patient.phone)) {
+      return { ok: false, error: "Bot pausado — atendimento humano" }
+    }
+  } else {
+    await refreshBotPause(patient.phone)
   }
 
   const provider = await getWhatsAppProvider()
@@ -227,6 +250,15 @@ export async function sendManualMessage(
   }
 
   await enqueueMessage(patientId, "MANUAL", content)
+
+  // A equipe assumiu a conversa: pausa o bot para este número e limpa o
+  // destaque "Pediu atendente" das mensagens anteriores.
+  await pauseBotForPhone(patient.phone, "atendimento_humano")
+  await prisma.message.updateMany({
+    where: { patientId, needsAttention: true },
+    data: { needsAttention: false },
+  })
+
   return { ok: true, message: "Mensagem enfileirada para envio" }
 }
 
@@ -262,6 +294,9 @@ export async function sendDocumentMessage(
     document,
     fileName
   )
+
+  // Envio da equipe também assume a conversa: renova a pausa do bot.
+  await refreshBotPause(patient.phone)
 
   await prisma.message.create({
     data: {
@@ -313,7 +348,15 @@ export async function queueDueFollowUps(now = new Date()): Promise<number> {
         })
       : `Olá ${config.patient.name.split(" ")[0]}, tudo bem? Como está a sua saúde?`
 
-    await enqueueMessage(config.patientId, "ACOMPANHAMENTO", content, now)
+    // Bot pausado: enqueueMessage retorna null e o ciclo não avança — o
+    // acompanhamento reaparece no próximo cron, quando o bot voltar.
+    const created = await enqueueMessage(
+      config.patientId,
+      "ACOMPANHAMENTO",
+      content,
+      now
+    )
+    if (!created) continue
 
     await prisma.followUpConfig.update({
       where: { id: config.id },
@@ -540,6 +583,19 @@ export async function processPendingMessages(
   let failed = 0
   const touchedCampaigns = new Set<string>()
 
+  // Números com o bot pausado (atendimento humano): mensagens
+  // automatizadas da fila viram SUPRIMIDA — só MANUAL/DOCUMENTO saem.
+  const phones = pending
+    .map((m) => normalizePhone(m.patient.phone ?? ""))
+    .filter(Boolean)
+  const pausedRows = phones.length
+    ? await prisma.botPause.findMany({
+        where: { phone: { in: phones }, resumeAt: { gt: now } },
+        select: { phone: true },
+      })
+    : []
+  const pausedPhones = new Set(pausedRows.map((p) => p.phone))
+
   for (const message of pending) {
     const phone = normalizePhone(message.patient.phone ?? "")
     const campaign = message.marketingCampaignId
@@ -559,6 +615,24 @@ export async function processPendingMessages(
         })
         touchedCampaigns.add(campaign.id)
       }
+      continue
+    }
+
+    // Conversa em atendimento humano: mensagem automatizada não sai
+    // (fica registrada como SUPRIMIDA para auditoria). Mensagens da
+    // equipe (MANUAL/DOCUMENTO) passam sempre.
+    if (
+      pausedPhones.has(phone) &&
+      message.type !== "MANUAL" &&
+      message.type !== "DOCUMENTO"
+    ) {
+      await prisma.message.update({
+        where: { id: message.id },
+        data: {
+          status: "SUPRIMIDA",
+          error: "Bot pausado — atendimento humano",
+        },
+      })
       continue
     }
 

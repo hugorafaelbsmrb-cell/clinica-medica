@@ -237,6 +237,7 @@ export async function saveBotSettings(
   const botEnabled = formData.get("botEnabled") === "on"
 
   const botSchema = z.object({
+    botPauseHours: z.coerce.number().int().min(1, "Mínimo de 1 hora").max(168, "Máximo de 168 horas"),
     botMsgAtendente: z.string().max(2000).optional(),
     botMsgSaude: z.string().max(2000).optional(),
     botMsgCpfNaoEncontrado: z.string().max(2000).optional(),
@@ -244,6 +245,7 @@ export async function saveBotSettings(
     botMsgAgendar: z.string().max(2000).optional(),
   })
   const parsed = botSchema.safeParse({
+    botPauseHours: formData.get("botPauseHours") ?? 24,
     botMsgAtendente: formData.get("botMsgAtendente"),
     botMsgSaude: formData.get("botMsgSaude"),
     botMsgCpfNaoEncontrado: formData.get("botMsgCpfNaoEncontrado"),
@@ -262,6 +264,7 @@ export async function saveBotSettings(
     where: { id: 1 },
     update: {
       botEnabled,
+      botPauseHours: data.botPauseHours,
       botMsgAtendente: data.botMsgAtendente?.trim() || null,
       botMsgSaude: data.botMsgSaude?.trim() || null,
       botMsgCpfNaoEncontrado: data.botMsgCpfNaoEncontrado?.trim() || null,
@@ -271,6 +274,7 @@ export async function saveBotSettings(
     create: {
       id: 1,
       botEnabled,
+      botPauseHours: data.botPauseHours,
       botMsgAtendente: data.botMsgAtendente?.trim() || null,
       botMsgSaude: data.botMsgSaude?.trim() || null,
       botMsgCpfNaoEncontrado: data.botMsgCpfNaoEncontrado?.trim() || null,

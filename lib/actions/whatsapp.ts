@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { getClinicSettings } from "@/lib/clinic"
 import { sendManualMessage } from "@/lib/whatsapp/message-service"
 
 export type ActionState = { success: boolean; message: string }
@@ -24,7 +25,17 @@ export async function sendMessageAction(
   }
 
   const result = await sendManualMessage(patientId, content.trim())
-  if (result.ok) revalidatePath("/whatsapp")
+  if (result.ok) {
+    revalidatePath("/whatsapp")
+    // A equipe assumiu a conversa: avisa que o bot ficará em silêncio
+    // para este paciente até o prazo configurado vencer.
+    const clinic = await getClinicSettings()
+    const hours = clinic.botPauseHours ?? 24
+    return {
+      success: true,
+      message: `Mensagem enfileirada — bot pausado para este paciente por ${hours}h`,
+    }
+  }
   return { success: result.ok, message: result.message }
 }
 
