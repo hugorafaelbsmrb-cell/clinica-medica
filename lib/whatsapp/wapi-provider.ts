@@ -19,6 +19,7 @@ import type {
   SendResult,
   WhatsAppButton,
   WhatsAppIncoming,
+  WhatsAppOutgoing,
   WhatsAppProvider,
 } from "./provider"
 
@@ -188,6 +189,24 @@ export class WApiProvider implements WhatsAppProvider {
     }
   }
 
+  /** Extrai o texto de uma mensagem (texto puro ou estendido) do payload. */
+  private extractText(msgContent?: {
+    conversation?: string
+    extendedTextMessage?: { text?: string }
+    message?: {
+      conversation?: string
+      extendedTextMessage?: { text?: string }
+    }
+  }): string {
+    return (
+      msgContent?.conversation ??
+      msgContent?.extendedTextMessage?.text ??
+      msgContent?.message?.conversation ??
+      msgContent?.message?.extendedTextMessage?.text ??
+      ""
+    )
+  }
+
   async parseWebhook(payload: unknown): Promise<WhatsAppIncoming[]> {
     // Formato real do webhook da W-API (evento de mensagem recebida):
     // {
@@ -219,11 +238,7 @@ export class WApiProvider implements WhatsAppProvider {
     }
 
     const from = (body.sender?.id ?? body.chat?.id ?? "").split("@")[0]
-    const content =
-      body.msgContent?.conversation ??
-      body.msgContent?.extendedTextMessage?.text ??
-      body.msgContent?.message?.conversation ??
-      body.msgContent?.message?.extendedTextMessage?.text
+    const content = this.extractText(body.msgContent)
 
     if (!from || !content) {
       return []
@@ -235,6 +250,48 @@ export class WApiProvider implements WhatsAppProvider {
         from,
         content,
         receivedAt: moment > 0 ? new Date(moment * 1000) : new Date(),
+      },
+    ]
+  }
+
+  /**
+   * Mensagens que PARTIRAM do número (fromMe = true): a W-API também
+   * dispara o webhook quando alguém envia pelo WhatsApp vinculado à
+   * instância (ex.: a equipe respondendo ao paciente fora do painel).
+   */
+  async parseOutgoing(payload: unknown): Promise<WhatsAppOutgoing[]> {
+    const body = payload as {
+      event?: string
+      fromMe?: boolean
+      chat?: { id?: string }
+      msgContent?: {
+        conversation?: string
+        extendedTextMessage?: { text?: string }
+        message?: {
+          conversation?: string
+          extendedTextMessage?: { text?: string }
+        }
+      }
+      moment?: number
+    }
+
+    if (body.event !== "webhookReceived" || !body.fromMe) {
+      return []
+    }
+
+    // Chat da conversa = destinatário. Ignora grupos e transmissões.
+    const chatId = body.chat?.id ?? ""
+    const to = chatId.split("@")[0]
+    if (!to || chatId.includes("g.us") || chatId.includes("broadcast")) {
+      return []
+    }
+
+    const moment = Number(body.moment)
+    return [
+      {
+        to,
+        content: this.extractText(body.msgContent),
+        sentAt: moment > 0 ? new Date(moment * 1000) : new Date(),
       },
     ]
   }

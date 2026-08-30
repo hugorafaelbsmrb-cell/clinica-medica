@@ -8,6 +8,7 @@ import type {
   SendResult,
   WhatsAppButton,
   WhatsAppIncoming,
+  WhatsAppOutgoing,
   WhatsAppProvider,
 } from "./provider"
 
@@ -92,6 +93,10 @@ export class MockProvider implements WhatsAppProvider {
       return [{ from: body.from, content: body.content, receivedAt: new Date() }]
     }
 
+    return []
+  }
+
+  async parseOutgoing(): Promise<WhatsAppOutgoing[]> {
     return []
   }
 }

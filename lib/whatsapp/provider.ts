@@ -31,6 +31,17 @@ export type WhatsAppIncoming = {
   providerMessageId?: string
 }
 
+/**
+ * Mensagem que PARTIU do número conectado (fromMe = true no webhook),
+ * ex.: a equipe respondendo ao paciente pelo próprio WhatsApp, fora do
+ * painel. Usada para pausar o bot da conversa automaticamente.
+ */
+export type WhatsAppOutgoing = {
+  to: string // número do destinatário (ex.: 5511999990000)
+  content: string
+  sentAt: Date
+}
+
 /** Botão de ação anexado a uma mensagem de texto (máx. 3 por mensagem). */
 export type WhatsAppButton =
   | { type: "URL"; label: string; url: string }
@@ -73,6 +84,11 @@ export interface WhatsAppProvider {
    * e devolve as mensagens recebidas em formato padronizado.
    */
   parseWebhook(payload: unknown): Promise<WhatsAppIncoming[]>
+  /**
+   * Devolve as mensagens que saíram do próprio número (envios feitos fora
+   * da API, ex.: equipe respondendo pelo WhatsApp vinculado à instância).
+   */
+  parseOutgoing(payload: unknown): Promise<WhatsAppOutgoing[]>
 }
 
 /** Provedor ativo com base nas credenciais configuradas (banco ou .env). */

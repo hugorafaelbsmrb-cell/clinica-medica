@@ -4,7 +4,8 @@
  * Enquanto uma linha de BotPause existe e o resumeAt não venceu, nenhuma
  * mensagem automática sai para aquele número — só o que a equipe escreve
  * manualmente. Gatilhos de pausa:
- *  - a equipe envia mensagem manual (atendimento_humano);
+ *  - a equipe envia mensagem manual pelo painel (atendimento_humano);
+ *  - a equipe responde pelo próprio WhatsApp (atendimento_humano);
  *  - o paciente pede "atendente" (pediu_atendente).
  * A retomada é automática quando resumeAt passa; cada mensagem manual da
  * equipe renova o prazo (botPauseHours em Configurações → Automações).
@@ -120,4 +121,55 @@ export async function listActiveBotPauses(
     })
   }
   return result
+}
+
+/**
+ * Detecta uma mensagem que a equipe enviou pelo próprio WhatsApp (fora do
+ * painel) e pausa o bot para aquela conversa. A W-API também dispara o
+ * webhook para envios feitos pela API (fromMe = true), então o evento só
+ * pausa quando não bate com um envio recente nosso (filtro de eco).
+ * Retorna true quando a conversa foi pausada ou renovada.
+ */
+export async function pauseFromWhatsAppOutgoing(
+  phone: string,
+  content: string,
+  sentAt: Date
+): Promise<boolean> {
+  const normalized = normalizePhone(phone)
+  if (!normalized) return false
+
+  const lastDigits = normalized.slice(-9)
+  const candidates = await prisma.patient.findMany({
+    where: { phone: { endsWith: lastDigits } },
+    select: { id: true, phone: true },
+  })
+  const patientIds = candidates
+    .filter(
+      (candidate) =>
+        candidate.phone && normalizePhone(candidate.phone) === normalized
+    )
+    .map((candidate) => candidate.id)
+
+  // Eco do bot: houve envio nosso para esse número nos últimos minutos?
+  const windowStart = new Date(sentAt.getTime() - 2 * 60 * 1000)
+  const windowEnd = new Date(sentAt.getTime() + 3 * 60 * 1000)
+  if (patientIds.length > 0) {
+    const recent = await prisma.message.findFirst({
+      where: {
+        patientId: { in: patientIds },
+        direction: "OUT",
+        sentAt: { gte: windowStart, lte: windowEnd },
+        ...(content.trim() ? { content: content.trim() } : {}),
+      },
+      orderBy: { sentAt: "desc" },
+    })
+    if (recent) {
+      console.log(`[bot-pause] eco de envio da API ignorado (${normalized})`)
+      return false
+    }
+  }
+
+  await pauseBotForPhone(normalized, "atendimento_humano")
+  console.log(`[bot-pause] pausado via WhatsApp (${normalized})`)
+  return true
 }
