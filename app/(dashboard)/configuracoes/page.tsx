@@ -8,6 +8,7 @@ import { ClinicaForm } from "@/components/configuracoes/clinica-form"
 import { IntegracoesForm } from "@/components/configuracoes/integracoes-form"
 import { PagamentosForm } from "@/components/configuracoes/pagamentos-form"
 import { WebhooksForm } from "@/components/configuracoes/webhooks-form"
+import { ConfigTabs } from "@/components/configuracoes/config-tabs"
 
 export const metadata: Metadata = { title: "Configurações" }
 
@@ -36,45 +37,53 @@ export default async function ConfiguracoesPage() {
           e PDFs
         </p>
       </div>
-      <ClinicaForm initial={clinic} />
-      <IntegracoesForm
-        initial={integrations}
-        clinicPhone={clinic.phone}
-        webhookUrl={webhookUrl}
-      />
-      <WebhooksForm
-        initial={{
-          whatsappWebhookUrl: webhookUrl,
-          asaasWebhookUrl,
-          stripeWebhookUrl,
-        }}
-      />
-      <PagamentosForm
-        initial={{
-          asaasApiKey: payments.asaasApiKey,
-          stripeSecretKey: payments.stripeSecretKey,
-          stripeWebhookSecret: payments.stripeWebhookSecret,
-          asaasWebhookUrl,
-          stripeWebhookUrl,
-          consultaPrecoPresencial: clinic.consultaPrecoPresencial ?? null,
-          consultaPrecoDomiciliar: clinic.consultaPrecoDomiciliar ?? null,
-          consultaPrecoDomiciliarFora:
-            clinic.consultaPrecoDomiciliarFora ?? null,
-          consultaPrecoTeleconsulta: clinic.consultaPrecoTeleconsulta ?? null,
-          acompValorBaixa: clinic.acompValorBaixa ?? null,
-          acompValorMedia: clinic.acompValorMedia ?? null,
-          acompValorAlta: clinic.acompValorAlta ?? null,
-          jurosParcelamento: clinic.jurosParcelamento ?? null,
-          pixEnabled: payments.pixEnabled,
-          cartaoEnabled: payments.cartaoEnabled,
-          applePayEnabled: payments.applePayEnabled,
-          dinheiroEnabled: payments.dinheiroEnabled,
-        }}
-        enabledModalities={{
-          presencial: clinic.consultaPresencialEnabled ?? true,
-          domiciliar: clinic.consultaDomiciliarEnabled ?? true,
-          teleconsulta: clinic.consultaTeleconsultaEnabled ?? true,
-        }}
+      <ConfigTabs
+        clinica={<ClinicaForm initial={clinic} />}
+        integracoes={
+          <IntegracoesForm
+            initial={integrations}
+            clinicPhone={clinic.phone}
+            webhookUrl={webhookUrl}
+          />
+        }
+        webhooks={
+          <WebhooksForm
+            initial={{
+              whatsappWebhookUrl: webhookUrl,
+              asaasWebhookUrl,
+              stripeWebhookUrl,
+            }}
+          />
+        }
+        pagamentos={
+          <PagamentosForm
+            initial={{
+              asaasApiKey: payments.asaasApiKey,
+              stripeSecretKey: payments.stripeSecretKey,
+              stripeWebhookSecret: payments.stripeWebhookSecret,
+              asaasWebhookUrl,
+              stripeWebhookUrl,
+              consultaPrecoPresencial: clinic.consultaPrecoPresencial ?? null,
+              consultaPrecoDomiciliar: clinic.consultaPrecoDomiciliar ?? null,
+              consultaPrecoDomiciliarFora:
+                clinic.consultaPrecoDomiciliarFora ?? null,
+              consultaPrecoTeleconsulta: clinic.consultaPrecoTeleconsulta ?? null,
+              acompValorBaixa: clinic.acompValorBaixa ?? null,
+              acompValorMedia: clinic.acompValorMedia ?? null,
+              acompValorAlta: clinic.acompValorAlta ?? null,
+              jurosParcelamento: clinic.jurosParcelamento ?? null,
+              pixEnabled: payments.pixEnabled,
+              cartaoEnabled: payments.cartaoEnabled,
+              applePayEnabled: payments.applePayEnabled,
+              dinheiroEnabled: payments.dinheiroEnabled,
+            }}
+            enabledModalities={{
+              presencial: clinic.consultaPresencialEnabled ?? true,
+              domiciliar: clinic.consultaDomiciliarEnabled ?? true,
+              teleconsulta: clinic.consultaTeleconsultaEnabled ?? true,
+            }}
+          />
+        }
       />
     </div>
   )

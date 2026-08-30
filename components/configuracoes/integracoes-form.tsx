@@ -28,6 +28,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Field, FieldLabel } from "@/components/ui/field"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   checkWhatsAppConnection,
   generatePairingCode,
@@ -252,7 +253,15 @@ export function IntegracoesForm({
       </CardHeader>
       <CardContent>
         <form action={formAction} className="flex flex-col gap-6">
-          {/* ===== DeepSeek ===== */}
+<Tabs defaultValue="deepseek">
+<TabsList className="max-w-full overflow-x-auto">
+<TabsTrigger value="deepseek">IA (DeepSeek)</TabsTrigger>
+<TabsTrigger value="birdid">Bird ID</TabsTrigger>
+<TabsTrigger value="whatsapp">WhatsApp (W-API)</TabsTrigger>
+</TabsList>
+
+{/* ===== DeepSeek ===== */}
+<TabsContent value="deepseek" keepMounted className="pt-4">
           <div className="flex flex-col gap-4 rounded-lg border p-4">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 font-medium">
@@ -333,8 +342,10 @@ export function IntegracoesForm({
               sistema continua funcionando.
             </p>
           </div>
+</TabsContent>
 
-          {/* ===== Bird ID (assinatura em nuvem) ===== */}
+{/* ===== Bird ID (assinatura em nuvem) ===== */}
+<TabsContent value="birdid" keepMounted className="pt-4">
           <div className="flex flex-col gap-4 rounded-lg border p-4">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 font-medium">
@@ -423,8 +434,10 @@ export function IntegracoesForm({
               escopo signature_session (OAuth Password).
             </p>
           </div>
+</TabsContent>
 
-          {/* ===== WhatsApp (W-API) ===== */}
+{/* ===== WhatsApp (W-API) ===== */}
+<TabsContent value="whatsapp" keepMounted className="pt-4">
           <div className="flex flex-col gap-4 rounded-lg border p-4">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 font-medium">
@@ -702,6 +715,8 @@ export function IntegracoesForm({
               </div>
             </div>
           </div>
+</TabsContent>
+</Tabs>
 
           <div className="flex gap-3">
             <Button type="submit" disabled={pending}>
