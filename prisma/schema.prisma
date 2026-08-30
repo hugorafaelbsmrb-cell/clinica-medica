@@ -162,7 +162,7 @@ model User {
  */
 model ClinicSettings {
   id                     Int     @id @default(1)
-  name                   String  @default("Clínica Médica")
+  name                   String  @default("Médico em Domicílio")
   address                String?
   phone                  String?
   email                  String?
