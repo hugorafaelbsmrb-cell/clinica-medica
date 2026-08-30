@@ -1,5 +1,5 @@
 /**
- * Credenciais de integrações externas (DeepSeek e W-API).
+ * Credenciais de integrações externas (DeepSeek, W-API e Bird ID).
  *
  * O admin configura tudo pela tela Configurações → Integrações, salvo no
  * banco (tabela ClinicSettings). As variáveis de ambiente do .env continuam
@@ -11,6 +11,10 @@ export type IntegrationSettings = {
   deepseekApiKey: string
   wApiInstance: string
   wApiToken: string
+  birdIdBaseUrl: string
+  birdIdClientId: string
+  /** true quando há client_secret salvo — o valor nunca vai para a tela. */
+  birdIdClientSecretSet: boolean
 }
 
 let cache: IntegrationSettings | null = null
@@ -25,6 +29,14 @@ export async function getIntegrationSettings(): Promise<IntegrationSettings> {
       settings?.deepseekApiKey || process.env.DEEPSEEK_API_KEY || "",
     wApiInstance: settings?.wApiInstance || process.env.W_API_INSTANCE || "",
     wApiToken: settings?.wApiToken || process.env.W_API_TOKEN || "",
+    birdIdBaseUrl:
+      settings?.birdIdBaseUrl ||
+      process.env.BIRDID_BASE_URL ||
+      "https://api.birdid.com.br",
+    birdIdClientId: settings?.birdIdClientId || process.env.BIRDID_CLIENT_ID || "",
+    birdIdClientSecretSet: Boolean(
+      settings?.birdIdClientSecretEnc || process.env.BIRDID_CLIENT_SECRET
+    ),
   }
   return cache
 }

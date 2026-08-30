@@ -46,6 +46,10 @@ export type CloudSignRequest = {
   doctorName: string
   reason: string
   userId: string
+  /** Configuração Bird ID vinda do painel (Integrações); ausente = env do signer. */
+  birdIdBaseUrl?: string
+  birdIdClientId?: string
+  birdIdClientSecret?: string
 }
 
 export type SessionSignRequest = {
@@ -58,6 +62,8 @@ export type SessionSignRequest = {
   doctorName: string
   reason: string
   userId: string
+  /** Base da API Bird ID vinda do painel (Integrações); ausente = env do signer. */
+  birdIdBaseUrl?: string
 }
 
 /** Token de sessão Bird ID inválido/expirado (HTTP 401 do signer). */
@@ -159,16 +165,20 @@ export async function signPdfWithSigner(input: SignRequest): Promise<SignResult>
 export async function signPdfCloudWithSigner(
   input: CloudSignRequest
 ): Promise<SignResult> {
+  const fields: Record<string, string> = {
+    certPem: input.certPem,
+    cpf: input.cpf,
+    message: input.message,
+    doctorName: input.doctorName,
+    reason: input.reason,
+    userId: input.userId,
+  }
+  if (input.birdIdBaseUrl) fields.birdIdBaseUrl = input.birdIdBaseUrl
+  if (input.birdIdClientId) fields.birdIdClientId = input.birdIdClientId
+  if (input.birdIdClientSecret) fields.birdIdClientSecret = input.birdIdClientSecret
   const res = await postMultipart(
     "/sign-cloud",
-    {
-      certPem: input.certPem,
-      cpf: input.cpf,
-      message: input.message,
-      doctorName: input.doctorName,
-      reason: input.reason,
-      userId: input.userId,
-    },
+    fields,
     { pdf: { data: input.pdf, filename: "documento.pdf" } },
     AbortSignal.timeout(180_000)
   )
@@ -189,16 +199,18 @@ export async function signPdfCloudWithSigner(
 export async function signPdfSessionWithSigner(
   input: SessionSignRequest
 ): Promise<SignResult> {
+  const fields: Record<string, string> = {
+    certPem: input.certPem,
+    alias: input.alias,
+    sessionToken: input.sessionToken,
+    doctorName: input.doctorName,
+    reason: input.reason,
+    userId: input.userId,
+  }
+  if (input.birdIdBaseUrl) fields.birdIdBaseUrl = input.birdIdBaseUrl
   const res = await postMultipart(
     "/sign-session",
-    {
-      certPem: input.certPem,
-      alias: input.alias,
-      sessionToken: input.sessionToken,
-      doctorName: input.doctorName,
-      reason: input.reason,
-      userId: input.userId,
-    },
+    fields,
     { pdf: { data: input.pdf, filename: "documento.pdf" } },
     AbortSignal.timeout(120_000)
   )

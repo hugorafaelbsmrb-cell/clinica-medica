@@ -63,6 +63,8 @@ FIELD_NAME = "AssinaturaMedico"
 TSA_URL = os.environ.get("TSA_URL", "http://act.serpro.gov.br")
 
 # Bird ID (VaultID) — nuvem pública. Homologação: https://apihom.birdid.com.br
+# Fallback de ambiente: o padrão é a aplicação Node enviar a configuração
+# salva no painel (Configurações → Integrações) em cada requisição.
 BIRDID_BASE_URL = os.environ.get("BIRDID_BASE_URL", "https://api.birdid.com.br").rstrip("/")
 BIRDID_CLIENT_ID = os.environ.get("BIRDID_CLIENT_ID", "")
 BIRDID_CLIENT_SECRET = os.environ.get("BIRDID_CLIENT_SECRET", "")
@@ -216,17 +218,21 @@ def _decode_signature(raw: str) -> bytes:
     return base64.b64decode(raw)
 
 
-def _birdid_push_sign(cpf: str, message: str, digest_hex: str) -> bytes:
+def _birdid_push_sign(cpf, message, digest_hex, base_url=None, client_id=None, client_secret=None):
     """
     Solicita a assinatura do hash via push e aguarda o médico aprovar no
-    app Bird ID (polling do resultado com o token da resposta 201).
+    app Bird ID (polling do resultado com o token da resposta 201). A
+    configuração vem da requisição (painel Integrações); env como fallback.
     """
-    if not BIRDID_CLIENT_ID or not BIRDID_CLIENT_SECRET:
-        raise BirdIdPushError("BIRDID_CLIENT_ID/SECRET não configurados no signer")
+    base_url = (base_url or BIRDID_BASE_URL).rstrip("/")
+    client_id = client_id or BIRDID_CLIENT_ID
+    client_secret = client_secret or BIRDID_CLIENT_SECRET
+    if not client_id or not client_secret:
+        raise BirdIdPushError("Bird ID não configurado (Configurações → Integrações)")
 
     payload = {
-        "client_id": BIRDID_CLIENT_ID,
-        "client_secret": BIRDID_CLIENT_SECRET,
+        "client_id": client_id,
+        "client_secret": client_secret,
         "username": cpf,
         "message": (message or "Aprovar assinatura")[:200],
         "hashes": [digest_hex],
@@ -235,7 +241,7 @@ def _birdid_push_sign(cpf: str, message: str, digest_hex: str) -> bytes:
     }
     try:
         resp = requests.post(
-            f"{BIRDID_BASE_URL}/async-signature", json=payload, timeout=15
+            f"{base_url}/async-signature", json=payload, timeout=15
         )
     except requests.RequestException as exc:
         raise BirdIdPushError(f"Bird ID indisponível: {exc}") from exc
@@ -254,7 +260,7 @@ def _birdid_push_sign(cpf: str, message: str, digest_hex: str) -> bytes:
         time.sleep(PUSH_POLL_INTERVAL)
         try:
             poll = requests.get(
-                f"{BIRDID_BASE_URL}/async-signature",
+                f"{base_url}/async-signature",
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=10,
             )
@@ -277,7 +283,8 @@ class BirdIdPushSigner(signers.Signer):
     O CMS/PAdES completo é montado pelo próprio pyhanko.
     """
 
-    def __init__(self, signing_cert, cert_registry, cpf: str, message: str):
+    def __init__(self, signing_cert, cert_registry, cpf: str, message: str,
+                 base_url=None, client_id=None, client_secret=None):
         super().__init__(
             prefer_pss=False,
             signing_cert=signing_cert,
@@ -285,6 +292,9 @@ class BirdIdPushSigner(signers.Signer):
         )
         self._cpf = cpf
         self._message = message
+        self._base_url = base_url
+        self._client_id = client_id
+        self._client_secret = client_secret
         self.push_attempted = False
 
     async def async_sign_raw(self, data, digest_algorithm, dry_run=False):
@@ -292,7 +302,10 @@ class BirdIdPushSigner(signers.Signer):
             return bytes(256)  # placeholder RSA-2048 (estimativa de tamanho)
         digest_hex = hashlib.sha256(data).hexdigest()
         self.push_attempted = True
-        return _birdid_push_sign(self._cpf, self._message, digest_hex)
+        return _birdid_push_sign(
+            self._cpf, self._message, digest_hex,
+            self._base_url, self._client_id, self._client_secret,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -307,12 +320,15 @@ class BirdIdSessionError(Exception):
         self.invalid_token = invalid_token
 
 
-def _birdid_session_sign(alias: str, session_token: str, digest_hex: str) -> bytes:
+def _birdid_session_sign(alias: str, session_token: str, digest_hex: str,
+                         base_url=None) -> bytes:
     """
     Assina o hash via POST /v0/oauth/signature usando o token da sessão
     signature_session (resposta imediata, sem push). Formato RAW: PKCS#1
-    v1.5 direto sobre o hash SHA-256 (OID 2.16.840.1.101.3.4.2.1).
+    v1.5 direto sobre o hash SHA-256 (OID 2.16.840.1.101.3.4.2.1). A base
+    da API vem da requisição (painel Integrações); env como fallback.
     """
+    base_url = (base_url or BIRDID_BASE_URL).rstrip("/")
     payload = {
         "certificate_alias": alias,
         "hashes": [
@@ -327,7 +343,7 @@ def _birdid_session_sign(alias: str, session_token: str, digest_hex: str) -> byt
     }
     try:
         resp = requests.post(
-            f"{BIRDID_BASE_URL}/v0/oauth/signature",
+            f"{base_url}/v0/oauth/signature",
             json=payload,
             headers={"Authorization": f"Bearer {session_token}"},
             timeout=20,
@@ -363,7 +379,8 @@ class BirdIdSessionSigner(signers.Signer):
     O CMS/PAdES completo é montado pelo próprio pyhanko.
     """
 
-    def __init__(self, signing_cert, cert_registry, alias: str, session_token: str):
+    def __init__(self, signing_cert, cert_registry, alias: str, session_token: str,
+                 base_url=None):
         super().__init__(
             prefer_pss=False,
             signing_cert=signing_cert,
@@ -371,12 +388,13 @@ class BirdIdSessionSigner(signers.Signer):
         )
         self._alias = alias
         self._session_token = session_token
+        self._base_url = base_url
 
     async def async_sign_raw(self, data, digest_algorithm, dry_run=False):
         if dry_run:
             return bytes(256)  # placeholder RSA-2048 (estimativa de tamanho)
         digest_hex = hashlib.sha256(data).hexdigest()
-        return _birdid_session_sign(self._alias, self._session_token, digest_hex)
+        return _birdid_session_sign(self._alias, self._session_token, digest_hex, self._base_url)
 
 
 def _verify_signature_matches_cert(signed_pdf: bytes, cert):
@@ -565,6 +583,10 @@ def sign_cloud():
     doctor_name = (request.form.get("doctorName") or "Medico").strip()[:120]
     reason = (request.form.get("reason") or "Assinatura de documento medico").strip()[:200]
     user_id = (request.form.get("userId") or "").strip()[:80]
+    # Configuração vinda do painel (Integrações); env do signer como fallback.
+    birdid_base_url = (request.form.get("birdIdBaseUrl") or "").strip()
+    birdid_client_id = (request.form.get("birdIdClientId") or "").strip()
+    birdid_client_secret = (request.form.get("birdIdClientSecret") or "").strip()
 
     if pdf_file is None:
         return jsonify({"error": "PDF ausente"}), 400
@@ -595,7 +617,12 @@ def sign_cloud():
 
     cert_store = SimpleCertificateStore()
     cert_store.register_multiple([cert] + intermediates)
-    push_signer = BirdIdPushSigner(cert, cert_store, cpf, message)
+    push_signer = BirdIdPushSigner(
+        cert, cert_store, cpf, message,
+        birdid_base_url or None,
+        birdid_client_id or None,
+        birdid_client_secret or None,
+    )
 
     level = "B-B"
     try:
@@ -690,6 +717,8 @@ def sign_session():
     doctor_name = (request.form.get("doctorName") or "Medico").strip()[:120]
     reason = (request.form.get("reason") or "Assinatura de documento medico").strip()[:200]
     user_id = (request.form.get("userId") or "").strip()[:80]
+    # Base da API vinda do painel (Integrações); env do signer como fallback.
+    birdid_base_url = (request.form.get("birdIdBaseUrl") or "").strip()
 
     if pdf_file is None:
         return jsonify({"error": "PDF ausente"}), 400
@@ -721,7 +750,9 @@ def sign_session():
 
     cert_store = SimpleCertificateStore()
     cert_store.register_multiple([cert] + intermediates)
-    session_signer = BirdIdSessionSigner(cert, cert_store, alias, session_token)
+    session_signer = BirdIdSessionSigner(
+        cert, cert_store, alias, session_token, birdid_base_url or None
+    )
 
     level = "B-B"
     try:

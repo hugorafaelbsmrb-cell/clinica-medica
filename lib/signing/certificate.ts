@@ -10,6 +10,7 @@
  */
 import { prisma } from "@/lib/prisma"
 import { decryptSecret } from "./crypto"
+import { getBirdIdConfig } from "./birdid-client"
 import {
   BirdIdSessionExpiredError,
   signPdfCloudWithSigner,
@@ -91,6 +92,7 @@ export async function signPdfIfEnabled(input: {
   const birdId = await getActiveBirdIdCredential(input.doctorId)
   if (birdId) {
     const certPem = decryptSecret(birdId.encryptedCertPem).toString("utf8")
+    const birdIdConfig = await getBirdIdConfig()
     const message = input.patientName
       ? `${reason} — paciente ${input.patientName}`
       : reason
@@ -107,6 +109,7 @@ export async function signPdfIfEnabled(input: {
           doctorName: input.doctorName ?? "Médico",
           reason,
           userId: input.doctorId ?? "",
+          birdIdBaseUrl: birdIdConfig.baseUrl,
         })
         await prisma.$transaction([
           prisma.birdIdSession.update({
@@ -158,6 +161,9 @@ export async function signPdfIfEnabled(input: {
         doctorName: input.doctorName ?? "Médico",
         reason,
         userId: input.doctorId ?? "",
+        birdIdBaseUrl: birdIdConfig.baseUrl,
+        birdIdClientId: birdIdConfig.clientId,
+        birdIdClientSecret: birdIdConfig.clientSecret,
       })
       await prisma.auditLog.create({
         data: {

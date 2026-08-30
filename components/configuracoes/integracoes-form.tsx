@@ -14,6 +14,7 @@ import {
   Phone,
   QrCode,
   RefreshCw,
+  ShieldCheck,
   Webhook,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -41,6 +42,10 @@ export type IntegrationInitialData = {
   deepseekApiKey: string
   wApiInstance: string
   wApiToken: string
+  birdIdBaseUrl: string
+  birdIdClientId: string
+  /** true quando há client_secret salvo — o valor nunca chega à tela. */
+  birdIdClientSecretSet: boolean
   clinicPhone?: string | null
 }
 
@@ -61,8 +66,15 @@ export function IntegracoesForm({
   const [wApiInstance, setWApiInstance] = useState(initial.wApiInstance)
   const [wApiToken, setWApiToken] = useState(initial.wApiToken)
 
+  const [birdIdBaseUrl, setBirdIdBaseUrl] = useState(
+    initial.birdIdBaseUrl || "https://api.birdid.com.br"
+  )
+  const [birdIdClientId, setBirdIdClientId] = useState(initial.birdIdClientId)
+  const [birdIdClientSecret, setBirdIdClientSecret] = useState("")
+
   const [showDeepseek, setShowDeepseek] = useState(false)
   const [showWApiToken, setShowWApiToken] = useState(false)
+  const [showBirdIdSecret, setShowBirdIdSecret] = useState(false)
 
   const [deepseekTest, setDeepseekTest] = useState<TestResult>(null)
   const [wapiTest, setWapiTest] = useState<TestResult>(null)
@@ -212,6 +224,7 @@ export function IntegracoesForm({
 
   const deepseekConfigured = !!initial.deepseekApiKey
   const wapiConfigured = !!(initial.wApiInstance && initial.wApiToken)
+  const birdIdConfigured = !!(initial.birdIdClientId && initial.birdIdClientSecretSet)
 
   const statusBadge = !wapiConfigured ? (
     <Badge variant="outline">Sem credenciais</Badge>
@@ -232,8 +245,9 @@ export function IntegracoesForm({
       <CardHeader>
         <CardTitle>Integrações</CardTitle>
         <CardDescription>
-          Serviços externos usados pelo sistema: IA (DeepSeek) e WhatsApp
-          (W-API). As credenciais ficam guardadas no banco da clínica.
+          Serviços externos usados pelo sistema: IA (DeepSeek), WhatsApp
+          (W-API) e Bird ID (assinatura em nuvem). As credenciais ficam
+          guardadas no banco da clínica.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -317,6 +331,96 @@ export function IntegracoesForm({
             <p className="text-xs text-muted-foreground">
               Sem chave, o médico escreve o resumo do plano manualmente — o
               sistema continua funcionando.
+            </p>
+          </div>
+
+          {/* ===== Bird ID (assinatura em nuvem) ===== */}
+          <div className="flex flex-col gap-4 rounded-lg border p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 font-medium">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                Bird ID (assinatura em nuvem)
+              </div>
+              <Badge variant={birdIdConfigured ? "secondary" : "outline"}>
+                {birdIdConfigured ? "Configurada" : "Não configurada"}
+              </Badge>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Certificado digital em nuvem (ICP-Brasil) usado para assinar
+              prescrições e planos terapêuticos. As credenciais da aplicação
+              vêm do console do Bird ID (Wings); o client secret é guardado
+              criptografado e não volta a aparecer depois de salvo.
+            </p>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field>
+                <FieldLabel>Ambiente</FieldLabel>
+                <select
+                  name="birdIdBaseUrl"
+                  value={birdIdBaseUrl}
+                  onChange={(event) => setBirdIdBaseUrl(event.target.value)}
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                >
+                  <option value="https://apihom.birdid.com.br">
+                    Homologação (apihom.birdid.com.br)
+                  </option>
+                  <option value="https://api.birdid.com.br">
+                    Produção (api.birdid.com.br)
+                  </option>
+                </select>
+              </Field>
+
+              <Field>
+                <FieldLabel>Client ID</FieldLabel>
+                <Input
+                  name="birdIdClientId"
+                  value={birdIdClientId}
+                  onChange={(event) => setBirdIdClientId(event.target.value)}
+                  placeholder="Client ID da aplicação no console Bird ID"
+                  autoComplete="off"
+                />
+              </Field>
+            </div>
+
+            <Field>
+              <FieldLabel>Client secret</FieldLabel>
+              <div className="relative">
+                <Input
+                  name="birdIdClientSecret"
+                  type={showBirdIdSecret ? "text" : "password"}
+                  value={birdIdClientSecret}
+                  onChange={(event) => setBirdIdClientSecret(event.target.value)}
+                  placeholder={
+                    initial.birdIdClientSecretSet
+                      ? "Salvo — preencha apenas para substituir"
+                      : "Client secret da aplicação"
+                  }
+                  autoComplete="new-password"
+                  className="pr-9"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowBirdIdSecret((value) => !value)}
+                  className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={
+                    showBirdIdSecret ? "Ocultar secret" : "Mostrar secret"
+                  }
+                >
+                  {showBirdIdSecret ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </Field>
+
+            <p className="text-xs text-muted-foreground">
+              Sem credenciais, a conexão Bird ID aparece como não configurada
+              para os médicos (a assinatura A1 .pfx continua funcionando).
+              Para assinar por sessão sem push, o Wings precisa liberar o
+              escopo signature_session (OAuth Password).
             </p>
           </div>
 

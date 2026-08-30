@@ -35,7 +35,7 @@ export async function GET(request: Request) {
   if (!["ADMIN", "MEDICO"].includes(session.user.role)) {
     return NextResponse.redirect(new URL("/dashboard", request.url))
   }
-  if (!birdIdConfigured()) {
+  if (!(await birdIdConfigured())) {
     return failRedirect(request.url, "nao-configurado")
   }
 
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
   const state = randomBytes(24).toString("hex")
   const verifier = generateCodeVerifier()
   const redirectUri = getBirdIdRedirectUri(request.url)
-  const authorizeUrl = buildBirdIdAuthorizeUrl({
+  const authorizeUrl = await buildBirdIdAuthorizeUrl({
     state,
     codeChallenge: computeCodeChallenge(verifier),
     redirectUri,

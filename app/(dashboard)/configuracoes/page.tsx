@@ -32,7 +32,8 @@ export default async function ConfiguracoesPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Configurações</h1>
         <p className="text-muted-foreground">
-          Dados da clínica, integrações (IA e WhatsApp), pagamentos e PDFs
+          Dados da clínica, integrações (IA, WhatsApp e Bird ID), pagamentos
+          e PDFs
         </p>
       </div>
       <ClinicaForm initial={clinic} />

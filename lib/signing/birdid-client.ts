@@ -9,17 +9,52 @@
  * descartado em seguida — nada de material de assinatura fica no servidor.
  *
  * A assinatura em si (push /async-signature) acontece só no microserviço
- * signer, que é quem detém client_id/client_secret da aplicação.
+ * signer, que recebe as credenciais da aplicação por requisição.
  */
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto"
+import { prisma } from "@/lib/prisma"
+import { decryptSecret } from "./crypto"
 
-const BIRDID_BASE_URL = (process.env.BIRDID_BASE_URL || "https://api.birdid.com.br").replace(/\/+$/, "")
-const BIRDID_CLIENT_ID = process.env.BIRDID_CLIENT_ID || ""
-const BIRDID_CLIENT_SECRET = process.env.BIRDID_CLIENT_SECRET || ""
+/** Ambientes oficiais da API pública do Bird ID (seletor no painel). */
+export const BIRDID_BASE_URLS = {
+  homologacao: "https://apihom.birdid.com.br",
+  producao: "https://api.birdid.com.br",
+} as const
+
+export type BirdIdConfig = {
+  baseUrl: string
+  clientId: string
+  clientSecret: string
+}
+
+/**
+ * Resolve a configuração do Bird ID: banco primeiro (tela Configurações →
+ * Integrações), .env como fallback. O client_secret fica criptografado no
+ * banco (AES-256-GCM) e é decifrado só aqui, em memória.
+ */
+export async function getBirdIdConfig(): Promise<BirdIdConfig> {
+  const settings = await prisma.clinicSettings.findUnique({ where: { id: 1 } })
+  const baseUrl = (
+    settings?.birdIdBaseUrl ||
+    process.env.BIRDID_BASE_URL ||
+    BIRDID_BASE_URLS.producao
+  ).replace(/\/+$/, "")
+  const clientId = settings?.birdIdClientId || process.env.BIRDID_CLIENT_ID || ""
+  let clientSecret = process.env.BIRDID_CLIENT_SECRET || ""
+  if (settings?.birdIdClientSecretEnc) {
+    try {
+      clientSecret = decryptSecret(settings.birdIdClientSecretEnc).toString("utf8")
+    } catch (error) {
+      console.warn("[BirdID] Falha ao decifrar o client_secret do banco:", error)
+    }
+  }
+  return { baseUrl, clientId, clientSecret }
+}
 
 /** True quando as credenciais do console Bird ID estão configuradas. */
-export function birdIdConfigured(): boolean {
-  return Boolean(BIRDID_CLIENT_ID && BIRDID_CLIENT_SECRET)
+export async function birdIdConfigured(): Promise<boolean> {
+  const config = await getBirdIdConfig()
+  return Boolean(config.clientId && config.clientSecret)
 }
 
 /** URI de retorno registrada no console Bird ID (env ou derivada da requisição). */
@@ -44,15 +79,16 @@ export function computeCodeChallenge(verifier: string): string {
 }
 
 /** URL do GET /v0/oauth/authorize com PKCE e login_hint (CPF do médico). */
-export function buildBirdIdAuthorizeUrl(opts: {
+export async function buildBirdIdAuthorizeUrl(opts: {
   state: string
   codeChallenge: string
   redirectUri: string
   loginHint?: string
-}): string {
+}): Promise<string> {
+  const config = await getBirdIdConfig()
   const params = new URLSearchParams({
     response_type: "code",
-    client_id: BIRDID_CLIENT_ID,
+    client_id: config.clientId,
     redirect_uri: opts.redirectUri,
     code_challenge: opts.codeChallenge,
     code_challenge_method: "S256",
@@ -61,7 +97,7 @@ export function buildBirdIdAuthorizeUrl(opts: {
     lifetime: "300",
   })
   if (opts.loginHint) params.set("login_hint", opts.loginHint)
-  return `${BIRDID_BASE_URL}/v0/oauth/authorize?${params.toString()}`
+  return `${config.baseUrl}/v0/oauth/authorize?${params.toString()}`
 }
 
 export type BirdIdToken = {
@@ -80,15 +116,16 @@ export async function exchangeBirdIdCode(opts: {
   codeVerifier: string
   redirectUri: string
 }): Promise<BirdIdToken> {
+  const config = await getBirdIdConfig()
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code: opts.code,
     redirect_uri: opts.redirectUri,
-    client_id: BIRDID_CLIENT_ID,
-    client_secret: BIRDID_CLIENT_SECRET,
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
     code_verifier: opts.codeVerifier,
   })
-  const res = await fetch(`${BIRDID_BASE_URL}/v0/oauth/token`, {
+  const res = await fetch(`${config.baseUrl}/v0/oauth/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: body.toString(),
@@ -116,7 +153,8 @@ export type BirdIdCertificate = {
 export async function discoverBirdIdCertificate(
   accessToken: string
 ): Promise<BirdIdCertificate> {
-  const res = await fetch(`${BIRDID_BASE_URL}/v0/oauth/certificate-discovery`, {
+  const config = await getBirdIdConfig()
+  const res = await fetch(`${config.baseUrl}/v0/oauth/certificate-discovery`, {
     headers: { Authorization: `Bearer ${accessToken}` },
     signal: AbortSignal.timeout(15_000),
   })
@@ -163,16 +201,17 @@ export async function openBirdIdOtpSession(opts: {
   cpf: string
   otp: string
 }): Promise<BirdIdSessionToken> {
+  const config = await getBirdIdConfig()
   const body = {
-    client_id: BIRDID_CLIENT_ID,
-    client_secret: BIRDID_CLIENT_SECRET,
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
     username: opts.cpf,
     password: opts.otp,
     grant_type: "password",
     scope: "signature_session",
     lifetime: getBirdIdSessionLifetime(),
   }
-  const res = await fetch(`${BIRDID_BASE_URL}/v0/oauth/pwd_authorize`, {
+  const res = await fetch(`${config.baseUrl}/v0/oauth/pwd_authorize`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
@@ -204,7 +243,8 @@ export async function openBirdIdOtpSession(opts: {
 /** Revoga a sessão no Bird ID (best-effort; falha não impede o encerramento). */
 export async function revokeBirdIdSession(accessToken: string): Promise<void> {
   try {
-    await fetch(`${BIRDID_BASE_URL}/v0/oauth/revoke`, {
+    const config = await getBirdIdConfig()
+    await fetch(`${config.baseUrl}/v0/oauth/revoke`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token: accessToken }),

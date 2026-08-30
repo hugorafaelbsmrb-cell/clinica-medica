@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { encryptSecret } from "@/lib/signing/crypto"
 import {
   getIntegrationSettings,
   getWApiConnectionStatus,
@@ -19,15 +20,26 @@ export type ActionState = {
   message: string
 }
 
+/** Ambientes aceitos no seletor do painel (allowlist da API Bird ID). */
+const BIRDID_BASE_URLS = [
+  "https://apihom.birdid.com.br",
+  "https://api.birdid.com.br",
+]
+
 const integrationsSchema = z.object({
   deepseekApiKey: z.string().optional(),
   wApiInstance: z.string().optional(),
   wApiToken: z.string().optional(),
+  birdIdBaseUrl: z.string().optional(),
+  birdIdClientId: z.string().optional(),
+  birdIdClientSecret: z.string().optional(),
 })
 
 /**
- * Salva as credenciais de integração (DeepSeek + W-API) no registro
- * da clínica (id = 1). Campos vazios removem a credencial salva.
+ * Salva as credenciais de integração (DeepSeek + W-API + Bird ID) no
+ * registro da clínica (id = 1). Campos vazios removem a credencial salva —
+ * exceção: o client_secret do Bird ID só é sobrescrito quando preenchido
+ * (fica criptografado e não volta para a tela).
  */
 export async function saveIntegrations(
   _prev: ActionState | null,
@@ -45,6 +57,9 @@ export async function saveIntegrations(
     deepseekApiKey: formData.get("deepseekApiKey"),
     wApiInstance: formData.get("wApiInstance"),
     wApiToken: formData.get("wApiToken"),
+    birdIdBaseUrl: formData.get("birdIdBaseUrl"),
+    birdIdClientId: formData.get("birdIdClientId"),
+    birdIdClientSecret: formData.get("birdIdClientSecret"),
   })
 
   if (!parsed.success) {
@@ -55,19 +70,24 @@ export async function saveIntegrations(
   }
 
   const data = parsed.data
+  const birdIdBaseUrl = data.birdIdBaseUrl?.trim().replace(/\/+$/, "") || null
+  if (birdIdBaseUrl && !BIRDID_BASE_URLS.includes(birdIdBaseUrl)) {
+    return { success: false, message: "Ambiente do Bird ID inválido" }
+  }
+  const birdIdClientSecret = data.birdIdClientSecret?.trim()
+  const secretEnc = birdIdClientSecret ? encryptSecret(birdIdClientSecret) : null
+
+  const base = {
+    deepseekApiKey: data.deepseekApiKey?.trim() || null,
+    wApiInstance: data.wApiInstance?.trim() || null,
+    wApiToken: data.wApiToken?.trim() || null,
+    birdIdBaseUrl,
+    birdIdClientId: data.birdIdClientId?.trim() || null,
+  }
   await prisma.clinicSettings.upsert({
     where: { id: 1 },
-    update: {
-      deepseekApiKey: data.deepseekApiKey?.trim() || null,
-      wApiInstance: data.wApiInstance?.trim() || null,
-      wApiToken: data.wApiToken?.trim() || null,
-    },
-    create: {
-      id: 1,
-      deepseekApiKey: data.deepseekApiKey?.trim() || null,
-      wApiInstance: data.wApiInstance?.trim() || null,
-      wApiToken: data.wApiToken?.trim() || null,
-    },
+    update: { ...base, ...(secretEnc ? { birdIdClientSecretEnc: secretEnc } : {}) },
+    create: { id: 1, ...base, birdIdClientSecretEnc: secretEnc },
   })
 
   invalidateIntegrationCache()

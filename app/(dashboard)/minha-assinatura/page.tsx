@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
 import { SignatureForm } from "@/components/usuarios/signature-form"
 import { CertificateForm } from "@/components/usuarios/certificate-form"
+import { birdIdConfigured as isBirdIdConfigured } from "@/lib/signing/birdid-client"
 
 export const metadata: Metadata = { title: "Minha assinatura" }
 
@@ -69,9 +70,7 @@ export default async function MinhaAssinaturaPage({
   ])
   if (!user) notFound()
 
-  const birdIdConfigured = Boolean(
-    process.env.BIRDID_CLIENT_ID && process.env.BIRDID_CLIENT_SECRET
-  )
+  const birdIdConfigured = await isBirdIdConfigured()
   const notice = birdIdNotice(
     typeof query.birdid === "string" ? query.birdid : undefined,
     typeof query.motivo === "string" ? query.motivo : undefined

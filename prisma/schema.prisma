@@ -171,6 +171,9 @@ model ClinicSettings {
   deepseekApiKey         String? // chave da DeepSeek (tela Configurações → Integrações)
   wApiInstance           String? // instanceId da W-API
   wApiToken              String? // token da W-API
+  birdIdBaseUrl          String? // base da API Bird ID (homologação/produção, tela Integrações)
+  birdIdClientId         String? // client_id da aplicação no console Bird ID
+  birdIdClientSecretEnc  String? @db.Text // client_secret criptografado (AES-256-GCM)
   botEnabled             Boolean @default(true) // bot de atendimento ligado/desligado
   botMsgAtendente        String? @db.Text // resposta personalizada ao pedir atendente (vazio = padrão)
   botMsgSaude            String? @db.Text // resposta personalizada de segurança/saúde (vazio = padrão)

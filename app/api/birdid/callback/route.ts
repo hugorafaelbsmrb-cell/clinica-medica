@@ -57,7 +57,7 @@ export async function GET(request: Request) {
   if (!session?.user || session.user.id !== oauth.userId) {
     return redirectResult(request.url, "sessao")
   }
-  if (!birdIdConfigured()) {
+  if (!(await birdIdConfigured())) {
     return redirectResult(request.url, "nao-configurado")
   }
 
