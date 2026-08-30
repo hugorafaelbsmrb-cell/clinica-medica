@@ -7,7 +7,7 @@ import type { MetadataRoute } from "next"
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Médico em Domicílio",
-    short_name: "Médico",
+    short_name: "Médico em Domicílio",
     description: "Sistema de gestão do Médico em Domicílio — atendimentos home care",
     start_url: "/dashboard",
     display: "standalone",
