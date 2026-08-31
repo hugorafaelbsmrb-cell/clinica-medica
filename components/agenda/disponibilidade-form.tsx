@@ -83,6 +83,146 @@ function toDateKey(date: Date): string {
   )}-${String(date.getDate()).padStart(2, "0")}`
 }
 
+type IntervalRow = { start: string; end: string }
+
+/**
+ * Grade semanal com múltiplos intervalos por dia: cada dia lista seus
+ * intervalos (Início/Fim) e tem um botão "+" para adicionar outro.
+ * Intervalos extras podem ser removidos (mantém sempre ao menos um).
+ * O componente remonta quando o médico da grade muda (key no formulário).
+ */
+function WeeklyGrid({ rules }: { rules: InitialRule[] }) {
+  const [intervals, setIntervals] = useState<Record<number, IntervalRow[]>>(
+    () => {
+      const map: Record<number, IntervalRow[]> = {}
+      for (let weekday = 0; weekday < 7; weekday++) {
+        const dayRules = rules
+          .filter((r) => r.weekday === weekday)
+          .sort((a, b) => a.startTime.localeCompare(b.startTime))
+        map[weekday] =
+          dayRules.length > 0
+            ? dayRules.map((r) => ({ start: r.startTime, end: r.endTime }))
+            : [{ start: "08:00", end: "17:00" }]
+      }
+      return map
+    }
+  )
+
+  const hasRule = (weekday: number) =>
+    rules.some((r) => r.weekday === weekday && r.active)
+
+  function addInterval(weekday: number) {
+    setIntervals((prev) => ({
+      ...prev,
+      [weekday]: [...(prev[weekday] ?? []), { start: "12:00", end: "14:00" }],
+    }))
+  }
+
+  function removeInterval(weekday: number, idx: number) {
+    setIntervals((prev) => {
+      const list = prev[weekday] ?? []
+      if (list.length <= 1) return prev
+      return { ...prev, [weekday]: list.filter((_, i) => i !== idx) }
+    })
+  }
+
+  function updateInterval(
+    weekday: number,
+    idx: number,
+    field: "start" | "end",
+    value: string
+  ) {
+    setIntervals((prev) => ({
+      ...prev,
+      [weekday]: (prev[weekday] ?? []).map((row, i) =>
+        i === idx ? { ...row, [field]: value } : row
+      ),
+    }))
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {WEEKDAY_NAMES.map((label, weekday) => {
+        const dayIntervals = intervals[weekday] ?? []
+        return (
+          <div
+            key={weekday}
+            className="flex flex-col gap-2 rounded-md border px-3 py-2"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  name={`wd_${weekday}_active`}
+                  defaultChecked={hasRule(weekday)}
+                  className="h-5 w-5 accent-primary"
+                />
+                {label}
+              </label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => addInterval(weekday)}
+                title={`Adicionar outro intervalo em ${label}`}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+            {dayIntervals.length > 1 && (
+              <div className="grid grid-cols-[1fr_1fr_2.25rem] items-center gap-2 text-xs font-medium text-muted-foreground">
+                <span>Início</span>
+                <span>Fim</span>
+                <span />
+              </div>
+            )}
+            {dayIntervals.map((row, idx) => (
+              <div
+                key={idx}
+                className="grid grid-cols-[1fr_1fr_2.25rem] items-center gap-2"
+              >
+                <Input
+                  type="time"
+                  name={`wd_${weekday}_${idx}_start`}
+                  value={row.start}
+                  onChange={(event) =>
+                    updateInterval(weekday, idx, "start", event.target.value)
+                  }
+                  className="h-10"
+                  aria-label={`${label} início`}
+                />
+                <Input
+                  type="time"
+                  name={`wd_${weekday}_${idx}_end`}
+                  value={row.end}
+                  onChange={(event) =>
+                    updateInterval(weekday, idx, "end", event.target.value)
+                  }
+                  className="h-10"
+                  aria-label={`${label} fim`}
+                />
+                {dayIntervals.length > 1 ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeInterval(weekday, idx)}
+                    title="Remover intervalo"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <span />
+                )}
+              </div>
+            ))}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 /**
  * Configuração da agenda: grade semanal (por médico ou geral), exceções
  * por data (mini-calendário) e regras gerais de agendamento.
@@ -253,51 +393,12 @@ export function DisponibilidadeForm({
               </div>
             )}
 
-            <div className="overflow-x-auto">
-              <div className="grid min-w-[340px] grid-cols-[1fr_auto_auto_auto] items-center gap-x-3 gap-y-2">
-              <div className="text-sm font-medium text-muted-foreground">
-                Dia
-              </div>
-              <div className="w-20 text-center text-sm font-medium text-muted-foreground">
-                Início
-              </div>
-              <div className="w-20 text-center text-sm font-medium text-muted-foreground">
-                Fim
-              </div>
-              <div className="w-16 text-center text-sm font-medium text-muted-foreground">
-                Ativo
-              </div>
-
-              {WEEKDAY_NAMES.map((label, weekday) => {
-                const rule = visibleRules.find((r) => r.weekday === weekday)
-                return (
-                  <div key={weekday} className="col-span-4 grid grid-cols-subgrid items-center gap-x-3">
-                    <span className="text-sm font-medium">{label}</span>
-                    <Input
-                      type="time"
-                      name={`wd_${weekday}_start`}
-                      defaultValue={rule?.startTime ?? "08:00"}
-                      className="h-10 w-20"
-                    />
-                    <Input
-                      type="time"
-                      name={`wd_${weekday}_end`}
-                      defaultValue={rule?.endTime ?? "17:00"}
-                      className="h-10 w-20"
-                    />
-                    <div className="flex justify-center">
-                      <input
-                        type="checkbox"
-                        name={`wd_${weekday}_active`}
-                        defaultChecked={rule?.active ?? false}
-                        className="h-5 w-5 accent-primary"
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-              </div>
-            </div>
+            <WeeklyGrid rules={visibleRules} />
+            <p className="text-xs text-muted-foreground">
+              Cada dia pode ter vários intervalos de atendimento (ex.:
+              08:00–12:00 e 14:00–18:00). Use o botão + para adicionar outro
+              intervalo ao dia.
+            </p>
 
             <div className="grid gap-4 sm:grid-cols-2 border-t pt-4">
               <div className="flex flex-col gap-1">

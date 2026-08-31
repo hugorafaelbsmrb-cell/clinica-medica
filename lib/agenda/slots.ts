@@ -81,12 +81,15 @@ export function generateSlots(params: {
 
   for (; day <= last; day.setDate(day.getDate() + 1)) {
     const weekday = day.getDay()
-    const rule = params.rules.find((r) => r.active && r.weekday === weekday)
+    // Um dia pode ter vários intervalos ativos (ex.: 08:00–12:00 e 14:00–18:00)
+    const dayRules = params.rules.filter(
+      (r) => r.active && r.weekday === weekday
+    )
     const dayExceptions = params.exceptions.filter((e) => sameDay(e.date, day))
 
     // Sem regra ativa, o dia só existe se tiver faixa extra liberada
     const hasExtra = dayExceptions.some((e) => e.type === "LIVRE")
-    if (!rule && !hasExtra) continue
+    if (dayRules.length === 0 && !hasExtra) continue
 
     let fullBlocked = false
     const blockedRanges: { start: number; end: number }[] = []
@@ -109,15 +112,17 @@ export function generateSlots(params: {
 
     if (fullBlocked) continue
 
-    const ruleStart = timeToMinutes(rule?.startTime) ?? DEFAULT_RANGE.start
-    const ruleEnd = timeToMinutes(rule?.endTime) ?? DEFAULT_RANGE.end
-    const duration = rule?.slotDurationMin ?? 60
-    const buffer = rule?.bufferMin ?? 15
+    // Duração e intervalo entre consultas são da grade (primeira regra do dia)
+    const duration = dayRules[0]?.slotDurationMin ?? 60
+    const buffer = dayRules[0]?.bufferMin ?? 15
 
-    // Intervalos permitidos: regra do dia - bloqueios + faixas extras
-    const ranges: { start: number; end: number }[] = rule
-      ? [{ start: ruleStart, end: ruleEnd }]
-      : []
+    // Intervalos permitidos: regras do dia - bloqueios + faixas extras
+    const ranges: { start: number; end: number }[] = dayRules
+      .map((r) => ({
+        start: timeToMinutes(r.startTime) ?? DEFAULT_RANGE.start,
+        end: timeToMinutes(r.endTime) ?? DEFAULT_RANGE.end,
+      }))
+      .filter((range) => range.end > range.start)
     for (const b of blockedRanges) {
       const next: { start: number; end: number }[] = []
       for (const r of ranges) {

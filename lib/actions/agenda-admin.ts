@@ -19,6 +19,16 @@ export type AgendaActionState = {
 
 const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6]
 
+const WEEKDAY_LABELS = [
+  "domingo",
+  "segunda-feira",
+  "terça-feira",
+  "quarta-feira",
+  "quinta-feira",
+  "sexta-feira",
+  "sábado",
+]
+
 function formatTime(value: FormDataEntryValue | null): string {
   const text = String(value ?? "").trim()
   if (!/^\d{1,2}:\d{2}$/.test(text)) return ""
@@ -70,47 +80,90 @@ export async function saveAvailabilityRules(
       ? Math.min(Math.max(bufferRaw, 0), 120)
       : 15
 
+    // Intervalos do formulário: wd_{weekday}_{idx}_start / wd_{weekday}_{idx}_end
+    type Interval = { startTime: string; endTime: string }
+    const intervalsByDay = new Map<number, Interval[]>()
+    for (const [key, value] of formData.entries()) {
+      const match = /^wd_(\d+)_(\d+)_(start|end)$/.exec(key)
+      if (!match) continue
+      const weekday = Number(match[1])
+      const idx = Number(match[2])
+      const time = formatTime(value)
+      if (!time) continue
+      const list = intervalsByDay.get(weekday) ?? []
+      const current = list[idx] ?? { startTime: "", endTime: "" }
+      list[idx] =
+        match[3] === "start"
+          ? { ...current, startTime: time }
+          : { ...current, endTime: time }
+      intervalsByDay.set(weekday, list)
+    }
+
     for (const weekday of WEEKDAYS) {
       const active = formData.get(`wd_${weekday}_active`) === "on"
-      const startTime = formatTime(formData.get(`wd_${weekday}_start`))
-      const endTime = formatTime(formData.get(`wd_${weekday}_end`))
+      if (!active) continue
 
-      if (active && (!startTime || !endTime)) {
+      const intervals = (intervalsByDay.get(weekday) ?? []).filter(
+        (interval) => interval.startTime && interval.endTime
+      )
+
+      if (intervals.length === 0) {
         return {
           success: false,
-          message: "Preencha os horários de início e fim dos dias ativos.",
+          message: `Preencha ao menos um intervalo de horários para ${WEEKDAY_LABELS[weekday]}.`,
         }
       }
-      if (startTime && endTime && startTime >= endTime) {
-        return {
-          success: false,
-          message: "O horário de fim precisa ser depois do horário de início.",
+      for (const interval of intervals) {
+        if (interval.startTime >= interval.endTime) {
+          return {
+            success: false,
+            message: "O horário de fim precisa ser depois do horário de início.",
+          }
         }
       }
-
-      const data = {
-        startTime: startTime || "08:00",
-        endTime: endTime || "17:00",
-        slotDurationMin,
-        bufferMin,
-        active,
+      const sorted = [...intervals].sort((a, b) =>
+        a.startTime.localeCompare(b.startTime)
+      )
+      for (let i = 1; i < sorted.length; i++) {
+        if (sorted[i].startTime < sorted[i - 1].endTime) {
+          return {
+            success: false,
+            message: `Os intervalos de ${WEEKDAY_LABELS[weekday]} não podem se sobrepor.`,
+          }
+        }
       }
+    }
 
-      // Sem unique: faz o upsert manual por [doctorId, weekday]
-      const existing = await prisma.availabilityRule.findFirst({
-        where: { weekday, doctorId },
-      })
-
-      if (existing) {
-        await prisma.availabilityRule.update({
-          where: { id: existing.id },
-          data,
-        })
-      } else if (active) {
-        await prisma.availabilityRule.create({
-          data: { weekday, doctorId, ...data },
+    // Substitui a grade inteira do médico selecionado: dias inativos ficam
+    // sem regra e cada dia ativo ganha uma regra por intervalo.
+    await prisma.availabilityRule.deleteMany({ where: { doctorId } })
+    const rows: {
+      weekday: number
+      doctorId: string | null
+      startTime: string
+      endTime: string
+      slotDurationMin: number
+      bufferMin: number
+      active: boolean
+    }[] = []
+    for (const weekday of WEEKDAYS) {
+      const active = formData.get(`wd_${weekday}_active`) === "on"
+      if (!active) continue
+      for (const interval of intervalsByDay.get(weekday) ?? []) {
+        if (!interval.startTime || !interval.endTime) continue
+        rows.push({
+          weekday,
+          doctorId,
+          startTime: interval.startTime,
+          endTime: interval.endTime,
+          slotDurationMin,
+          bufferMin,
+          active: true,
         })
       }
+    }
+    if (rows.length > 0) {
+      await prisma.availabilityRule.createMany({ data: rows })
     }
 
     await prisma.auditLog.create({
