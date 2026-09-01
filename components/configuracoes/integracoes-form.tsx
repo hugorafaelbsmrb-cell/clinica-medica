@@ -8,6 +8,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  Image as ImageIcon,
   KeyRound,
   Loader2,
   MessageCircle,
@@ -35,8 +36,10 @@ import {
   generateQrCode,
   saveIntegrations,
   testIntegration,
+  testMediaApiKeyAction,
   type ActionState,
   type ConnectResult,
+  type MediaTestState,
 } from "@/lib/actions/integracoes"
 
 export type IntegrationInitialData = {
@@ -47,6 +50,10 @@ export type IntegrationInitialData = {
   birdIdClientId: string
   /** true quando há client_secret salvo — o valor nunca chega à tela. */
   birdIdClientSecretSet: boolean
+  /** Chave da API de mídias (repositório de imagens/vídeos). */
+  mediaApiKey: string
+  /** company_slug do repositório (preenchido no teste de conexão). */
+  mediaSlug: string
   clinicPhone?: string | null
 }
 
@@ -76,6 +83,11 @@ export function IntegracoesForm({
   const [showDeepseek, setShowDeepseek] = useState(false)
   const [showWApiToken, setShowWApiToken] = useState(false)
   const [showBirdIdSecret, setShowBirdIdSecret] = useState(false)
+  const [showMediaKey, setShowMediaKey] = useState(false)
+
+  const [mediaKey, setMediaKey] = useState(initial.mediaApiKey)
+  const [mediaTest, setMediaTest] = useState<MediaTestState | null>(null)
+  const [pendingMedia, startMediaTest] = useTransition()
 
   const [deepseekTest, setDeepseekTest] = useState<TestResult>(null)
   const [wapiTest, setWapiTest] = useState<TestResult>(null)
@@ -223,9 +235,21 @@ export function IntegracoesForm({
     })
   }
 
+  function handleMediaTest() {
+    setMediaTest(null)
+    startMediaTest(async () => {
+      const result = await testMediaApiKeyAction(mediaKey)
+      setMediaTest(result)
+      // Teste aprovado grava o slug no banco: recarrega para o badge
+      // "Configurada" e o slug aparecerem.
+      if (result.success) router.refresh()
+    })
+  }
+
   const deepseekConfigured = !!initial.deepseekApiKey
   const wapiConfigured = !!(initial.wApiInstance && initial.wApiToken)
   const birdIdConfigured = !!(initial.birdIdClientId && initial.birdIdClientSecretSet)
+  const mediaConfigured = !!initial.mediaApiKey
 
   const statusBadge = !wapiConfigured ? (
     <Badge variant="outline">Sem credenciais</Badge>
@@ -258,6 +282,7 @@ export function IntegracoesForm({
 <TabsTrigger value="deepseek">IA (DeepSeek)</TabsTrigger>
 <TabsTrigger value="birdid">Bird ID</TabsTrigger>
 <TabsTrigger value="whatsapp">WhatsApp (W-API)</TabsTrigger>
+<TabsTrigger value="midias">Mídias (Storage)</TabsTrigger>
 </TabsList>
 
 {/* ===== DeepSeek ===== */}
@@ -714,6 +739,98 @@ export function IntegracoesForm({
                 </Button>
               </div>
             </div>
+          </div>
+</TabsContent>
+
+{/* ===== Mídias (Storage) ===== */}
+<TabsContent value="midias" keepMounted className="pt-4">
+          <div className="flex flex-col gap-4 rounded-lg border p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 font-medium">
+                <ImageIcon className="h-4 w-4 text-primary" />
+                Mídias (Storage)
+              </div>
+              <Badge variant={mediaConfigured ? "secondary" : "outline"}>
+                {mediaConfigured ? "Configurada" : "Não configurada"}
+              </Badge>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Repositório de imagens e vídeos usado nas jornadas de
+              mensagens (api.circuitokids.com.br). A chave fica guardada no
+              servidor; o teste de conexão identifica o repositório da
+              empresa automaticamente.
+            </p>
+
+            <Field>
+              <FieldLabel>Chave da API</FieldLabel>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    name="mediaApiKey"
+                    type={showMediaKey ? "text" : "password"}
+                    value={mediaKey}
+                    onChange={(event) => {
+                      setMediaKey(event.target.value)
+                      setMediaTest(null)
+                    }}
+                    placeholder="Chave da API de mídias"
+                    autoComplete="off"
+                    className="pr-9"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowMediaKey((value) => !value)}
+                    className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label={
+                      showMediaKey ? "Ocultar chave" : "Mostrar chave"
+                    }
+                  >
+                    {showMediaKey ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleMediaTest}
+                  disabled={pendingMedia || !mediaKey.trim()}
+                >
+                  {pendingMedia ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <KeyRound className="h-4 w-4" />
+                  )}
+                  Testar conexão
+                </Button>
+              </div>
+            </Field>
+
+            {mediaTest && (
+              <p
+                className={
+                  mediaTest.success
+                    ? "text-sm text-green-600 dark:text-green-400"
+                    : "text-sm text-destructive"
+                }
+              >
+                {mediaTest.message}
+              </p>
+            )}
+
+            {initial.mediaSlug && (
+              <p className="text-xs text-muted-foreground">
+                Repositório conectado: <b>{initial.mediaSlug}</b>
+              </p>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              Limite de 50 MB por arquivo. Sem a chave, as jornadas de
+              mensagens com mídia ficam desabilitadas no painel.
+            </p>
           </div>
 </TabsContent>
 </Tabs>

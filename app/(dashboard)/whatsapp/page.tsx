@@ -20,6 +20,7 @@ import {
 import { SendMessageForm } from "./send-message-form"
 import { TemplateForm } from "./template-form"
 import { FollowUpRow } from "./follow-up-row"
+import { StartJourneyForm } from "@/components/whatsapp/start-journey-form"
 
 export const metadata: Metadata = { title: "WhatsApp" }
 
@@ -39,13 +40,14 @@ const TYPE_LABELS: Record<string, string> = {
   RESPOSTA: "Resposta",
   DOCUMENTO: "Documento",
   MARKETING: "Marketing",
+  JORNADA: "Jornada",
 }
 
 export default async function WhatsAppPage() {
   const session = await auth()
   requireRole(session, ["ADMIN", "SECRETARIA"])
 
-  const [messages, templates, followUps, patients, botPauses] =
+  const [messages, templates, followUps, patients, botPauses, journeys] =
     await Promise.all([
       prisma.message.findMany({
         include: { patient: true },
@@ -63,6 +65,11 @@ export default async function WhatsAppPage() {
         select: { id: true, name: true, phone: true },
       }),
       listActiveBotPauses(),
+      prisma.messageJourney.findMany({
+        where: { active: true },
+        include: { _count: { select: { steps: true } } },
+        orderBy: { createdAt: "desc" },
+      }),
     ])
 
   const integrations = await getIntegrationSettings()
@@ -209,7 +216,17 @@ export default async function WhatsAppPage() {
         </TabsContent>
 
         <TabsContent value="enviar" className="pt-4">
-          <SendMessageForm patients={patients} />
+          <div className="flex flex-col gap-4">
+            <SendMessageForm patients={patients} />
+            <StartJourneyForm
+              patients={patients}
+              journeys={journeys.map((journey) => ({
+                id: journey.id,
+                name: journey.name,
+                steps: journey._count.steps,
+              }))}
+            />
+          </div>
         </TabsContent>
 
         <TabsContent value="templates" className="pt-4">

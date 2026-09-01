@@ -152,6 +152,22 @@ export class WApiProvider implements WhatsAppProvider {
   }
 
   /**
+   * POST /message/send-video → body { phone, video (URL .mp4), caption }.
+   * A W-API baixa a URL e envia o vídeo como mídia nativa do WhatsApp.
+   */
+  async sendVideo(
+    phone: string,
+    videoUrl: string,
+    caption: string
+  ): Promise<SendResult> {
+    return this.post("/message/send-video", {
+      phone,
+      video: videoUrl,
+      caption,
+    })
+  }
+
+  /**
    * GET /contacts/phone-exists?instanceId=...&phoneNumber=...
    * Resposta 200: { exists: boolean, phoneNumber, lid }
    */

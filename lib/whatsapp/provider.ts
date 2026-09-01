@@ -69,6 +69,16 @@ export interface WhatsAppProvider {
     imageDataUrl: string
   ): Promise<SendResult>
   /**
+   * Envia um vídeo por URL direta (.mp4) com legenda — o WhatsApp baixa a
+   * mídia e a renderiza inline com player. Opcional: quando o provedor não
+   * implementa mídia, o chamador cai para texto puro.
+   */
+  sendVideo?(
+    phone: string,
+    videoUrl: string,
+    caption: string
+  ): Promise<SendResult>
+  /**
    * Envia texto com botões de ação (ex.: botão URL para links de pagamento).
    * Opcional: quando o provedor não implementa, o chamador cai para texto puro.
    */

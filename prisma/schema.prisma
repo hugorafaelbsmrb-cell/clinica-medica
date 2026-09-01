@@ -59,6 +59,7 @@ enum MessageType {
   PAGAMENTO_CONFIRMADO
   AGENDAMENTO_CANCELADO
   MARKETING
+  JORNADA
 }
 
 enum MessageStatus {
@@ -175,6 +176,8 @@ model ClinicSettings {
   birdIdBaseUrl          String? // base da API Bird ID (homologação/produção, tela Integrações)
   birdIdClientId         String? // client_id da aplicação no console Bird ID
   birdIdClientSecretEnc  String? @db.Text // client_secret criptografado (AES-256-GCM)
+  mediaApiKey            String? // chave da API de mídias (storage, tela Integrações → Mídias)
+  mediaSlug              String? // company_slug no storage (preenchido no teste de conexão)
   botEnabled             Boolean @default(true) // bot de atendimento ligado/desligado
   botMsgAtendente        String? @db.Text // resposta personalizada ao pedir atendente (vazio = padrão)
   botMsgSaude            String? @db.Text // resposta personalizada de segurança/saúde (vazio = padrão)
@@ -410,6 +413,8 @@ model Message {
   error          String?
   marketingCampaignId String? // campanha de marketing que originou a mensagem
   marketingCampaign    MarketingCampaign? @relation(fields: [marketingCampaignId], references: [id], onDelete: SetNull)
+  mediaUrl             String? // URL da mídia no storage (passos IMAGEM/VIDEO da jornada)
+  mediaType            String? // "IMAGEM" | "VIDEO" — quando presente, o envio usa mídia
   createdAt      DateTime      @default(now())
 
   @@index([patientId])
@@ -832,4 +837,42 @@ model CronRun {
   name       String    @unique
   startedAt  DateTime  @default(now())
   finishedAt DateTime?
+}
+
+enum JourneyStepKind {
+  TEXTO
+  IMAGEM
+  VIDEO
+}
+
+/**
+ * Jornada de mensagens: sequência de passos (texto, imagem, vídeo) montada
+ * pelo admin no painel e disparada manualmente por paciente. O atraso de
+ * cada passo (delayHours) é relativo ao passo anterior; o do 1º passo é
+ * relativo ao início da jornada.
+ */
+model MessageJourney {
+  id          String        @id @default(cuid())
+  name        String
+  description String?       @db.Text
+  active      Boolean       @default(true)
+  steps       JourneyStep[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([active])
+}
+
+model JourneyStep {
+  id         String         @id @default(cuid())
+  journeyId  String
+  journey    MessageJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  position   Int // ordem do passo na jornada (0 = primeiro)
+  delayHours Int            @default(0) // tempo após o passo anterior (1º passo: após o início)
+  kind       JourneyStepKind
+  content    String         @db.Text // TEXTO = mensagem; IMAGEM/VIDEO = legenda
+  mediaUrl   String?        @db.Text // URL da mídia no storage (passos IMAGEM/VIDEO)
+  createdAt  DateTime       @default(now())
+
+  @@index([journeyId, position])
 }

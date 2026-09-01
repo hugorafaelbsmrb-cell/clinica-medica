@@ -95,6 +95,25 @@ export async function sendTextSmart(
   return provider.sendText(phone, content)
 }
 
+/**
+ * Baixa uma imagem do storage e a converte em data URL (base64) para o
+ * envio nativo do WhatsApp (send-image). Retorna null em falha — o chamador
+ * cai para o texto da legenda.
+ */
+async function downloadImageAsDataUrl(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url)
+    if (!response.ok) return null
+    const contentType = response.headers.get("content-type") ?? "image/jpeg"
+    if (!contentType.startsWith("image/")) return null
+    const buffer = Buffer.from(await response.arrayBuffer())
+    return `data:${contentType};base64,${buffer.toString("base64")}`
+  } catch (error) {
+    console.warn(`[WhatsApp] Falha ao baixar imagem (${url}):`, error)
+    return null
+  }
+}
+
 export async function enqueueMessage(
   patientId: string,
   type:
@@ -260,6 +279,55 @@ export async function sendManualMessage(
   })
 
   return { ok: true, message: "Mensagem enfileirada para envio" }
+}
+
+/**
+ * Enfileira todos os passos de uma jornada de mensagens para o paciente,
+ * com scheduledFor = agora + soma acumulada dos atrasos (o do 1º passo é
+ * relativo ao início). Passos de mídia carregam mediaUrl/mediaType; o
+ * conteúdo do passo vira a legenda.
+ *
+ * Retorna null quando o bot está pausado para o número (atendimento
+ * humano) — nesse caso nenhum passo é criado.
+ */
+export async function enqueueJourneyForPatient(
+  patientId: string,
+  journeyId: string
+): Promise<number | null> {
+  const patient = await prisma.patient.findUnique({
+    where: { id: patientId },
+    select: { phone: true },
+  })
+  if (!patient?.phone) return null
+  if (await isPhonePaused(patient.phone)) return null
+
+  const journey = await prisma.messageJourney.findUnique({
+    where: { id: journeyId },
+    include: { steps: { orderBy: { position: "asc" } } },
+  })
+  if (!journey || !journey.active || journey.steps.length === 0) return null
+
+  const now = new Date()
+  let cumulativeHours = 0
+  const rows = journey.steps.map((step) => {
+    cumulativeHours += step.delayHours
+    const isMedia = step.kind !== "TEXTO"
+    return {
+      patientId,
+      type: "JORNADA" as const,
+      direction: "OUT" as const,
+      content: step.content,
+      status: "PENDENTE" as const,
+      scheduledFor: new Date(
+        now.getTime() + cumulativeHours * 60 * 60 * 1000
+      ),
+      mediaUrl: isMedia ? step.mediaUrl : null,
+      mediaType: isMedia ? (step.kind === "IMAGEM" ? "IMAGEM" : "VIDEO") : null,
+    }
+  })
+
+  await prisma.message.createMany({ data: rows })
+  return rows.length
 }
 
 /**
@@ -648,11 +716,27 @@ export async function processPendingMessages(
 
     // Marketing com imagem: tenta enviar a mídia com a legenda; quando o
     // provedor não suporta ou falha, cai para texto puro (com o link).
+    // Passos de mídia da jornada (mediaType IMAGEM/VIDEO) seguem o mesmo
+    // princípio: tenta a mídia e cai para o texto da legenda.
     // Mensagens com link ganham botão URL; se o botão falhar, o envio cai
     // automaticamente para texto puro (sem perder a entrega).
     let result: SendResult | undefined
     if (campaign?.imageDataUrl && provider.sendImage) {
       result = await provider.sendImage(phone, message.content, campaign.imageDataUrl)
+    }
+    if (!result?.ok && message.mediaType && message.mediaUrl) {
+      if (message.mediaType === "VIDEO" && provider.sendVideo) {
+        result = await provider.sendVideo(
+          phone,
+          message.mediaUrl,
+          message.content
+        )
+      } else if (message.mediaType === "IMAGEM" && provider.sendImage) {
+        const dataUrl = await downloadImageAsDataUrl(message.mediaUrl)
+        if (dataUrl) {
+          result = await provider.sendImage(phone, message.content, dataUrl)
+        }
+      }
     }
     if (!result?.ok) {
       result = await sendTextSmart(

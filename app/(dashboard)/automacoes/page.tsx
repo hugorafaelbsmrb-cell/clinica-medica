@@ -1,16 +1,26 @@
 import type { Metadata } from "next"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
+import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
+import { getIntegrationSettings } from "@/lib/integrations"
 import { BotForm } from "@/components/automacoes/bot-form"
 import { MensagensForm } from "@/components/automacoes/mensagens-form"
+import { JornadasManager } from "@/components/automacoes/jornadas-manager"
 
 export const metadata: Metadata = { title: "Automações" }
 
 export default async function AutomacoesPage() {
   const session = requireRole(await auth(), ["ADMIN"])
   void session
-  const clinic = await getClinicSettings()
+  const [clinic, integrations, journeys] = await Promise.all([
+    getClinicSettings(),
+    getIntegrationSettings(),
+    prisma.messageJourney.findMany({
+      include: { steps: { orderBy: { position: "asc" } } },
+      orderBy: { createdAt: "desc" },
+    }),
+  ])
 
   return (
     <div className="flex flex-col gap-6">
@@ -71,6 +81,16 @@ export default async function AutomacoesPage() {
           autoAgendamentoCanceladoMsg:
             clinic.autoAgendamentoCanceladoMsg ?? "",
         }}
+      />
+      <JornadasManager
+        journeys={journeys.map((journey) => ({
+          id: journey.id,
+          name: journey.name,
+          description: journey.description,
+          active: journey.active,
+          steps: journey.steps,
+        }))}
+        mediaConfigured={!!integrations.mediaApiKey}
       />
     </div>
   )

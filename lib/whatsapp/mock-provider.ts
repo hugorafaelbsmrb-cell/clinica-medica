@@ -52,6 +52,20 @@ export class MockProvider implements WhatsAppProvider {
     }
   }
 
+  async sendVideo(
+    phone: string,
+    videoUrl: string,
+    caption: string
+  ): Promise<SendResult> {
+    console.log(
+      `[WhatsApp MOCK] Enviando vídeo para ${phone} (${videoUrl}) — ${caption}`
+    )
+    return {
+      ok: true,
+      providerMessageId: `mock-video-${Date.now()}`,
+    }
+  }
+
   async sendTextWithButtons(
     phone: string,
     message: string,

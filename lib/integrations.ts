@@ -15,6 +15,8 @@ export type IntegrationSettings = {
   birdIdClientId: string
   /** true quando há client_secret salvo — o valor nunca vai para a tela. */
   birdIdClientSecretSet: boolean
+  mediaApiKey: string
+  mediaSlug: string
 }
 
 let cache: IntegrationSettings | null = null
@@ -37,6 +39,8 @@ export async function getIntegrationSettings(): Promise<IntegrationSettings> {
     birdIdClientSecretSet: Boolean(
       settings?.birdIdClientSecretEnc || process.env.BIRDID_CLIENT_SECRET
     ),
+    mediaApiKey: settings?.mediaApiKey || process.env.MEDIA_API_KEY || "",
+    mediaSlug: settings?.mediaSlug || process.env.MEDIA_SLUG || "",
   }
   return cache
 }
@@ -287,6 +291,66 @@ export async function getWApiQrCode(
     return {
       success: false,
       message: "Falha ao conectar na W-API. Verifique sua internet.",
+    }
+  }
+}
+
+/** Base do repositório de mídias (Circuito Kids). */
+export const MEDIA_API_BASE = "https://api.circuitokids.com.br"
+
+export type MediaTestResult = {
+  success: boolean
+  message: string
+  /** company_slug retornado pela API (gravado no teste de conexão). */
+  slug?: string
+}
+
+/**
+ * Testa a chave da API de mídias trocando-a por um JWT:
+ * POST /auth.php { action: "login_api_key", api_key }
+ * Resposta esperada: { token, user: { company_slug } }.
+ */
+export async function testMediaApiKey(apiKey: string): Promise<MediaTestResult> {
+  try {
+    const response = await fetch(`${MEDIA_API_BASE}/auth.php`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "login_api_key", api_key: apiKey }),
+    })
+
+    const text = await response.text()
+    let data: {
+      token?: string
+      error?: string
+      message?: string
+      user?: { company_slug?: string; company?: string }
+    } = {}
+    try {
+      data = text ? JSON.parse(text) : {}
+    } catch {
+      data = {}
+    }
+
+    if (!response.ok || !data.token) {
+      return {
+        success: false,
+        message:
+          data.error || data.message || `API de mídias respondeu ${response.status}`,
+      }
+    }
+
+    const slug = data.user?.company_slug ?? data.user?.company ?? ""
+    return {
+      success: true,
+      message: slug
+        ? `Chave válida — repositório conectado (${slug})`
+        : "Chave válida — repositório conectado",
+      slug: slug || undefined,
+    }
+  } catch {
+    return {
+      success: false,
+      message: "Falha ao conectar na API de mídias. Verifique sua internet.",
     }
   }
 }

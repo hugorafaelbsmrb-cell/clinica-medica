@@ -12,6 +12,7 @@ import {
   getWApiQrCode,
   invalidateIntegrationCache,
   testDeepSeekConnection,
+  testMediaApiKey as testMediaKey,
   testWApiConnection,
 } from "@/lib/integrations"
 
@@ -33,6 +34,7 @@ const integrationsSchema = z.object({
   birdIdBaseUrl: z.string().optional(),
   birdIdClientId: z.string().optional(),
   birdIdClientSecret: z.string().optional(),
+  mediaApiKey: z.string().optional(),
 })
 
 /**
@@ -60,6 +62,7 @@ export async function saveIntegrations(
     birdIdBaseUrl: formData.get("birdIdBaseUrl"),
     birdIdClientId: formData.get("birdIdClientId"),
     birdIdClientSecret: formData.get("birdIdClientSecret"),
+    mediaApiKey: formData.get("mediaApiKey"),
   })
 
   if (!parsed.success) {
@@ -83,10 +86,22 @@ export async function saveIntegrations(
     wApiToken: data.wApiToken?.trim() || null,
     birdIdBaseUrl,
     birdIdClientId: data.birdIdClientId?.trim() || null,
+    mediaApiKey: data.mediaApiKey?.trim() || null,
+    // Sem chave não há como achar o repositório: limpa o slug junto.
+    mediaSlug: data.mediaApiKey?.trim() ? undefined : null,
   }
   await prisma.clinicSettings.upsert({
     where: { id: 1 },
-    update: { ...base, ...(secretEnc ? { birdIdClientSecretEnc: secretEnc } : {}) },
+    update: {
+      deepseekApiKey: base.deepseekApiKey,
+      wApiInstance: base.wApiInstance,
+      wApiToken: base.wApiToken,
+      birdIdBaseUrl: base.birdIdBaseUrl,
+      birdIdClientId: base.birdIdClientId,
+      mediaApiKey: base.mediaApiKey,
+      ...(base.mediaSlug === null ? { mediaSlug: null } : {}),
+      ...(secretEnc ? { birdIdClientSecretEnc: secretEnc } : {}),
+    },
     create: { id: 1, ...base, birdIdClientSecretEnc: secretEnc },
   })
 
@@ -143,6 +158,40 @@ export async function testIntegration(input: {
     }
   }
   return testWApiConnection(instance, token)
+}
+
+export type MediaTestState = ActionState & { slug?: string }
+
+/**
+ * Testa a chave da API de mídias informada no formulário. Em caso de
+ * sucesso, grava o company_slug retornado em ClinicSettings.mediaSlug —
+ * é ele que o picker de mídias usa para listar o repositório.
+ */
+export async function testMediaApiKeyAction(
+  apiKey: string
+): Promise<MediaTestState> {
+  const session = await auth()
+  if (!session?.user || session.user.role !== "ADMIN") {
+    return {
+      success: false,
+      message: "Apenas administradores podem testar as integrações",
+    }
+  }
+
+  const key = apiKey.trim()
+  if (!key) {
+    return { success: false, message: "Informe a chave da API de mídias" }
+  }
+
+  const result = await testMediaKey(key)
+  if (result.success && result.slug) {
+    await prisma.clinicSettings.update({
+      where: { id: 1 },
+      data: { mediaSlug: result.slug },
+    })
+    invalidateIntegrationCache()
+  }
+  return { success: result.success, message: result.message, slug: result.slug }
 }
 
 export type ConnectResult = {
