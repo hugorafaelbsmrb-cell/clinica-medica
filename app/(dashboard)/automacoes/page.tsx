@@ -4,30 +4,41 @@ import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
 import { getIntegrationSettings } from "@/lib/integrations"
+import { parseFlowEdges, parseFlowNodes } from "@/lib/whatsapp/flow-types"
 import { BotForm } from "@/components/automacoes/bot-form"
-import { MensagensForm } from "@/components/automacoes/mensagens-form"
-import { JornadasManager } from "@/components/automacoes/jornadas-manager"
+import { FluxosManagerLoader } from "@/components/automacoes/fluxos-manager-loader"
+import type { FluxoData } from "@/components/automacoes/fluxos-canvas"
 
 export const metadata: Metadata = { title: "Automações" }
 
 export default async function AutomacoesPage() {
   const session = requireRole(await auth(), ["ADMIN"])
   void session
-  const [clinic, integrations, journeys] = await Promise.all([
+  const [clinic, integrations, flows] = await Promise.all([
     getClinicSettings(),
     getIntegrationSettings(),
-    prisma.messageJourney.findMany({
-      include: { steps: { orderBy: { position: "asc" } } },
-      orderBy: { createdAt: "desc" },
+    prisma.messageFlow.findMany({
+      orderBy: [{ kind: "asc" }, { createdAt: "asc" }],
     }),
   ])
+
+  const fluxos: FluxoData[] = flows.map((flow) => ({
+    id: flow.id,
+    kind: flow.kind,
+    name: flow.name,
+    description: flow.description,
+    enabled: flow.enabled,
+    nodes: parseFlowNodes(flow.nodes),
+    edges: parseFlowEdges(flow.edges),
+  }))
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Automações</h1>
         <p className="text-muted-foreground">
-          Bot de atendimento e mensagens automáticas do WhatsApp
+          Fluxos de mensagens do WhatsApp no estilo n8n — bot de atendimento,
+          automações e jornadas em um único diagrama
         </p>
       </div>
       <BotForm
@@ -41,55 +52,8 @@ export default async function AutomacoesPage() {
           botMsgAgendar: clinic.botMsgAgendar ?? "",
         }}
       />
-      <MensagensForm
-        initial={{
-          autoCadastroEnabled: clinic.autoCadastroEnabled ?? true,
-          autoCadastroMsg: clinic.autoCadastroMsg ?? "",
-          autoCadastroFollowUp2Msg: clinic.autoCadastroFollowUp2Msg ?? "",
-          autoCadastroFollowUp3Msg: clinic.autoCadastroFollowUp3Msg ?? "",
-          autoWhatsappFollowUpEnabled: clinic.autoWhatsappFollowUpEnabled ?? true,
-          autoWhatsappFollowUpMsg: clinic.autoWhatsappFollowUpMsg ?? "",
-          autoWhatsappFollowUp2Msg: clinic.autoWhatsappFollowUp2Msg ?? "",
-          autoWhatsappFollowUp3Msg: clinic.autoWhatsappFollowUp3Msg ?? "",
-          autoTratamentoEnabled: clinic.autoTratamentoEnabled ?? true,
-          autoTratamentoIntervalDays: clinic.autoTratamentoIntervalDays ?? 7,
-          autoTratamentoMsg: clinic.autoTratamentoMsg ?? "",
-          autoAniversarioEnabled: clinic.autoAniversarioEnabled ?? true,
-          autoAniversarioMsg: clinic.autoAniversarioMsg ?? "",
-          autoReativacaoEnabled: clinic.autoReativacaoEnabled ?? true,
-          autoReativacaoDays: clinic.autoReativacaoDays ?? 60,
-          autoReativacaoMsg: clinic.autoReativacaoMsg ?? "",
-          autoAgradecimentoEnabled: clinic.autoAgradecimentoEnabled ?? true,
-          autoAgradecimentoMsg: clinic.autoAgradecimentoMsg ?? "",
-          autoACaminhoEnabled: clinic.autoACaminhoEnabled ?? true,
-          autoACaminhoMsg: clinic.autoACaminhoMsg ?? "",
-          autoPagamentoLinkEnabled: clinic.autoPagamentoLinkEnabled ?? true,
-          autoPagamentoLinkMsg: clinic.autoPagamentoLinkMsg ?? "",
-          autoPagamentoLembreteEnabled:
-            clinic.autoPagamentoLembreteEnabled ?? true,
-          autoPagamentoLembreteDelayMinutes:
-            clinic.autoPagamentoLembreteDelayMinutes ?? 60,
-          autoPagamentoLembreteMsg: clinic.autoPagamentoLembreteMsg ?? "",
-          autoPagamentoConfirmadoEnabled:
-            clinic.autoPagamentoConfirmadoEnabled ?? true,
-          autoPagamentoConfirmadoMsg:
-            clinic.autoPagamentoConfirmadoMsg ?? "",
-          autoAgendamentoFollowUpEnabled:
-            clinic.autoAgendamentoFollowUpEnabled ?? true,
-          autoAgendamentoFollowUpMsg:
-            clinic.autoAgendamentoFollowUpMsg ?? "",
-          autoAgendamentoCanceladoMsg:
-            clinic.autoAgendamentoCanceladoMsg ?? "",
-        }}
-      />
-      <JornadasManager
-        journeys={journeys.map((journey) => ({
-          id: journey.id,
-          name: journey.name,
-          description: journey.description,
-          active: journey.active,
-          steps: journey.steps,
-        }))}
+      <FluxosManagerLoader
+        flows={fluxos}
         mediaConfigured={!!integrations.mediaApiKey}
       />
     </div>

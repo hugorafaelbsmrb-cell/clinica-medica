@@ -1,21 +1,20 @@
 /**
- * Automações de mensagens do WhatsApp (cron).
+ * Automações de mensagens orientadas a fluxos (MessageFlow kind AUTOMACAO).
  *
- * Executadas pelo worker /api/cron/send-messages a cada 10 minutos:
- *  1. Cadastro incompleto — lembretes em 30 min, 1h e 2h para quem
- *     iniciou o pré-cadastro online e não finalizou.
- *  2. Tratamento — mensagem periódica para pacientes em tratamento
- *     (com consulta realizada nos últimos 90 dias).
- *  3. Aniversário — mensagem no dia do aniversário do paciente.
- *  4. Reativação — mensagem para clientes com a última consulta
- *     há mais de X dias.
- *  5. Pagamento pendente — lembrete para cobranças avulsas ainda não
- *     pagas depois do tempo definido pelo admin. Cobranças de agendamento
- *     online seguem o follow-up próprio (payment-follow-up.ts).
+ * O cron (/api/cron/send-messages) e os hooks de evento (atendimentos,
+ * pagamentos) executam aqui: cada fluxo tem um nó GATILHO que define o
+ * evento disparador, e a cadeia de MENSAGEMs com arestas de atraso define o
+ * que enviar e quando. A lógica de negócio de cada gatilho (dedup por
+ * estágio/intervalo/ano/entidade) continua aqui; o conteúdo vem do grafo.
  *
- * As mensagens usam a fila (tabela Message) sempre que há paciente
- * cadastrado; para tentativas de cadastro o envio é direto, pois ainda
- * não existe registro de paciente.
+ * Executadas pelo worker a cada 10 minutos:
+ *  1. Cadastro incompleto — lembretes por estágio (30 min, 1h e 2h; a cadeia
+ *     do fluxo define os marcos — novas mensagens estendem o follow-up).
+ *  2. Contato do WhatsApp — mesmo padrão para quem só mandou mensagem.
+ *  3. Tratamento — mensagem periódica (config.intervalDays do gatilho).
+ *  4. Aniversário — mensagem no dia do aniversário (1x por ano).
+ *  5. Reativação — última consulta há mais de config.days dias.
+ *  6. Pagamento avulso pendente — lembrete após config.delayMinutes.
  */
 import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
@@ -28,6 +27,14 @@ import {
   sendTextSmart,
 } from "./message-service"
 import { isPhonePaused, sweepExpiredBotPauses } from "./bot-pause"
+import {
+  parseFlowEdges,
+  parseFlowNodes,
+  flowMessageChain,
+  triggerNode,
+  type FlowRecord,
+  type GatilhoTipo,
+} from "./flow-types"
 
 export type AutomationCounts = {
   cadastro: number
@@ -70,26 +77,8 @@ export function defaultAutomationMessage(
   }
 }
 
-/** Marcos do follow-up de cadastro em minutos após o início (30 min, 1h e 2h). */
-const CADASTRO_FOLLOW_UP_MINUTES = [30, 60, 120] as const
-
-/** Marcos do follow-up do contato do WhatsApp em minutos após a última mensagem. */
-const WHATSAPP_FOLLOW_UP_MINUTES = [30, 60, 120] as const
-
-/** Template padrão de cada lembrete do contato que só mandou mensagem. */
-function defaultWhatsappFollowUpMessage(stage: 1 | 2 | 3): string {
-  switch (stage) {
-    case 1:
-      return "Oi! 😊 Você falou com a gente aqui no WhatsApp e sumiu — mas a sua saúde não precisa esperar. Que tal agendar sua consulta? É rapidinho: {{link}}"
-    case 2:
-      return "Cuidar de você é o melhor investimento de hoje. 💙 A {{clinica}} está pronta para te atender — garanta seu horário em 2 minutinhos: {{link}}"
-    case 3:
-      return "Deixar a saúde para depois pode sair caro. 🩺 Nossa equipe está esperando por você — agende agora: {{link}}"
-  }
-}
-
 /** Template padrão de cada lembrete do cadastro incompleto (admin edita). */
-function defaultCadastroFollowUpMessage(stage: 1 | 2 | 3): string {
+export function defaultCadastroFollowUpMessage(stage: 1 | 2 | 3): string {
   switch (stage) {
     case 1:
       return "Olá {{nome}}! 😊 Seu cadastro ficou no meio do caminho, mas sua saúde não precisa esperar. Faltam poucos passos para garantir sua consulta. Continue por aqui: {{link}}"
@@ -100,21 +89,81 @@ function defaultCadastroFollowUpMessage(stage: 1 | 2 | 3): string {
   }
 }
 
+/** Template padrão de cada lembrete do contato que só mandou mensagem. */
+export function defaultWhatsappFollowUpMessage(stage: 1 | 2 | 3): string {
+  switch (stage) {
+    case 1:
+      return "Oi! 😊 Você falou com a gente aqui no WhatsApp e sumiu — mas a sua saúde não precisa esperar. Que tal agendar sua consulta? É rapidinho: {{link}}"
+    case 2:
+      return "Cuidar de você é o melhor investimento de hoje. 💙 A {{clinica}} está pronta para te atender — garanta seu horário em 2 minutinhos: {{link}}"
+    case 3:
+      return "Deixar a saúde para depois pode sair caro. 🩺 Nossa equipe está esperando por você — agende agora: {{link}}"
+  }
+}
+
+/** Busca o fluxo AUTOMACAO habilitado com o gatilho informado. */
+export async function getFlowByGatilho(
+  gatilho: GatilhoTipo
+): Promise<FlowRecord | null> {
+  const rows = await prisma.messageFlow.findMany({
+    where: { kind: "AUTOMACAO", enabled: true },
+  })
+  for (const row of rows) {
+    const nodes = parseFlowNodes(row.nodes)
+    const trigger = nodes.find((n) => n.kind === "GATILHO")
+    if (trigger && trigger.kind === "GATILHO" && trigger.gatilho === gatilho) {
+      return {
+        id: row.id,
+        kind: row.kind,
+        name: row.name,
+        description: row.description,
+        enabled: row.enabled,
+        nodes,
+        edges: parseFlowEdges(row.edges),
+      }
+    }
+  }
+  return null
+}
+
+/** Valor numérico de uma chave do config do GATILHO. */
+export function gatilhoConfigNumber(
+  flow: FlowRecord,
+  key: string
+): number | null {
+  const trigger = triggerNode(flow)
+  if (!trigger || trigger.kind !== "GATILHO") return null
+  const value = trigger.config?.[key]
+  return typeof value === "number" && Number.isFinite(value) ? value : null
+}
+
+/** Texto da primeira mensagem do fluxo (fallback quando vazio/ausente). */
+export function firstFlowMessage(flow: FlowRecord, fallback: string): string {
+  const chain = flowMessageChain(flow)
+  return chain[0]?.node.content?.trim() || fallback
+}
+
+const BASE_URL =
+  process.env.NEXT_PUBLIC_APP_URL ?? "https://painel.medicoemdomicilio.com"
+
 /**
- * 1) Cadastro incompleto: lembretes em 30 minutos, 1 hora e 2 horas após
- *    o início do pré-cadastro (mesmo padrão do follow-up de pagamento).
- *    Envio direto (sem paciente). Após o 3º lembrete, encerra sem cancelar.
+ * 1) Cadastro incompleto: lembretes por estágio. Os marcos (minutos após o
+ *    início) e os textos vêm da cadeia do fluxo; o estágio segue em
+ *    registrationAttempt.followUpStage. No máximo um avanço por execução.
  */
 async function processCadastroIncompleto(
   clinic: Awaited<ReturnType<typeof getClinicSettings>>,
+  flow: FlowRecord | null,
   now: Date
 ): Promise<number> {
-  if (!clinic.autoCadastroEnabled) return 0
+  if (!flow) return 0
+  const chain = flowMessageChain(flow)
+  if (chain.length === 0) return 0
 
   const attempts = await prisma.registrationAttempt.findMany({
     where: {
       converted: false,
-      followUpStage: { lte: 3 },
+      followUpStage: { lte: chain.length },
       phone: { not: "" },
     },
     orderBy: { createdAt: "asc" },
@@ -123,45 +172,29 @@ async function processCadastroIncompleto(
   if (attempts.length === 0) return 0
 
   const provider = await getWhatsAppProvider()
-  const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL ?? "https://painel.medicoemdomicilio.com"
-  const link = `${baseUrl}/cadastro`
-  const msgs = [
-    clinic.autoCadastroMsg?.trim() || defaultCadastroFollowUpMessage(1),
-    clinic.autoCadastroFollowUp2Msg?.trim() || defaultCadastroFollowUpMessage(2),
-    clinic.autoCadastroFollowUp3Msg?.trim() || defaultCadastroFollowUpMessage(3),
-  ]
-
+  const link = `${BASE_URL}/cadastro`
   let sent = 0
+
   for (const attempt of attempts) {
     const ageMinutes = (now.getTime() - attempt.createdAt.getTime()) / 60000
     const stage = attempt.followUpStage
 
-    // No máximo um avanço por execução do cron (se o cron perdeu
-    // execuções, o lembrete anterior é pulado).
-    let nextStage: number | null = null
-    if (
-      stage === 0 &&
-      ageMinutes >= CADASTRO_FOLLOW_UP_MINUTES[0] &&
-      ageMinutes < CADASTRO_FOLLOW_UP_MINUTES[1]
-    ) {
-      nextStage = 1
-    } else if (
-      stage <= 1 &&
-      ageMinutes >= CADASTRO_FOLLOW_UP_MINUTES[1] &&
-      ageMinutes < CADASTRO_FOLLOW_UP_MINUTES[2]
-    ) {
-      nextStage = 2
-    } else if (stage <= 2 && ageMinutes >= CADASTRO_FOLLOW_UP_MINUTES[2]) {
-      nextStage = 3
+    // Próximo índice devido: o mais alto cujo marco já passou (se o cron
+    // perdeu execuções, o lembrete anterior é pulado).
+    let nextIdx: number | null = null
+    for (let i = chain.length - 1; i >= 0; i--) {
+      if (stage <= i && ageMinutes >= chain[i].dueMinutes) {
+        nextIdx = i
+        break
+      }
     }
-    if (nextStage === null) continue
+    if (nextIdx === null) continue
 
     // Conversa em atendimento humano: não envia e não avança o estágio —
     // o lembrete reaparece quando o bot voltar.
     if (await isPhonePaused(attempt.phone)) continue
 
-    const content = renderTemplate(msgs[nextStage - 1], {
+    const content = renderTemplate(chain[nextIdx].node.content || "", {
       nome: attempt.name?.split(" ")[0] || "paciente",
       data: now.toLocaleDateString("pt-BR"),
       link,
@@ -176,13 +209,14 @@ async function processCadastroIncompleto(
     )
 
     if (result.ok) {
+      const isLast = nextIdx === chain.length - 1
       await prisma.registrationAttempt.update({
         where: { id: attempt.id },
         data: {
           contacted: true,
           contactedAt: now,
-          // Após o 3º lembrete (2h), encerra: sem cancelamento e sem novos envios.
-          followUpStage: nextStage === 3 ? 4 : nextStage,
+          // Após o último lembrete, encerra: sem cancelamento e sem novos envios.
+          followUpStage: isLast ? chain.length + 1 : nextIdx + 1,
         },
       })
       sent++
@@ -193,18 +227,20 @@ async function processCadastroIncompleto(
 }
 
 /**
- * 1b) Contato do WhatsApp: quem mandou mensagem (sem ser paciente) e
- *     ficou em silêncio recebe lembretes de agendamento em 30 min, 1h e 2h
- *     após a última mensagem — mesmo padrão do cadastro incompleto.
+ * 2) Contato do WhatsApp: quem mandou mensagem (sem ser paciente) e ficou
+ *    em silêncio recebe os lembretes da cadeia do fluxo.
  */
 async function processWhatsAppContacts(
   clinic: Awaited<ReturnType<typeof getClinicSettings>>,
+  flow: FlowRecord | null,
   now: Date
 ): Promise<number> {
-  if (!clinic.autoWhatsappFollowUpEnabled) return 0
+  if (!flow) return 0
+  const chain = flowMessageChain(flow)
+  if (chain.length === 0) return 0
 
   const contacts = await prisma.whatsAppContact.findMany({
-    where: { converted: false, followUpStage: { lte: 3 } },
+    where: { converted: false, followUpStage: { lte: chain.length } },
     orderBy: { lastMessageAt: "asc" },
     take: 20,
   })
@@ -236,16 +272,9 @@ async function processWhatsAppContacts(
   const skip = new Set([...patientPhones, ...attempts.map((a) => a.phone)])
 
   const provider = await getWhatsAppProvider()
-  const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL ?? "https://painel.medicoemdomicilio.com"
-  const link = `${baseUrl}/cadastro`
-  const msgs = [
-    clinic.autoWhatsappFollowUpMsg?.trim() || defaultWhatsappFollowUpMessage(1),
-    clinic.autoWhatsappFollowUp2Msg?.trim() || defaultWhatsappFollowUpMessage(2),
-    clinic.autoWhatsappFollowUp3Msg?.trim() || defaultWhatsappFollowUpMessage(3),
-  ]
-
+  const link = `${BASE_URL}/cadastro`
   let sent = 0
+
   for (const contact of contacts) {
     if (skip.has(contact.phone)) continue
 
@@ -253,29 +282,19 @@ async function processWhatsAppContacts(
       (now.getTime() - contact.lastMessageAt.getTime()) / 60000
     const stage = contact.followUpStage
 
-    // No máximo um avanço por execução do cron.
-    let nextStage: number | null = null
-    if (
-      stage === 0 &&
-      ageMinutes >= WHATSAPP_FOLLOW_UP_MINUTES[0] &&
-      ageMinutes < WHATSAPP_FOLLOW_UP_MINUTES[1]
-    ) {
-      nextStage = 1
-    } else if (
-      stage <= 1 &&
-      ageMinutes >= WHATSAPP_FOLLOW_UP_MINUTES[1] &&
-      ageMinutes < WHATSAPP_FOLLOW_UP_MINUTES[2]
-    ) {
-      nextStage = 2
-    } else if (stage <= 2 && ageMinutes >= WHATSAPP_FOLLOW_UP_MINUTES[2]) {
-      nextStage = 3
+    let nextIdx: number | null = null
+    for (let i = chain.length - 1; i >= 0; i--) {
+      if (stage <= i && ageMinutes >= chain[i].dueMinutes) {
+        nextIdx = i
+        break
+      }
     }
-    if (nextStage === null) continue
+    if (nextIdx === null) continue
 
     // Conversa em atendimento humano: não envia e não avança o estágio.
     if (await isPhonePaused(contact.phone)) continue
 
-    const content = renderTemplate(msgs[nextStage - 1], {
+    const content = renderTemplate(chain[nextIdx].node.content || "", {
       nome: contact.name?.split(" ")[0] || "",
       link,
       clinica: clinic.name,
@@ -289,12 +308,13 @@ async function processWhatsAppContacts(
     )
 
     if (result.ok) {
+      const isLast = nextIdx === chain.length - 1
       await prisma.whatsAppContact.update({
         where: { id: contact.id },
         data: {
           contactedAt: now,
-          // Após o 3º lembrete (2h), encerra o follow-up.
-          followUpStage: nextStage === 3 ? 4 : nextStage,
+          // Após o último lembrete, encerra o follow-up.
+          followUpStage: isLast ? chain.length + 1 : nextIdx + 1,
         },
       })
       sent++
@@ -305,15 +325,17 @@ async function processWhatsAppContacts(
 }
 
 /**
- * 2) Tratamento periódico: pacientes com consulta REALIZADA nos últimos
- *    90 dias, sem mensagem periódica no intervalo definido pelo admin.
+ * 3) Tratamento periódico: pacientes com consulta REALIZADA nos últimos
+ *    90 dias, sem mensagem periódica no intervalo configurado no gatilho.
  */
 async function processTratamentoPeriodico(
   clinic: Awaited<ReturnType<typeof getClinicSettings>>,
+  flow: FlowRecord | null,
   now: Date
 ): Promise<number> {
-  if (!clinic.autoTratamentoEnabled) return 0
-  const intervalDays = clinic.autoTratamentoIntervalDays ?? 7
+  if (!flow) return 0
+  const msg = firstFlowMessage(flow, defaultAutomationMessage("tratamento"))
+  const intervalDays = gatilhoConfigNumber(flow, "intervalDays") ?? 7
   const activeSince = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
   const lastSentBefore = new Date(
     now.getTime() - intervalDays * 24 * 60 * 60 * 1000
@@ -330,9 +352,7 @@ async function processTratamentoPeriodico(
   })
   if (patients.length === 0) return 0
 
-  const msg = clinic.autoTratamentoMsg?.trim() || defaultAutomationMessage("tratamento")
   let queued = 0
-
   for (const patient of patients) {
     const last = await prisma.message.findFirst({
       where: {
@@ -360,19 +380,20 @@ async function processTratamentoPeriodico(
 }
 
 /**
- * 3) Aniversário: pacientes com aniversário hoje, no máximo uma vez por ano.
+ * 4) Aniversário: pacientes com aniversário hoje, no máximo uma vez por ano.
  */
 async function processAniversario(
   clinic: Awaited<ReturnType<typeof getClinicSettings>>,
+  flow: FlowRecord | null,
   now: Date
 ): Promise<number> {
-  if (!clinic.autoAniversarioEnabled) return 0
+  if (!flow) return 0
+  const msg = firstFlowMessage(flow, defaultAutomationMessage("aniversario"))
 
   const month = now.getMonth() + 1
   const day = now.getDate()
   const yearStart = new Date(now.getFullYear(), 0, 1)
 
-  // Filtra por mês/dia no banco e confirma o dia exato em memória.
   const patients = await prisma.patient.findMany({
     where: {
       whatsappEnabled: true,
@@ -390,9 +411,7 @@ async function processAniversario(
   )
   if (aniversariantes.length === 0) return 0
 
-  const msg = clinic.autoAniversarioMsg?.trim() || defaultAutomationMessage("aniversario")
   let queued = 0
-
   for (const patient of aniversariantes) {
     const already = await prisma.message.findFirst({
       where: {
@@ -420,15 +439,17 @@ async function processAniversario(
 }
 
 /**
- * 4) Reativação: clientes (com consulta REALIZADA) cuja última consulta
- *    aconteceu há mais de X dias, sem mensagem de reativação no período.
+ * 5) Reativação: clientes (com consulta REALIZADA) cuja última consulta
+ *    aconteceu há mais de config.days dias, sem mensagem no período.
  */
 async function processReativacao(
   clinic: Awaited<ReturnType<typeof getClinicSettings>>,
+  flow: FlowRecord | null,
   now: Date
 ): Promise<number> {
-  if (!clinic.autoReativacaoEnabled) return 0
-  const days = clinic.autoReativacaoDays ?? 60
+  if (!flow) return 0
+  const msg = firstFlowMessage(flow, defaultAutomationMessage("reativacao"))
+  const days = gatilhoConfigNumber(flow, "days") ?? 60
   const lastAttendanceBefore = new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
 
   const patients = await prisma.patient.findMany({
@@ -454,9 +475,7 @@ async function processReativacao(
   )
   if (inativos.length === 0) return 0
 
-  const msg = clinic.autoReativacaoMsg?.trim() || defaultAutomationMessage("reativacao")
   let queued = 0
-
   for (const patient of inativos) {
     const already = await prisma.message.findFirst({
       where: {
@@ -484,17 +503,17 @@ async function processReativacao(
 }
 
 /**
- * 5) Pagamentos pendentes: lembrete (uma única vez por cobrança) para quem
- *    recebeu cobrança avulsa e não pagou dentro do tempo definido.
- *    Cobranças vinculadas a agendamento online são tratadas pelo follow-up
- *    próprio (lib/whatsapp/payment-follow-up.ts).
+ * 6) Pagamentos pendentes: lembrete (uma única vez por cobrança) para quem
+ *    recebeu cobrança avulsa e não pagou dentro de config.delayMinutes.
  */
 async function processPagamentosPendentes(
   clinic: Awaited<ReturnType<typeof getClinicSettings>>,
+  flow: FlowRecord | null,
   now: Date
 ): Promise<number> {
-  if (!clinic.autoPagamentoLembreteEnabled) return 0
-  const delayMinutes = clinic.autoPagamentoLembreteDelayMinutes ?? 60
+  if (!flow) return 0
+  const msg = firstFlowMessage(flow, defaultAutomationMessage("lembretepagamento"))
+  const delayMinutes = gatilhoConfigNumber(flow, "delayMinutes") ?? 60
   const cutoff = new Date(now.getTime() - delayMinutes * 60 * 1000)
 
   const payments = await prisma.payment.findMany({
@@ -508,10 +527,6 @@ async function processPagamentosPendentes(
     take: 20,
   })
   if (payments.length === 0) return 0
-
-  const msg =
-    clinic.autoPagamentoLembreteMsg?.trim() ||
-    defaultAutomationMessage("lembretepagamento")
 
   let queued = 0
   for (const payment of payments) {
@@ -560,13 +575,22 @@ export async function queueAutomationMessages(
   await sweepExpiredBotPauses(now)
 
   const clinic = await getClinicSettings()
+  const [cadastroFlow, whatsappFlow, tratamentoFlow, aniversarioFlow, reativacaoFlow, pagamentosFlow] =
+    await Promise.all([
+      getFlowByGatilho("cadastro_incompleto"),
+      getFlowByGatilho("whatsapp_contato"),
+      getFlowByGatilho("tratamento_periodico"),
+      getFlowByGatilho("aniversario"),
+      getFlowByGatilho("reativacao"),
+      getFlowByGatilho("lembrete_pagamento"),
+    ])
 
-  const cadastro = await processCadastroIncompleto(clinic, now)
-  const whatsapp = await processWhatsAppContacts(clinic, now)
-  const tratamento = await processTratamentoPeriodico(clinic, now)
-  const aniversario = await processAniversario(clinic, now)
-  const reativacao = await processReativacao(clinic, now)
-  const pagamentos = await processPagamentosPendentes(clinic, now)
+  const cadastro = await processCadastroIncompleto(clinic, cadastroFlow, now)
+  const whatsapp = await processWhatsAppContacts(clinic, whatsappFlow, now)
+  const tratamento = await processTratamentoPeriodico(clinic, tratamentoFlow, now)
+  const aniversario = await processAniversario(clinic, aniversarioFlow, now)
+  const reativacao = await processReativacao(clinic, reativacaoFlow, now)
+  const pagamentos = await processPagamentosPendentes(clinic, pagamentosFlow, now)
 
   return { cadastro, whatsapp, tratamento, aniversario, reativacao, pagamentos }
 }
@@ -586,14 +610,14 @@ export async function queuePaymentLinkMessage(
     amount: number
   }
 ): Promise<void> {
-  const clinic = await getClinicSettings()
-  if (!clinic.autoPagamentoLinkEnabled) return
+  const flow = await getFlowByGatilho("link_pagamento")
+  if (!flow) return
 
+  const clinic = await getClinicSettings()
   const patient = await prisma.patient.findUnique({ where: { id: patientId } })
   if (!patient?.phone || !patient.whatsappEnabled || !patient.lgpdConsent) return
 
-  const msg =
-    clinic.autoPagamentoLinkMsg?.trim() || defaultAutomationMessage("linkpagamento")
+  const msg = firstFlowMessage(flow, defaultAutomationMessage("linkpagamento"))
   const link = payment.paymentUrl ?? payment.checkoutUrl ?? payment.pixCopiaCola ?? ""
 
   await sendImmediateMessage(
@@ -620,16 +644,16 @@ export async function queuePaymentLinkMessage(
  * Exige consentimento LGPD e WhatsApp habilitado.
  */
 export async function queueThankYouMessage(patientId: string): Promise<boolean> {
-  const clinic = await getClinicSettings()
-  if (!clinic.autoAgradecimentoEnabled) return false
+  const flow = await getFlowByGatilho("agradecimento")
+  if (!flow) return false
 
+  const clinic = await getClinicSettings()
   const patient = await prisma.patient.findUnique({ where: { id: patientId } })
   if (!patient?.phone || !patient.whatsappEnabled || !patient.lgpdConsent) {
     return false
   }
 
-  const msg =
-    clinic.autoAgradecimentoMsg?.trim() || defaultAutomationMessage("agradecimento")
+  const msg = firstFlowMessage(flow, defaultAutomationMessage("agradecimento"))
 
   await enqueueMessage(
     patientId,

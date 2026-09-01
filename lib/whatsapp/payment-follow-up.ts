@@ -2,12 +2,14 @@
  * Follow-up do agendamento online não pago.
  *
  * Reservas com cobrança (status AGUARDANDO_PAGAMENTO) recebem lembretes
- * automáticos em 30 minutos, 1 hora e 2 horas após a reserva. Sem
- * confirmação de pagamento depois do último lembrete, o sistema confere o
- * gateway, cancela a reserva, libera o horário na agenda e orienta o
- * paciente a fazer um novo agendamento.
+ * automáticos definidos pelo fluxo de automação `agendamento_followup`
+ * (por padrão 30 minutos, 1 hora e 2 horas após a reserva — a cadeia de
+ * MENSAGEMs e os atrasos das arestas vêm do grafo). Sem confirmação de
+ * pagamento depois do último lembrete, o sistema confere o gateway, cancela
+ * a reserva, libera o horário na agenda e orienta o paciente a fazer um novo
+ * agendamento (texto do fluxo `agendamento_cancelado`).
  *
- * Módulo separado (fora de automations.ts) de propósito: o router de
+ * Módulo separado (fora de flow-automations.ts) de propósito: o router de
  * pagamentos importa as automações e este módulo importa o router —
  * mantê-lo aqui evita import circular.
  */
@@ -21,6 +23,11 @@ import {
   refreshPaymentStatus,
   releasePendingAttendance,
 } from "@/lib/payments/router"
+import {
+  firstFlowMessage,
+  getFlowByGatilho,
+} from "./flow-automations"
+import { flowMessageChain } from "./flow-types"
 import { enqueueMessage, renderTemplate } from "./message-service"
 
 export type AgendamentoFollowUpCounts = {
@@ -30,36 +37,38 @@ export type AgendamentoFollowUpCounts = {
   cancelados: number
 }
 
-/** Marcos do follow-up em minutos após a reserva (30 min, 1h e 2h). */
-const STAGE_MINUTES = [30, 60, 120] as const
-
-/** Template padrão do lembrete (quando o admin deixa vazio). */
-function defaultFollowUpMessage(): string {
+/** Template padrão do lembrete (usado no seed — quando o nó fica vazio). */
+export function defaultFollowUpMessage(): string {
   return "Olá {{nome}}! 😊 Seu horário continua reservado. Para confirmar a consulta, falta o pagamento de R$ {{valor}} — é rapidinho por aqui: {{link}}"
 }
 
-/** Template padrão do aviso de liberação (quando o admin deixa vazio). */
-function defaultCanceladoMessage(): string {
+/** Template padrão do aviso de liberação (usado no seed — nó vazio). */
+export function defaultCanceladoMessage(): string {
   return "Olá {{nome}}! 😔 Como não identificamos o pagamento da sua consulta de {{data}} às {{hora}}, a reserva foi liberada. Não se preocupe: é só agendar de novo por aqui: {{link}}"
 }
 
 /**
  * Processa o follow-up de agendamentos online com cobrança pendente.
- * Chamado pelo cron a cada 10 minutos.
+ * Chamado pelo cron a cada 10 minutos. Se o fluxo `agendamento_followup`
+ * não existir ou estiver desligado, nada é enviado.
  */
 export async function processAgendamentoFollowUps(
   now = new Date()
 ): Promise<AgendamentoFollowUpCounts> {
+  const flow = await getFlowByGatilho("agendamento_followup")
+  if (!flow) return { lembretes: 0, cancelados: 0 }
+
+  const chain = flowMessageChain(flow)
+  const total = chain.length
+  if (total === 0) return { lembretes: 0, cancelados: 0 }
+
   const clinic = await getClinicSettings()
-  if (!clinic.autoAgendamentoFollowUpEnabled) {
-    return { lembretes: 0, cancelados: 0 }
-  }
 
   const payments = await prisma.payment.findMany({
     where: {
       status: "PENDENTE",
       attendanceId: { not: null },
-      followUpStage: { lte: 3 },
+      followUpStage: { lte: total },
     },
     include: {
       attendance: {
@@ -71,10 +80,6 @@ export async function processAgendamentoFollowUps(
   })
   if (payments.length === 0) return { lembretes: 0, cancelados: 0 }
 
-  const msgFollowUp =
-    clinic.autoAgendamentoFollowUpMsg?.trim() || defaultFollowUpMessage()
-  const msgCancelado =
-    clinic.autoAgendamentoCanceladoMsg?.trim() || defaultCanceladoMessage()
   const baseUrl =
     process.env.NEXT_PUBLIC_APP_URL ?? "https://painel.medicoemdomicilio.com"
 
@@ -93,7 +98,7 @@ export async function processAgendamentoFollowUps(
       )
       await prisma.payment.update({
         where: { id: payment.id },
-        data: { followUpStage: 4 },
+        data: { followUpStage: total + 1 },
       })
       continue
     }
@@ -101,10 +106,11 @@ export async function processAgendamentoFollowUps(
     const ageMinutes = (now.getTime() - payment.createdAt.getTime()) / 60000
     const stage = payment.followUpStage
 
-    // Estágio final (2h): confere o gateway antes de cancelar — o webhook
-    // pode ter atrasado. Sem pagamento, cancela a reserva, libera o horário
-    // e orienta o paciente a agendar novamente.
-    if (stage === 3 && ageMinutes >= STAGE_MINUTES[2]) {
+    // Todos os lembretes enviados e o último marco vencido: confere o
+    // gateway antes de cancelar — o webhook pode ter atrasado. Sem
+    // pagamento, cancela a reserva, libera o horário e orienta o paciente
+    // a agendar novamente (texto do fluxo `agendamento_cancelado`).
+    if (stage >= total && ageMinutes >= chain[total - 1].dueMinutes) {
       let paid = false
       if (payment.provider !== "MOCK" && payment.providerPaymentId) {
         const check = await refreshPaymentStatus(payment.id)
@@ -113,7 +119,7 @@ export async function processAgendamentoFollowUps(
       if (paid) {
         await prisma.payment.update({
           where: { id: payment.id },
-          data: { followUpStage: 4 },
+          data: { followUpStage: total + 1 },
         })
         continue
       }
@@ -125,8 +131,13 @@ export async function processAgendamentoFollowUps(
       await releasePendingAttendance(attendance.id)
       await prisma.payment.update({
         where: { id: payment.id },
-        data: { followUpStage: 4 },
+        data: { followUpStage: total + 1 },
       })
+
+      const cancelFlow = await getFlowByGatilho("agendamento_cancelado")
+      const msgCancelado = cancelFlow
+        ? firstFlowMessage(cancelFlow, defaultCanceladoMessage())
+        : defaultCanceladoMessage()
 
       const patient = await prisma.patient.findUnique({
         where: { id: attendance.patientId },
@@ -149,25 +160,17 @@ export async function processAgendamentoFollowUps(
       continue
     }
 
-    // Lembretes por estágio — no máximo um avanço por execução do cron
-    // (se o cron perdeu execuções, o lembrete anterior é pulado).
-    let nextStage: number | null = null
-    if (
-      stage === 0 &&
-      ageMinutes >= STAGE_MINUTES[0] &&
-      ageMinutes < STAGE_MINUTES[1]
-    ) {
-      nextStage = 1
-    } else if (
-      stage <= 1 &&
-      ageMinutes >= STAGE_MINUTES[1] &&
-      ageMinutes < STAGE_MINUTES[2]
-    ) {
-      nextStage = 2
-    } else if (stage <= 2 && ageMinutes >= STAGE_MINUTES[2]) {
-      nextStage = 3
+    // Lembretes por estágio — o próximo índice devido é o mais alto cujo
+    // marco passou (se o cron perdeu execuções, o anterior é pulado);
+    // no máximo um avanço por execução.
+    let nextIdx: number | null = null
+    for (let i = total - 1; i >= 0; i--) {
+      if (stage <= i && ageMinutes >= chain[i].dueMinutes) {
+        nextIdx = i
+        break
+      }
     }
-    if (nextStage === null) continue
+    if (nextIdx === null) continue
 
     const patient = await prisma.patient.findUnique({
       where: { id: attendance.patientId },
@@ -178,7 +181,7 @@ export async function processAgendamentoFollowUps(
       const queued = await enqueueMessage(
         attendance.patientId,
         "LEMBRETE_PAGAMENTO",
-        renderTemplate(msgFollowUp, {
+        renderTemplate(chain[nextIdx].node.content || defaultFollowUpMessage(), {
           nome: patient.name.split(" ")[0],
           valor: Number(payment.amount).toLocaleString("pt-BR", {
             minimumFractionDigits: 2,
@@ -192,7 +195,7 @@ export async function processAgendamentoFollowUps(
     }
     await prisma.payment.update({
       where: { id: payment.id },
-      data: { followUpStage: nextStage, remindedAt: now },
+      data: { followUpStage: nextIdx + 1, remindedAt: now },
     })
     lembretes++
   }

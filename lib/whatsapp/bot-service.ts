@@ -9,11 +9,48 @@ import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
 import { notifyAttendantNeeded } from "@/lib/notifications"
 import { getWhatsAppProvider, normalizePhone } from "./provider"
-import { sendTextSmart, extractLinks } from "./message-service"
-import { normalizeText, runBot, type BotState } from "./bot-engine"
+import { sendTextSmart, extractLinks, downloadImageAsDataUrl } from "./message-service"
+import { normalizeText, runBotFlow, type BotState } from "./flow-engine"
+import { buildBotFlow } from "./flow-defaults"
+import {
+  parseFlowEdges,
+  parseFlowNodes,
+  type FlowRecord,
+} from "./flow-types"
 import { isPhonePaused, pauseBotForPhone } from "./bot-pause"
 
 const SESSION_TTL_MS = 15 * 60 * 1000 // sessão expira após 15 minutos
+
+/**
+ * Carrega o fluxo BOT do banco. Sem fluxo salvo (ou desligado), monta o
+ * grafo padrão em memória com os textos históricos de ClinicSettings —
+ * o bot nunca fica sem resposta.
+ */
+async function loadBotFlow(
+  clinic: Awaited<ReturnType<typeof getClinicSettings>>
+): Promise<FlowRecord> {
+  const row = await prisma.messageFlow.findFirst({
+    where: { kind: "BOT", enabled: true },
+  })
+  if (row) {
+    return {
+      id: row.id,
+      kind: row.kind,
+      name: row.name,
+      description: row.description,
+      enabled: row.enabled,
+      nodes: parseFlowNodes(row.nodes),
+      edges: parseFlowEdges(row.edges),
+    }
+  }
+  return buildBotFlow({
+    boasVindas: clinic.botMsgBoasVindas,
+    agendar: clinic.botMsgAgendar,
+    atendente: clinic.botMsgAtendente,
+    saude: clinic.botMsgSaude,
+    phone: clinic.phone,
+  })
+}
 
 /**
  * Processa uma mensagem recebida e responde o paciente.
@@ -73,18 +110,20 @@ export async function handleBotMessage(
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
 
-  const result = runBot(state, text, {
-    clinicName: clinic.name,
-    address: clinic.address,
-    phone: clinic.phone,
-    email: clinic.email,
-    horarioAtendimento: clinic.horarioAtendimento,
-    baseUrl,
-    msgAtendente: clinic.botMsgAtendente,
-    msgSaude: clinic.botMsgSaude,
-    msgBoasVindas: clinic.botMsgBoasVindas,
-    msgAgendar: clinic.botMsgAgendar,
-  })
+  const flow = await loadBotFlow(clinic)
+  const result = runBotFlow(
+    state,
+    text,
+    {
+      clinicName: clinic.name,
+      address: clinic.address,
+      phone: clinic.phone,
+      email: clinic.email,
+      horarioAtendimento: clinic.horarioAtendimento,
+      baseUrl,
+    },
+    flow
+  )
 
   let reply = result.reply
   if (result.cpfLookup) {
@@ -143,7 +182,20 @@ export async function handleBotMessage(
           : "Abrir link",
       url,
     }))
-    const sent = await sendTextSmart(provider, phone, reply, buttons)
+    // Nó com mídia (imagem/vídeo): envia a mídia com o texto de legenda;
+    // se o provedor não suporta ou falha, cai para texto puro.
+    let sent: Awaited<ReturnType<typeof sendTextSmart>> | undefined
+    if (result.mediaUrl) {
+      if (result.mediaType === "VIDEO" && provider.sendVideo) {
+        sent = await provider.sendVideo(phone, result.mediaUrl, reply)
+      } else if (result.mediaType === "IMAGEM" && provider.sendImage) {
+        const dataUrl = await downloadImageAsDataUrl(result.mediaUrl)
+        if (dataUrl) sent = await provider.sendImage(phone, reply, dataUrl)
+      }
+    }
+    if (!sent?.ok) {
+      sent = await sendTextSmart(provider, phone, reply, buttons)
+    }
     if (!sent.ok) {
       console.error(`[Bot] Falha ao responder ${phone}: ${sent.error}`)
     }

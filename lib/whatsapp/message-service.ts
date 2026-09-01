@@ -100,7 +100,7 @@ export async function sendTextSmart(
  * envio nativo do WhatsApp (send-image). Retorna null em falha — o chamador
  * cai para o texto da legenda.
  */
-async function downloadImageAsDataUrl(url: string): Promise<string | null> {
+export async function downloadImageAsDataUrl(url: string): Promise<string | null> {
   try {
     const response = await fetch(url)
     if (!response.ok) return null
@@ -279,55 +279,6 @@ export async function sendManualMessage(
   })
 
   return { ok: true, message: "Mensagem enfileirada para envio" }
-}
-
-/**
- * Enfileira todos os passos de uma jornada de mensagens para o paciente,
- * com scheduledFor = agora + soma acumulada dos atrasos (o do 1º passo é
- * relativo ao início). Passos de mídia carregam mediaUrl/mediaType; o
- * conteúdo do passo vira a legenda.
- *
- * Retorna null quando o bot está pausado para o número (atendimento
- * humano) — nesse caso nenhum passo é criado.
- */
-export async function enqueueJourneyForPatient(
-  patientId: string,
-  journeyId: string
-): Promise<number | null> {
-  const patient = await prisma.patient.findUnique({
-    where: { id: patientId },
-    select: { phone: true },
-  })
-  if (!patient?.phone) return null
-  if (await isPhonePaused(patient.phone)) return null
-
-  const journey = await prisma.messageJourney.findUnique({
-    where: { id: journeyId },
-    include: { steps: { orderBy: { position: "asc" } } },
-  })
-  if (!journey || !journey.active || journey.steps.length === 0) return null
-
-  const now = new Date()
-  let cumulativeHours = 0
-  const rows = journey.steps.map((step) => {
-    cumulativeHours += step.delayHours
-    const isMedia = step.kind !== "TEXTO"
-    return {
-      patientId,
-      type: "JORNADA" as const,
-      direction: "OUT" as const,
-      content: step.content,
-      status: "PENDENTE" as const,
-      scheduledFor: new Date(
-        now.getTime() + cumulativeHours * 60 * 60 * 1000
-      ),
-      mediaUrl: isMedia ? step.mediaUrl : null,
-      mediaType: isMedia ? (step.kind === "IMAGEM" ? "IMAGEM" : "VIDEO") : null,
-    }
-  })
-
-  await prisma.message.createMany({ data: rows })
-  return rows.length
 }
 
 /**

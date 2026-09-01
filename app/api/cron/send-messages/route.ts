@@ -16,7 +16,7 @@ import {
   queueAppointmentReminders,
   queueDueFollowUps,
 } from "@/lib/whatsapp/message-service"
-import { queueAutomationMessages } from "@/lib/whatsapp/automations"
+import { queueAutomationMessages } from "@/lib/whatsapp/flow-automations"
 import { processAgendamentoFollowUps } from "@/lib/whatsapp/payment-follow-up"
 import { queueDueMarketingCampaigns } from "@/lib/marketing/service"
 import { sweepExpiredPayments } from "@/lib/payments/router"

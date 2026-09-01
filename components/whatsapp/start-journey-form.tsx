@@ -6,7 +6,7 @@ import { PlayCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldLabel } from "@/components/ui/field"
-import { startJourneyForPatient } from "@/lib/actions/journeys"
+import { startJourneyForPatient } from "@/lib/actions/flows"
 
 export function StartJourneyForm({
   patients,
@@ -104,8 +104,7 @@ export function StartJourneyForm({
 
           {journeys.length === 0 && (
             <p className="text-xs text-muted-foreground">
-              Nenhuma jornada ativa. Crie uma em Automações → Jornadas de
-              mensagens.
+              Nenhuma jornada ativa. Crie um fluxo de jornada em Automações.
             </p>
           )}
           {patients.length === 0 && (

@@ -9,8 +9,10 @@ import { resolveDoctorId } from "@/lib/doctor"
 import { geocodeAddress, reverseGeocodeAddress, type AddressParts } from "@/lib/geo"
 import {
   defaultAutomationMessage,
+  firstFlowMessage,
+  getFlowByGatilho,
   queueThankYouMessage,
-} from "@/lib/whatsapp/automations"
+} from "@/lib/whatsapp/flow-automations"
 import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
 import { notifyNewAppointment } from "@/lib/notifications"
 import {
@@ -323,10 +325,10 @@ export async function startAttendance(id: string): Promise<ActionState> {
     attendance.patient.whatsappEnabled &&
     attendance.patient.lgpdConsent
   ) {
-    const clinic = await getClinicSettings()
-    if (clinic.autoACaminhoEnabled) {
-      const msg =
-        clinic.autoACaminhoMsg?.trim() || defaultAutomationMessage("acaminho")
+    const flow = await getFlowByGatilho("acaminho")
+    if (flow) {
+      const clinic = await getClinicSettings()
+      const msg = firstFlowMessage(flow, defaultAutomationMessage("acaminho"))
       const content = renderTemplate(msg, {
         nome: attendance.patient.name.split(" ")[0],
         data: now.toLocaleDateString("pt-BR"),

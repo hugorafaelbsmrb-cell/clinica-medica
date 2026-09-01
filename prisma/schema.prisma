@@ -839,40 +839,28 @@ model CronRun {
   finishedAt DateTime?
 }
 
-enum JourneyStepKind {
-  TEXTO
-  IMAGEM
-  VIDEO
+enum FlowKind {
+  BOT // fluxo conversacional de atendimento (uma única linha, não deletável)
+  AUTOMACAO // mensagem automática com gatilho (cron ou evento)
+  JORNADA // sequência manual por paciente (início manual, atrasos entre mensagens)
 }
 
 /**
- * Jornada de mensagens: sequência de passos (texto, imagem, vídeo) montada
- * pelo admin no painel e disparada manualmente por paciente. O atraso de
- * cada passo (delayHours) é relativo ao passo anterior; o do 1º passo é
- * relativo ao início da jornada.
+ * Fluxo de mensagens no estilo n8n: grafo de nós e arestas salvo em JSON.
+ * Um fluxo BOT guarda o atendimento conversacional; fluxos AUTOMACAO têm um
+ * nó GATILHO que define o evento disparador; fluxos JORNADA disparam por
+ * início manual no painel (WhatsApp → Enviar manual).
  */
-model MessageJourney {
-  id          String        @id @default(cuid())
+model MessageFlow {
+  id          String   @id @default(cuid())
+  kind        FlowKind
   name        String
-  description String?       @db.Text
-  active      Boolean       @default(true)
-  steps       JourneyStep[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  description String?  @db.Text
+  enabled     Boolean  @default(true)
+  nodes       Json     // FlowNode[] — GATILHO | MENSAGEM | RAMO | ACAO
+  edges       Json     // FlowEdge[] — { id, source, target, delayMinutes? }
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  @@index([active])
-}
-
-model JourneyStep {
-  id         String         @id @default(cuid())
-  journeyId  String
-  journey    MessageJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
-  position   Int // ordem do passo na jornada (0 = primeiro)
-  delayHours Int            @default(0) // tempo após o passo anterior (1º passo: após o início)
-  kind       JourneyStepKind
-  content    String         @db.Text // TEXTO = mensagem; IMAGEM/VIDEO = legenda
-  mediaUrl   String?        @db.Text // URL da mídia no storage (passos IMAGEM/VIDEO)
-  createdAt  DateTime       @default(now())
-
-  @@index([journeyId, position])
+  @@index([kind, enabled])
 }

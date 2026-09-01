@@ -33,8 +33,10 @@ import {
 } from "@/lib/whatsapp/message-service"
 import {
   defaultAutomationMessage,
+  firstFlowMessage,
+  getFlowByGatilho,
   queuePaymentLinkMessage,
-} from "@/lib/whatsapp/automations"
+} from "@/lib/whatsapp/flow-automations"
 import { notifyAppointmentConfirmed } from "@/lib/notifications"
 import type {
   CreateChargeInput,
@@ -845,23 +847,22 @@ async function applyPaymentRefunded(paymentId: string): Promise<void> {
 }
 
 /**
- * Aviso "pagamento confirmado" via WhatsApp, configurável no painel de
- * Automações (desligado = não envia nada). Envio imediato, na sequência
- * da confirmação da consulta.
+ * Aviso "pagamento confirmado" via WhatsApp. O texto vem do fluxo de
+ * automação correspondente no painel (fluxo desligado = não envia nada).
+ * Envio imediato, na sequência da confirmação da consulta.
  */
 async function queuePaymentConfirmedMessage(
   patientId: string,
   amount: number
 ): Promise<void> {
-  const clinic = await getClinicSettings()
-  if (!clinic.autoPagamentoConfirmadoEnabled) return
+  const flow = await getFlowByGatilho("pagamento_confirmado")
+  if (!flow) return
 
   const patient = await prisma.patient.findUnique({ where: { id: patientId } })
   if (!patient?.phone || !patient.whatsappEnabled || !patient.lgpdConsent) return
 
-  const msg =
-    clinic.autoPagamentoConfirmadoMsg?.trim() ||
-    defaultAutomationMessage("pagamentoconfirmado")
+  const clinic = await getClinicSettings()
+  const msg = firstFlowMessage(flow, defaultAutomationMessage("pagamentoconfirmado"))
 
   await sendImmediateMessage(
     patientId,

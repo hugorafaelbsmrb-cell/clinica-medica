@@ -6,6 +6,7 @@ import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { getIntegrationSettings } from "@/lib/integrations"
 import { listActiveBotPauses } from "@/lib/whatsapp/bot-pause"
+import { parseFlowNodes } from "@/lib/whatsapp/flow-types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -65,9 +66,8 @@ export default async function WhatsAppPage() {
         select: { id: true, name: true, phone: true },
       }),
       listActiveBotPauses(),
-      prisma.messageJourney.findMany({
-        where: { active: true },
-        include: { _count: { select: { steps: true } } },
+      prisma.messageFlow.findMany({
+        where: { kind: "JORNADA", enabled: true },
         orderBy: { createdAt: "desc" },
       }),
     ])
@@ -223,7 +223,9 @@ export default async function WhatsAppPage() {
               journeys={journeys.map((journey) => ({
                 id: journey.id,
                 name: journey.name,
-                steps: journey._count.steps,
+                steps: parseFlowNodes(journey.nodes).filter(
+                  (node) => node.kind === "MENSAGEM"
+                ).length,
               }))}
             />
           </div>
