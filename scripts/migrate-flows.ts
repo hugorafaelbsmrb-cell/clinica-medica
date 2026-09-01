@@ -401,50 +401,56 @@ async function main() {
 
   // 3) Jornadas existentes → fluxos JORNADA
   if (!hasJourney) {
-    const journeys = await prisma.$queryRaw<RawJourney[]>`
-      SELECT "id", "name", "description", "active", "createdAt" FROM "MessageJourney" ORDER BY "createdAt" ASC
-    `
-    const steps = await prisma.$queryRaw<RawStep[]>`
-      SELECT "id", "journeyId", "position", "delayHours", "kind", "content", "mediaUrl" FROM "JourneyStep" ORDER BY "journeyId" ASC, "position" ASC
-    `
-    for (const journey of journeys) {
-      const journeySteps = steps
-        .filter((s) => s.journeyId === journey.id)
-        .sort((a, b) => a.position - b.position)
-      if (journeySteps.length === 0) continue
+    try {
+      const journeys = await prisma.$queryRaw<RawJourney[]>`
+        SELECT "id", "name", "description", "active", "createdAt" FROM "MessageJourney" ORDER BY "createdAt" ASC
+      `
+      const steps = await prisma.$queryRaw<RawStep[]>`
+        SELECT "id", "journeyId", "position", "delayHours", "kind", "content", "mediaUrl" FROM "JourneyStep" ORDER BY "journeyId" ASC, "position" ASC
+      `
+      for (const journey of journeys) {
+        const journeySteps = steps
+          .filter((s) => s.journeyId === journey.id)
+          .sort((a, b) => a.position - b.position)
+        if (journeySteps.length === 0) continue
 
-      const nodes: FlowNode[] = [gatilho("inicio_manual")]
-      const edges: FlowEdge[] = []
-      let previousId = "gatilho"
-      journeySteps.forEach((step, index) => {
-        const id = `msg${index + 1}`
-        const isMedia = step.kind !== "TEXTO"
-        nodes.push(
-          mensagem(id, step.content, 120 + index * 200, isMedia && step.mediaUrl
-            ? { url: step.mediaUrl, type: step.kind === "IMAGEM" ? "IMAGEM" : "VIDEO" }
-            : undefined)
-        )
-        edges.push(
-          edge(`e${index + 1}`, previousId, id, Math.round(step.delayHours * 60))
-        )
-        previousId = id
-      })
+        const nodes: FlowNode[] = [gatilho("inicio_manual")]
+        const edges: FlowEdge[] = []
+        let previousId = "gatilho"
+        journeySteps.forEach((step, index) => {
+          const id = `msg${index + 1}`
+          const isMedia = step.kind !== "TEXTO"
+          nodes.push(
+            mensagem(id, step.content, 120 + index * 200, isMedia && step.mediaUrl
+              ? { url: step.mediaUrl, type: step.kind === "IMAGEM" ? "IMAGEM" : "VIDEO" }
+              : undefined)
+          )
+          edges.push(
+            edge(`e${index + 1}`, previousId, id, Math.round(step.delayHours * 60))
+          )
+          previousId = id
+        })
 
-      await prisma.messageFlow.create({
-        data: {
-          kind: "JORNADA",
-          name: journey.name,
-          description: journey.description,
-          enabled: journey.active,
-          nodes: nodes as unknown as Prisma.InputJsonValue,
-          edges: edges as unknown as Prisma.InputJsonValue,
-        },
-      })
-      created++
-      console.log(`✓ Jornada "${journey.name}" migrada (${journeySteps.length} passos)`)
-    }
-    if (journeys.length > 0 && created === 0) {
-      console.log("• Nenhuma jornada pendente para migrar")
+        await prisma.messageFlow.create({
+          data: {
+            kind: "JORNADA",
+            name: journey.name,
+            description: journey.description,
+            enabled: journey.active,
+            nodes: nodes as unknown as Prisma.InputJsonValue,
+            edges: edges as unknown as Prisma.InputJsonValue,
+          },
+        })
+        created++
+        console.log(`✓ Jornada "${journey.name}" migrada (${journeySteps.length} passos)`)
+      }
+      if (journeys.length > 0 && created === 0) {
+        console.log("• Nenhuma jornada pendente para migrar")
+      }
+    } catch {
+      // Tabelas legadas já removidas (db push --accept-data-loss depois da
+      // primeira migração): não há nada para converter.
+      console.log("• Tabelas legadas de jornada ausentes — conversão ignorada")
     }
   } else {
     console.log("• Já existem fluxos de jornada — conversão ignorada")
