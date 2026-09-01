@@ -135,18 +135,24 @@ export class WApiProvider implements WhatsAppProvider {
   }
 
   /**
-   * POST /message/send-image → body { phone, image (base64), caption }.
-   * Segue a convenção do send-document (base64 sem o prefixo data URL).
+   * POST /message/send-image → body { phone, image, caption }.
+   * A W-API aceita link direto ou Base64 — e, para Base64, exige o prefixo
+   * completo "data:image/png;base64," (docs.w-api.app). Quando o chamador
+   * passa uma URL http(s), enviamos o link direto (payload menor e mais
+   * confiável); data URLs vão como estão; Base64 cru ganha o prefixo.
    */
   async sendImage(
     phone: string,
     caption: string,
-    imageDataUrl: string
+    image: string
   ): Promise<SendResult> {
-    const base64 = imageDataUrl.includes(",") ? imageDataUrl.split(",")[1] ?? "" : imageDataUrl
+    const payload =
+      image.startsWith("http") || image.startsWith("data:")
+        ? image
+        : `data:image/png;base64,${image}`
     return this.post("/message/send-image", {
       phone,
-      image: base64,
+      image: payload,
       caption,
     })
   }
