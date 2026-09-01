@@ -21,6 +21,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Payload inválido" }, { status: 400 })
   }
 
+  // Eventos que não são mensagem recebida (webhookDelivery, webhookReceived
+  // com fromMe=true, webhookDisconnected etc.): loga para diagnóstico da
+  // entrega (sucesso/falha de envios) — parseWebhook já ignora a maioria.
+  const eventName = (payload as { event?: string }).event
+  if (eventName && eventName !== "webhookReceived") {
+    console.log(
+      `[WhatsApp Webhook] ${eventName}: ${JSON.stringify(payload).slice(0, 700)}`
+    )
+  }
+
   const provider = await getWhatsAppProvider()
   const messages = await provider.parseWebhook(payload)
   const outgoing = await provider.parseOutgoing(payload)
