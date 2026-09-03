@@ -182,7 +182,14 @@ type ExistingPatient = {
  * Pacientes já cadastrados informam o CPF no primeiro passo e pulam
  * direto para a fase de agendamento.
  */
-export function CadastroWizard() {
+export function CadastroWizard({
+  initialData,
+}: {
+  initialData?: { name: string; phone: string } | null
+}) {
+  // Visitante vindo do link do bot: nome e telefone chegam preenchidos e
+  // o CPF fica de fora do cadastro (pedido só no pagamento online).
+  const isLead = Boolean(initialData?.name)
   const [phase, setPhase] = useState<
     | "cadastro"
     | "consultas"
@@ -194,10 +201,10 @@ export function CadastroWizard() {
 
   // Fase de cadastro
   const [cadStep, setCadStep] = useState(0)
-  const [name, setName] = useState("")
+  const [name, setName] = useState(initialData?.name ?? "")
   const [cpf, setCpf] = useState("")
   const [birthDate, setBirthDate] = useState("")
-  const [phone, setPhone] = useState("")
+  const [phone, setPhone] = useState(initialData?.phone ?? "")
   const [phoneStatus, setPhoneStatus] = useState<
     "idle" | "checking" | "has" | "no" | "error"
   >("idle")
@@ -1619,42 +1626,50 @@ export function CadastroWizard() {
                     souber, pode deixar em branco.
                   </p>
                 </div>
-                <div className="flex flex-col gap-2 rounded-xl border-2 border-primary/40 bg-primary/5 p-4">
-                  <label htmlFor="cadastro-cpf" className="text-lg font-medium">
-                    Informe seu CPF
-                  </label>
-                  <Input
-                    id="cadastro-cpf"
-                    value={cpf}
-                    onChange={(event) => handleCpfChange(event.target.value)}
-                    placeholder="000.000.000-00"
-                    inputMode="numeric"
-                    maxLength={14}
-                    className={cn(
-                      "h-14 text-lg",
-                      cpfValidity === "invalid" &&
-                        "border-red-500 focus-visible:ring-red-500"
+                {!isLead && (
+                  <div className="flex flex-col gap-2 rounded-xl border-2 border-primary/40 bg-primary/5 p-4">
+                    <label htmlFor="cadastro-cpf" className="text-lg font-medium">
+                      Informe seu CPF
+                    </label>
+                    <Input
+                      id="cadastro-cpf"
+                      value={cpf}
+                      onChange={(event) => handleCpfChange(event.target.value)}
+                      placeholder="000.000.000-00"
+                      inputMode="numeric"
+                      maxLength={14}
+                      className={cn(
+                        "h-14 text-lg",
+                        cpfValidity === "invalid" &&
+                          "border-red-500 focus-visible:ring-red-500"
+                      )}
+                      autoComplete="off"
+                    />
+                    {cpfValidity === "valid" && (
+                      <p className="flex items-center gap-2 text-sm font-medium text-green-600">
+                        <CheckCircle2 className="h-4 w-4" />
+                        CPF válido
+                      </p>
                     )}
-                    autoComplete="off"
-                  />
-                  {cpfValidity === "valid" && (
-                    <p className="flex items-center gap-2 text-sm font-medium text-green-600">
-                      <CheckCircle2 className="h-4 w-4" />
-                      CPF válido
+                    {cpfValidity === "invalid" && (
+                      <p className="flex items-center gap-2 text-sm font-medium text-red-600">
+                        <AlertTriangle className="h-4 w-4" />
+                        Este CPF não parece correto — confira os números digitados
+                      </p>
+                    )}
+                    <p className="text-sm text-muted-foreground">
+                      Digite só os números — os pontos e o traço entram sozinhos.
+                      Já é paciente? Seu CPF leva direto ao agendamento. Primeira
+                      consulta? Ele é necessário para confirmar o pagamento.
                     </p>
-                  )}
-                  {cpfValidity === "invalid" && (
-                    <p className="flex items-center gap-2 text-sm font-medium text-red-600">
-                      <AlertTriangle className="h-4 w-4" />
-                      Este CPF não parece correto — confira os números digitados
-                    </p>
-                  )}
-                  <p className="text-sm text-muted-foreground">
-                    Digite só os números — os pontos e o traço entram sozinhos.
-                    Já é paciente? Seu CPF leva direto ao agendamento. Primeira
-                    consulta? Ele é necessário para confirmar o pagamento.
+                  </div>
+                )}
+                {isLead && (
+                  <p className="rounded-xl bg-muted/60 p-4 text-sm text-muted-foreground">
+                    Você só vai informar o CPF se pagar online — ele será
+                    pedido na confirmação do agendamento.
                   </p>
-                </div>
+                )}
                 {cpfStatus === "checking" && (
                   <p className="flex items-center gap-2 text-base text-muted-foreground">
                     <Loader2 className="h-5 w-5 animate-spin" />

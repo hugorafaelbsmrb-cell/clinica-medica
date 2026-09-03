@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { HeartPulse } from "lucide-react"
+import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
 import { CadastroWizard } from "@/components/cadastro/cadastro-wizard"
 
@@ -14,10 +15,30 @@ export const dynamic = "force-dynamic"
 
 /**
  * Página pública de pré-cadastro (autoatendimento).
- * O link pode ser enviado ao paciente no primeiro contato.
+ * O link pode ser enviado ao paciente no primeiro contato; vindo do bot,
+ * `?lead=` traz o nome e o telefone do contato já preenchidos.
  */
-export default async function CadastroPage() {
+export default async function CadastroPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ lead?: string }>
+}) {
   const clinic = await getClinicSettings()
+
+  const { lead } = await searchParams
+  const contact = lead
+    ? await prisma.whatsAppContact.findUnique({
+        where: { id: lead },
+        select: { name: true, phone: true },
+      })
+    : null
+  const initialData =
+    contact?.name && contact.phone
+      ? {
+          name: contact.name,
+          phone: contact.phone.replace(/^55/, ""),
+        }
+      : null
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-muted/40 p-4">
@@ -38,7 +59,7 @@ export default async function CadastroPage() {
         <p className="text-lg text-muted-foreground">Pré-cadastro de paciente</p>
       </div>
 
-      <CadastroWizard />
+      <CadastroWizard initialData={initialData} />
 
       <p className="mt-6 max-w-md text-center text-sm text-muted-foreground">
         Seus dados são protegidos conforme a Lei Geral de Proteção de Dados

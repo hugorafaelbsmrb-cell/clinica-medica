@@ -18,7 +18,11 @@ import {
   walkChain,
 } from "./flow-types"
 
-export type BotState = "MENU" | "AGUARDANDO_CPF"
+export type BotState =
+  | "MENU"
+  | "AGUARDANDO_CPF"
+  | "AGUARDANDO_NOME"
+  | "AGUARDANDO_TIPO"
 
 export type BotFlowContext = {
   clinicName: string

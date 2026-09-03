@@ -238,6 +238,17 @@ export async function cadastroPublico(
         console.error("[CadastroOnline] Erro ao converter tentativa:", error)
       )
 
+    // Marca o contato do WhatsApp como convertido (lead que finalizou o
+    // cadastro) e sincroniza o nome informado — sem await, idem.
+    prisma.whatsAppContact
+      .updateMany({
+        where: { phone, converted: false },
+        data: { converted: true, name: data.name },
+      })
+      .catch((error) =>
+        console.error("[CadastroOnline] Erro ao converter contato:", error)
+      )
+
     // Registro de auditoria (LGPD)
     await prisma.auditLog.create({
       data: {

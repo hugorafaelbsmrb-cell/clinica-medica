@@ -22,6 +22,7 @@ export const PERMISSIONS: Record<Role, string[]> = {
     "prescricoes",
     "planos",
     "whatsapp",
+    "leads",
     "automacoes",
     "marketing",
     "financeiro",
@@ -39,7 +40,14 @@ export const PERMISSIONS: Record<Role, string[]> = {
     "prescricoes",
     "planos",
   ],
-  SECRETARIA: ["dashboard", "agenda", "pacientes", "atendimentos", "whatsapp"],
+  SECRETARIA: [
+    "dashboard",
+    "agenda",
+    "pacientes",
+    "atendimentos",
+    "whatsapp",
+    "leads",
+  ],
   FINANCEIRO: ["dashboard", "financeiro", "relatorios"],
 }
 
