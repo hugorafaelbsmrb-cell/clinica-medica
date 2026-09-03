@@ -397,8 +397,10 @@ model TherapeuticPlan {
 
 model Message {
   id             String        @id @default(cuid())
-  patientId      String
-  patient        Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId      String? // nulo quando o destinatário é um lead (contato ainda sem paciente)
+  patient        Patient?      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  whatsAppContactId String? // lead destinatário — ex.: campanha de marketing para contatos
+  whatsAppContact    WhatsAppContact? @relation(fields: [whatsAppContactId], references: [id], onDelete: Cascade)
   attendanceId   String? // consulta relacionada (confirmação/lembrete)
   attendance     Attendance?   @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
   type           MessageType   @default(MANUAL)
@@ -418,6 +420,7 @@ model Message {
   createdAt      DateTime      @default(now())
 
   @@index([patientId])
+  @@index([whatsAppContactId])
   @@index([status])
   @@index([scheduledFor])
   @@index([marketingCampaignId])
@@ -596,6 +599,7 @@ model WhatsAppContact {
   converted     Boolean   @default(false) // virou paciente cadastrado
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  messages      Message[]
 
   @@index([converted, followUpStage, lastMessageAt])
 }

@@ -54,6 +54,8 @@ function audienceText(
     text = doctor ? `Pacientes do(a) ${doctor.name}` : "Pacientes por médico"
   } else if (audience.kind === "ATIVOS") {
     text = `Ativos nos últimos ${audience.days ?? 90} dias`
+  } else if (audience.kind === "LEADS") {
+    text = "Leads (ainda não são pacientes)"
   } else {
     text = "Todos os pacientes"
   }

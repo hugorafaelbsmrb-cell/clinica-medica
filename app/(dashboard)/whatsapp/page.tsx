@@ -51,7 +51,7 @@ export default async function WhatsAppPage() {
   const [messages, templates, followUps, patients, botPauses, journeys] =
     await Promise.all([
       prisma.message.findMany({
-        include: { patient: true },
+        include: { patient: true, whatsAppContact: true },
         orderBy: [{ needsAttention: "desc" }, { createdAt: "desc" }],
         take: 50,
       }),
@@ -183,7 +183,12 @@ export default async function WhatsAppPage() {
                         <TableCell className="whitespace-nowrap">
                           {format(message.createdAt, "dd/MM HH:mm", { locale: ptBR })}
                         </TableCell>
-                        <TableCell>{message.patient.name}</TableCell>
+                        <TableCell>
+                          {message.patient?.name ??
+                            message.whatsAppContact?.name ??
+                            message.whatsAppContact?.phone ??
+                            "Contato"}
+                        </TableCell>
                         <TableCell className="hidden md:table-cell">
                           {TYPE_LABELS[message.type] ?? message.type}
                         </TableCell>

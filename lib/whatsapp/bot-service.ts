@@ -381,11 +381,15 @@ export async function handleBotMessage(
         patient: { select: { name: true } },
       },
     })
-    await notifyAttendantNeeded(
-      flagged.patientId,
-      flagged.patient.name,
-      flagged.content
-    )
+    // Mensagem recebida sempre tem paciente; o guard protege o tipo do
+    // Prisma (patientId virou opcional por causa das mensagens de lead).
+    if (flagged.patientId) {
+      await notifyAttendantNeeded(
+        flagged.patientId,
+        flagged.patient?.name ?? "Paciente",
+        flagged.content
+      )
+    }
   }
 
   // O paciente pediu um atendente: o bot se cala na conversa (pausa) e

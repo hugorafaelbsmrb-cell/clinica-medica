@@ -317,6 +317,7 @@ export function CampaignForm({
                 <option value="TODOS">Todos os pacientes</option>
                 <option value="MEDICO">Pacientes por médico</option>
                 <option value="ATIVOS">Ativos nos últimos N dias</option>
+                <option value="LEADS">Leads (ainda não são pacientes)</option>
               </select>
               {audienceKind === "MEDICO" && (
                 <select
@@ -353,9 +354,17 @@ export function CampaignForm({
                   <Loader2 className="h-3 w-3 animate-spin" /> Contando público...
                 </span>
               ) : audienceCount === null ? (
-                "Público: pacientes com WhatsApp, telefone e consentimento LGPD"
+                audienceKind === "LEADS"
+                  ? "Público: leads capturados pelo bot que ainda não viraram pacientes"
+                  : "Público: pacientes com WhatsApp, telefone e consentimento LGPD"
               ) : (
-                `Público estimado: ${audienceCount} paciente${audienceCount === 1 ? "" : "s"}`
+                `Público estimado: ${audienceCount} ${
+                  audienceKind === "LEADS"
+                    ? audienceCount === 1
+                      ? "lead"
+                      : "leads"
+                    : `paciente${audienceCount === 1 ? "" : "s"}`
+                }`
               )}
             </p>
           </Field>

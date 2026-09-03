@@ -23,7 +23,7 @@ export type MarketingActionState = {
 }
 
 const TONES = ["informativo", "promocional", "sazonal", "evento"] as const
-const AUDIENCE_KINDS = ["TODOS", "MEDICO", "ATIVOS"] as const
+const AUDIENCE_KINDS = ["TODOS", "MEDICO", "ATIVOS", "LEADS"] as const
 
 /** Limite da imagem enviada com a campanha (mesma convenção da logo). */
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024
@@ -92,6 +92,11 @@ async function parseAudience(input: {
       }
     }
     return { audience: { kind: "ATIVOS", days } }
+  }
+
+  // Leads: contatos capturados pelo bot que ainda não viraram pacientes.
+  if (input.kind === "LEADS") {
+    return { audience: { kind: "LEADS" } }
   }
 
   return { audience: { kind: "TODOS" } }
@@ -363,7 +368,9 @@ export async function previewMarketingAudience(input: {
   }
 
   const kind: MarketingAudienceKind =
-    input.kind === "MEDICO" || input.kind === "ATIVOS" ? input.kind : "TODOS"
+    input.kind === "MEDICO" || input.kind === "ATIVOS" || input.kind === "LEADS"
+      ? input.kind
+      : "TODOS"
 
   const parsedAudience = await parseAudience({
     kind,

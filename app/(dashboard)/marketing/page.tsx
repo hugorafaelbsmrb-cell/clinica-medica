@@ -30,8 +30,9 @@ export default async function MarketingPage({
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Marketing</h1>
         <p className="text-muted-foreground">
-          Campanhas de mensagem em massa pelo WhatsApp — só alcançam pacientes
-          com WhatsApp habilitado, telefone e consentimento LGPD.
+          Campanhas de mensagem em massa pelo WhatsApp — alcançam pacientes
+          com WhatsApp habilitado, telefone e consentimento LGPD, e também
+          leads capturados pelo bot que ainda não viraram pacientes.
         </p>
       </div>
 

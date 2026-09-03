@@ -578,7 +578,7 @@ export async function processPendingMessages(
       scheduledFor: { lte: now },
       direction: "OUT",
     },
-    include: { patient: true },
+    include: { patient: true, whatsAppContact: true },
     orderBy: { createdAt: "asc" },
     take: 100,
   })
@@ -605,7 +605,9 @@ export async function processPendingMessages(
   // Números com o bot pausado (atendimento humano): mensagens
   // automatizadas da fila viram SUPRIMIDA — só MANUAL/DOCUMENTO saem.
   const phones = pending
-    .map((m) => normalizePhone(m.patient.phone ?? ""))
+    .map((m) =>
+      normalizePhone(m.patient?.phone ?? m.whatsAppContact?.phone ?? "")
+    )
     .filter(Boolean)
   const pausedRows = phones.length
     ? await prisma.botPause.findMany({
@@ -616,15 +618,18 @@ export async function processPendingMessages(
   const pausedPhones = new Set(pausedRows.map((p) => p.phone))
 
   for (const message of pending) {
-    const phone = normalizePhone(message.patient.phone ?? "")
+    // Destinatário: paciente ou lead (contato sem cadastro).
+    const phone = normalizePhone(
+      message.patient?.phone ?? message.whatsAppContact?.phone ?? ""
+    )
     const campaign = message.marketingCampaignId
       ? campaignById.get(message.marketingCampaignId)
       : null
 
-    if (!message.patient.phone) {
+    if (!phone) {
       await prisma.message.update({
         where: { id: message.id },
-        data: { status: "FALHA", error: "Paciente sem telefone" },
+        data: { status: "FALHA", error: "Destinatário sem telefone" },
       })
       failed++
       if (campaign) {

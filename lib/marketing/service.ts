@@ -17,7 +17,7 @@ import { renderTemplate } from "@/lib/whatsapp/message-service"
 /** Lote de fan-out por ciclo do cron (evita picos no WhatsApp). */
 export const MARKETING_BATCH_SIZE = 50
 
-export type MarketingAudienceKind = "TODOS" | "MEDICO" | "ATIVOS"
+export type MarketingAudienceKind = "TODOS" | "MEDICO" | "ATIVOS" | "LEADS"
 
 /**
  * audience (JSON na coluna MarketingCampaign.audience):
@@ -66,7 +66,9 @@ export function normalizeAudience(raw: unknown): MarketingAudience {
   const audience = (raw ?? {}) as Partial<MarketingAudience>
   return {
     kind:
-      audience.kind === "MEDICO" || audience.kind === "ATIVOS"
+      audience.kind === "MEDICO" ||
+      audience.kind === "ATIVOS" ||
+      audience.kind === "LEADS"
         ? audience.kind
         : "TODOS",
     doctorId: typeof audience.doctorId === "string" ? audience.doctorId : null,
@@ -81,6 +83,11 @@ export async function countMarketingAudience(
   audience: MarketingAudience,
   now = new Date()
 ): Promise<number> {
+  // Leads: contatos capturados pelo bot que ainda não viraram pacientes.
+  if (audience.kind === "LEADS") {
+    return prisma.whatsAppContact.count({ where: { converted: false } })
+  }
+
   return prisma.patient.count({
     where: audienceWhere(audience, now) as never,
   })
@@ -104,6 +111,7 @@ export async function queueDueMarketingCampaigns(
   let queued = 0
   for (const campaign of due) {
     const audience = normalizeAudience(campaign.audience)
+    const isLeads = audience.kind === "LEADS"
 
     // Conta o público uma única vez, no primeiro ciclo da campanha.
     let total = audience.total
@@ -115,43 +123,83 @@ export async function queueDueMarketingCampaigns(
       })
     }
 
-    // Público restante: quem ainda não recebeu mensagem desta campanha.
-    const patients = await prisma.patient.findMany({
-      where: {
-        ...(audienceWhere(audience, now) as Record<string, unknown>),
-        messages: { none: { marketingCampaignId: campaign.id } },
-      },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-      take: MARKETING_BATCH_SIZE,
-    })
-
-    for (const patient of patients) {
-      let content = renderTemplate(campaign.body, {
-        nome: patient.name.split(" ")[0],
-        clinica: clinic.name,
-      })
-      if (campaign.linkUrl) {
-        content = `${content}\n\n${campaign.linkUrl}`
-      }
-
-      await prisma.message.create({
-        data: {
-          patientId: patient.id,
-          type: "MARKETING",
-          direction: "OUT",
-          content,
-          status: "PENDENTE",
-          scheduledFor: now,
-          marketingCampaignId: campaign.id,
+    let batchSize: number
+    if (isLeads) {
+      // Leads: contatos capturados pelo bot que ainda não viraram pacientes.
+      // A mensagem fica registrada no histórico ligada ao contato (sem paciente).
+      const contacts = await prisma.whatsAppContact.findMany({
+        where: {
+          converted: false,
+          messages: { none: { marketingCampaignId: campaign.id } },
         },
+        select: { id: true, name: true },
+        orderBy: { lastMessageAt: "desc" },
+        take: MARKETING_BATCH_SIZE,
       })
+
+      for (const contact of contacts) {
+        const firstName = (contact.name ?? "").trim().split(" ")[0]
+        let content = renderTemplate(campaign.body, {
+          nome: firstName || "cliente",
+          clinica: clinic.name,
+        })
+        if (campaign.linkUrl) {
+          content = `${content}\n\n${campaign.linkUrl}`
+        }
+
+        await prisma.message.create({
+          data: {
+            whatsAppContactId: contact.id,
+            type: "MARKETING",
+            direction: "OUT",
+            content,
+            status: "PENDENTE",
+            scheduledFor: now,
+            marketingCampaignId: campaign.id,
+          },
+        })
+      }
+      batchSize = contacts.length
+    } else {
+      // Público restante: quem ainda não recebeu mensagem desta campanha.
+      const patients = await prisma.patient.findMany({
+        where: {
+          ...(audienceWhere(audience, now) as Record<string, unknown>),
+          messages: { none: { marketingCampaignId: campaign.id } },
+        },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+        take: MARKETING_BATCH_SIZE,
+      })
+
+      for (const patient of patients) {
+        let content = renderTemplate(campaign.body, {
+          nome: patient.name.split(" ")[0],
+          clinica: clinic.name,
+        })
+        if (campaign.linkUrl) {
+          content = `${content}\n\n${campaign.linkUrl}`
+        }
+
+        await prisma.message.create({
+          data: {
+            patientId: patient.id,
+            type: "MARKETING",
+            direction: "OUT",
+            content,
+            status: "PENDENTE",
+            scheduledFor: now,
+            marketingCampaignId: campaign.id,
+          },
+        })
+      }
+      batchSize = patients.length
     }
 
-    queued += patients.length
+    queued += batchSize
 
     // Lote menor que o máximo = público esgotado → fan-out concluído.
-    const fanoutDone = patients.length < MARKETING_BATCH_SIZE
+    const fanoutDone = batchSize < MARKETING_BATCH_SIZE
     await prisma.marketingCampaign.update({
       where: { id: campaign.id },
       data: { audience: { ...audience, total, fanoutDone } },
