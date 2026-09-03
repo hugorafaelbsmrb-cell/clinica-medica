@@ -36,16 +36,15 @@ const VALID_STATES: BotState[] = [
  * quem já tem cadastro.
  */
 const GATEWAY_TEXTS = {
-  pedirNome: "Olá! Antes de continuar, como posso te chamar?",
+  pedirNome: (clinica: string) =>
+    [
+      `Olá! 👋 Seja bem-vindo(a) à ${clinica}!`,
+      "Antes de começar, como posso te chamar?",
+    ].join("\n"),
   nomeInvalido:
     "Desculpa, não entendi. Me diz seu primeiro nome, por favor — só o nome.",
   portao: (nome: string) =>
-    [
-      `Obrigado, ${nome}! Como posso te ajudar?`,
-      "",
-      "1. Já sou paciente",
-      "2. Primeira consulta",
-    ].join("\n"),
+    `Obrigado, ${nome}! Você já é paciente ou é o primeiro atendimento?`,
   cpfPrompt:
     'Envie apenas os 11 números do seu CPF.\nPara voltar ao menu, escreva "menu".',
   primeiraConsulta: (link: string) =>
@@ -283,7 +282,7 @@ export async function handleBotMessage(
           provider,
           phone,
           GATEWAY_TEXTS.primeiraConsulta(link),
-          [{ type: "URL", label: "Fazer cadastro", url: link }]
+          [{ type: "URL", label: "Fazer agendamento", url: link }]
         )
         await saveBotSession(phone, "MENU")
         if (!sent.ok) {
@@ -326,7 +325,11 @@ export async function handleBotMessage(
         return
       }
       if (!knownName && !attemptName) {
-        const sent = await sendTextSmart(provider, phone, GATEWAY_TEXTS.pedirNome)
+        const sent = await sendTextSmart(
+          provider,
+          phone,
+          GATEWAY_TEXTS.pedirNome(clinic.name)
+        )
         await saveBotSession(phone, "AGUARDANDO_NOME")
         if (!sent.ok) {
           console.error(`[Bot] Falha ao responder ${phone}: ${sent.error}`)

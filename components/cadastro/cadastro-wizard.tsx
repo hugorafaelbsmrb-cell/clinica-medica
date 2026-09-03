@@ -1664,12 +1664,6 @@ export function CadastroWizard({
                     </p>
                   </div>
                 )}
-                {isLead && (
-                  <p className="rounded-xl bg-muted/60 p-4 text-sm text-muted-foreground">
-                    Você só vai informar o CPF se pagar online — ele será
-                    pedido na confirmação do agendamento.
-                  </p>
-                )}
                 {cpfStatus === "checking" && (
                   <p className="flex items-center gap-2 text-base text-muted-foreground">
                     <Loader2 className="h-5 w-5 animate-spin" />
