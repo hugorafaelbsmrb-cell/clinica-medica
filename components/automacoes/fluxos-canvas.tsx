@@ -12,11 +12,13 @@ import {
   ReactFlow,
   ReactFlowProvider,
   addEdge,
-  useEdgesState,
-  useNodesState,
+  applyEdgeChanges,
+  applyNodeChanges,
   useReactFlow,
   type Connection,
   type Edge,
+  type EdgeChange,
+  type NodeChange,
 } from "@xyflow/react"
 import {
   Bot,
@@ -523,30 +525,26 @@ function CanvasArea({
   mediaConfigured: boolean
 }) {
   const { screenToFlowPosition } = useReactFlow()
-  const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>(draft.nodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState<CanvasEdge>(draft.edges)
 
-  // Sincroniza o estado interno quando o usuário troca de fluxo.
-  const [loadedId, setLoadedId] = useState<string | null>(null)
-  if (loadedId !== draft.id) {
-    setLoadedId(draft.id)
-    setNodes(draft.nodes)
-    setEdges(draft.edges)
+  // Canvas controlado pelo rascunho: qualquer mudança (arrastar, excluir
+  // pelo teclado ou pelo inspetor) é aplicada no draft e volta renderizada.
+  function commit(next: Draft) {
+    onDraftChange(next)
   }
 
-  function commit(nodes: CanvasNode[], edges: CanvasEdge[]) {
-    onDraftChange({ ...draft, nodes, edges })
+  function handleNodesChange(changes: NodeChange<CanvasNode>[]) {
+    const next = applyNodeChanges(changes, draft.nodes)
+    commit({ ...draft, nodes: next })
+  }
+
+  function handleEdgesChange(changes: EdgeChange<CanvasEdge>[]) {
+    const next = applyEdgeChanges(changes, draft.edges)
+    commit({ ...draft, edges: next })
   }
 
   function handleConnect(connection: Connection) {
-    setEdges((current) => {
-      const next = addEdge(
-        { ...connection, label: "", data: {} },
-        current
-      )
-      commit(nodes, next)
-      return next
-    })
+    const next = addEdge({ ...connection, label: "", data: {} }, draft.edges)
+    commit({ ...draft, edges: next })
   }
 
   function handleDrop(event: React.DragEvent) {
@@ -561,11 +559,7 @@ function CanvasArea({
     if (!kind) return
     const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
     const created = newCanvasNode(kind, position.x, position.y)
-    setNodes((current) => {
-      const next = [...current, created]
-      commit(next, edges)
-      return next
-    })
+    commit({ ...draft, nodes: [...draft.nodes, created] })
     setSelected({ type: "node", id: created.id })
   }
 
@@ -579,21 +573,16 @@ function CanvasArea({
       }}
     >
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={draft.nodes}
+        edges={draft.edges}
         nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
+        onNodesChange={handleNodesChange}
+        onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
+        deleteKeyCode="Backspace"
         onNodeClick={(_, node) => setSelected({ type: "node", id: node.id })}
         onEdgeClick={(_, edge) => setSelected({ type: "edge", id: edge.id })}
         onPaneClick={() => setSelected(null)}
-        onNodesDelete={(deleted) =>
-          commit(
-            nodes.filter((n) => !deleted.some((d) => d.id === n.id)),
-            edges
-          )
-        }
         fitView
         minZoom={0.3}
         proOptions={{ hideAttribution: true }}
@@ -732,6 +721,13 @@ function Inspector({
     })
   }
 
+  function removeEdge(id: string) {
+    onDraftChange({
+      ...draft,
+      edges: draft.edges.filter((e) => e.id !== id),
+    })
+  }
+
   function updateEdgeDelay(id: string, minutes: number) {
     onDraftChange({
       ...draft,
@@ -755,6 +751,16 @@ function Inspector({
             size="sm"
             className="h-7 px-2 text-xs text-destructive"
             onClick={() => removeNode(node.id)}
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Excluir
+          </Button>
+        )}
+        {edge && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs text-destructive"
+            onClick={() => removeEdge(edge.id)}
           >
             <Trash2 className="h-3.5 w-3.5" /> Excluir
           </Button>
