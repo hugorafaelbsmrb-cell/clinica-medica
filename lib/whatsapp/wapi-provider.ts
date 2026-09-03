@@ -25,6 +25,22 @@ import type {
 
 const API_BASE = "https://api.w-api.app/v1"
 
+/** MIME por extensão para o data URL do send-document. */
+const DOCUMENT_MIME: Record<string, string> = {
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  mp4: "video/mp4",
+  mp3: "audio/mpeg",
+  xml: "application/xml",
+  txt: "text/plain",
+}
+
 type WApiSuccess = {
   instanceId?: string
   messageId?: string
@@ -125,9 +141,14 @@ export class WApiProvider implements WhatsAppProvider {
       ? (fileName.split(".").pop()?.toLowerCase() ?? "pdf")
       : "pdf"
 
+    // A W-API passou a rejeitar Base64 puro no send-document (500 "Formato
+    // de documento inválido") — exige data URL completo (mesmo padrão do
+    // send-image) ou link direto. Mantemos o Base64 com o MIME do arquivo.
+    const mime = DOCUMENT_MIME[extension] ?? "application/octet-stream"
+
     return this.post("/message/send-document", {
       phone,
-      document: document.toString("base64"),
+      document: `data:${mime};base64,${document.toString("base64")}`,
       extension,
       fileName,
       caption,
