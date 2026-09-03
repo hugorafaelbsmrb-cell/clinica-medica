@@ -119,3 +119,13 @@ export function normalizePhone(phone: string): string {
   return digits
 }
 
+/**
+ * Número de pessoa física válido no Brasil: 55 + DDD + 8/9 dígitos.
+ * IDs de grupos/comunidades do WhatsApp (ex.: 120363...@g.us viram números
+ * longos) e números de outros países ficam de fora do bot, dos leads e
+ * do follow-up.
+ */
+export function isValidIndividualPhone(phone: string): boolean {
+  return /^55\d{10,11}$/.test(phone)
+}
+

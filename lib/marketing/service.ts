@@ -13,6 +13,7 @@
 import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
 import { renderTemplate } from "@/lib/whatsapp/message-service"
+import { isValidIndividualPhone } from "@/lib/whatsapp/provider"
 
 /** Lote de fan-out por ciclo do cron (evita picos no WhatsApp). */
 export const MARKETING_BATCH_SIZE = 50
@@ -127,15 +128,20 @@ export async function queueDueMarketingCampaigns(
     if (isLeads) {
       // Leads: contatos capturados pelo bot que ainda não viraram pacientes.
       // A mensagem fica registrada no histórico ligada ao contato (sem paciente).
-      const contacts = await prisma.whatsAppContact.findMany({
-        where: {
-          converted: false,
-          messages: { none: { marketingCampaignId: campaign.id } },
-        },
-        select: { id: true, name: true },
-        orderBy: { lastMessageAt: "desc" },
-        take: MARKETING_BATCH_SIZE,
-      })
+      const contacts = (
+        await prisma.whatsAppContact.findMany({
+          where: {
+            converted: false,
+            messages: { none: { marketingCampaignId: campaign.id } },
+          },
+          select: { id: true, name: true, phone: true },
+          orderBy: { lastMessageAt: "desc" },
+          take: MARKETING_BATCH_SIZE * 4,
+        })
+      )
+        // Números de grupos do WhatsApp ficam fora do público.
+        .filter((c) => isValidIndividualPhone(c.phone))
+        .slice(0, MARKETING_BATCH_SIZE)
 
       for (const contact of contacts) {
         const firstName = (contact.name ?? "").trim().split(" ")[0]

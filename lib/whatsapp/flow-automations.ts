@@ -19,7 +19,7 @@
 import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
 import { paymentPageUrl } from "@/lib/payments/url"
-import { getWhatsAppProvider, normalizePhone } from "./provider"
+import { getWhatsAppProvider, normalizePhone, isValidIndividualPhone } from "./provider"
 import {
   renderTemplate,
   enqueueMessage,
@@ -239,14 +239,19 @@ async function processWhatsAppContacts(
   const chain = flowMessageChain(flow)
   if (chain.length === 0) return 0
 
+  // Busca um pouco mais do que o lote: números de grupos ficam de fora
+  // do follow-up (o bot já bloqueia a criação de contatos inválidos).
   const contacts = await prisma.whatsAppContact.findMany({
     where: { converted: false, followUpStage: { lte: chain.length } },
     orderBy: { lastMessageAt: "asc" },
-    take: 20,
+    take: 100,
   })
-  if (contacts.length === 0) return 0
+  const validContacts = contacts
+    .filter((c) => isValidIndividualPhone(c.phone))
+    .slice(0, 20)
+  if (validContacts.length === 0) return 0
 
-  const phones = contacts.map((c) => c.phone)
+  const phones = validContacts.map((c) => c.phone)
   // Evita duplicar lembretes: quem já é paciente ou tem tentativa de
   // cadastro aberta é coberto por outros fluxos.
   const [patients, attempts] = await Promise.all([
@@ -275,7 +280,7 @@ async function processWhatsAppContacts(
   const link = `${BASE_URL}/cadastro`
   let sent = 0
 
-  for (const contact of contacts) {
+  for (const contact of validContacts) {
     if (skip.has(contact.phone)) continue
 
     const ageMinutes =

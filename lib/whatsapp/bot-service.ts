@@ -8,7 +8,7 @@ import { ptBR } from "date-fns/locale"
 import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
 import { notifyAttendantNeeded } from "@/lib/notifications"
-import { getWhatsAppProvider, normalizePhone } from "./provider"
+import { getWhatsAppProvider, normalizePhone, isValidIndividualPhone } from "./provider"
 import { sendTextSmart, extractLinks, downloadImageAsDataUrl } from "./message-service"
 import { normalizeText, runBotFlow, type BotState } from "./flow-engine"
 import { buildBotFlow } from "./flow-defaults"
@@ -152,6 +152,10 @@ export async function handleBotMessage(
   const phone = normalizePhone(from)
   const text = normalizeText(content)
   if (!text) return
+
+  // Grupos do WhatsApp e números fora do formato brasileiro não viram
+  // lead: o bot, o follow-up e a tela de Leads atendem só pessoas físicas.
+  if (!isValidIndividualPhone(phone)) return
 
   const clinic = await getClinicSettings()
 

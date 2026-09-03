@@ -6,6 +6,7 @@ import { MessageCircle } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
+import { isValidIndividualPhone } from "@/lib/whatsapp/provider"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -41,11 +42,12 @@ export default async function LeadsPage() {
   const session = await auth()
   requireRole(session, ["ADMIN", "SECRETARIA"])
 
-  const [leads, pacientes] = await Promise.all([
+  const [leadsRows, pacientes] = await Promise.all([
     prisma.whatsAppContact.findMany({
       where: { converted: false },
       orderBy: { lastMessageAt: "desc" },
-      take: 100,
+      // Busca um pouco mais para sobrar após o filtro de número válido.
+      take: 300,
     }),
     prisma.patient.findMany({
       where: {
@@ -66,6 +68,12 @@ export default async function LeadsPage() {
       take: 100,
     }),
   ])
+
+  // Só números de pessoa física (55 + DDD + 8/9 dígitos): IDs de grupos
+  // do WhatsApp e números de outros países ficam fora da lista.
+  const leads = leadsRows
+    .filter((lead) => isValidIndividualPhone(lead.phone))
+    .slice(0, 100)
 
   return (
     <div className="flex flex-col gap-6">
