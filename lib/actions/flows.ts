@@ -56,7 +56,7 @@ const ACOES = [
 const nodeSchema = z
   .object({
     id: z.string().min(1, "Nó sem id").max(80),
-    kind: z.enum(["GATILHO", "MENSAGEM", "RAMO", "ACAO"]),
+    kind: z.enum(["GATILHO", "MENSAGEM", "PEDIR_NOME", "PORTAO", "RAMO", "ACAO"]),
     position: z.object({
       x: z.number(),
       y: z.number(),
@@ -129,6 +129,9 @@ function parseFlowJson(rawNodes: unknown, rawEdges: unknown): {
         mediaType: node.mediaUrl ? (node.mediaType ?? null) : null,
         showOptions: node.showOptions === true,
       } : {}),
+      ...(node.kind === "PEDIR_NOME" || node.kind === "PORTAO" ? {
+        content: (node.content ?? "").trim(),
+      } : {}),
       ...(node.kind === "RAMO" ? {
         label: (node.label ?? "").trim() || "Ramo",
         keywords: (node.keywords ?? []).map((k) => k.trim().toLowerCase()).filter(Boolean),
@@ -141,6 +144,12 @@ function parseFlowJson(rawNodes: unknown, rawEdges: unknown): {
     } as FlowNode
     if (node.kind === "MENSAGEM" && !(node.content ?? "").trim()) {
       return { error: `Nó ${index + 1}: escreva o texto da mensagem` }
+    }
+    if (
+      (node.kind === "PEDIR_NOME" || node.kind === "PORTAO") &&
+      !(node.content ?? "").trim()
+    ) {
+      return { error: `Nó ${index + 1}: escreva o texto do nó` }
     }
     if (node.kind === "MENSAGEM" && node.mediaUrl && !/^https:\/\//.test(node.mediaUrl)) {
       return { error: `Nó ${index + 1}: URL da mídia inválida` }

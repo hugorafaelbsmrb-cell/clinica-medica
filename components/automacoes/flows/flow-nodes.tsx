@@ -2,16 +2,21 @@
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
 import {
+  DoorOpen,
   GitBranch,
   MessageSquareText,
   PlayCircle,
+  UserPlus,
   Workflow,
   Zap,
 } from "lucide-react"
 import { GATILHO_LABELS, type FlowNode } from "@/lib/whatsapp/flow-types"
 
 /** Nó do canvas: o FlowNode inteiro viaja no campo `data`. */
-export type CanvasNode = Node<FlowNode, "gatilho" | "mensagem" | "ramo" | "acao">
+export type CanvasNode = Node<
+  FlowNode,
+  "gatilho" | "mensagem" | "ramo" | "acao" | "pedirNome" | "portao"
+>
 
 const ACAO_LABELS: Record<string, string> = {
   PEDIR_CPF: "Pedir CPF",
@@ -108,6 +113,46 @@ export function MensagemNode(props: NodeProps) {
           )}
         </div>
       </div>
+    </NodeShell>
+  )
+}
+
+/** PEDIR_NOME: boas-vindas que pede o nome de quem não é paciente. */
+export function PedirNomeNode(props: NodeProps) {
+  const node = nodeData(props)
+  if (node.kind !== "PEDIR_NOME") return null
+  return (
+    <NodeShell
+      selected={props.selected}
+      className="border-fuchsia-400/50 bg-fuchsia-500/10 text-fuchsia-900 dark:text-fuchsia-200"
+    >
+      <div className="flex items-center gap-2 font-medium">
+        <UserPlus className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">Pedir nome</span>
+      </div>
+      <p className="mt-1 line-clamp-3 whitespace-pre-wrap break-words text-muted-foreground">
+        {node.content || <em>sem texto</em>}
+      </p>
+    </NodeShell>
+  )
+}
+
+/** PORTAO: pergunta "já é paciente?" com botões de resposta rápida. */
+export function PortaoNode(props: NodeProps) {
+  const node = nodeData(props)
+  if (node.kind !== "PORTAO") return null
+  return (
+    <NodeShell
+      selected={props.selected}
+      className="border-teal-400/50 bg-teal-500/10 text-teal-900 dark:text-teal-200"
+    >
+      <div className="flex items-center gap-2 font-medium">
+        <DoorOpen className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">Portão</span>
+      </div>
+      <p className="mt-1 line-clamp-3 whitespace-pre-wrap break-words text-muted-foreground">
+        {node.content || <em>sem texto</em>}
+      </p>
     </NodeShell>
   )
 }

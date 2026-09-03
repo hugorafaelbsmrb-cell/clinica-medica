@@ -8,11 +8,17 @@ import { ptBR } from "date-fns/locale"
 import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
 import { notifyAttendantNeeded } from "@/lib/notifications"
-import { getWhatsAppProvider, normalizePhone, isValidIndividualPhone } from "./provider"
+import {
+  getWhatsAppProvider,
+  normalizePhone,
+  isValidIndividualPhone,
+  type WhatsAppButton,
+} from "./provider"
 import { sendTextSmart, extractLinks, downloadImageAsDataUrl } from "./message-service"
 import { normalizeText, runBotFlow, type BotState } from "./flow-engine"
 import { buildBotFlow } from "./flow-defaults"
 import {
+  menuNodeId,
   parseFlowEdges,
   parseFlowNodes,
   type FlowRecord,
@@ -28,76 +34,6 @@ const VALID_STATES: BotState[] = [
   "AGUARDANDO_NOME",
   "AGUARDANDO_TIPO",
 ]
-
-/**
- * Portão de identificação de quem ainda não é paciente: captura o nome no
- * início do atendimento (grava no banco) e separa "já sou paciente" de
- * "primeira consulta" antes de liberar o menu — sem quebrar o fluxo de
- * quem já tem cadastro.
- */
-const GATEWAY_TEXTS = {
-  pedirNome: (clinica: string) =>
-    [
-      `Olá! 👋 Seja bem-vindo(a) à ${clinica}!`,
-      "Antes de começar, como posso te chamar?",
-    ].join("\n"),
-  nomeInvalido:
-    "Desculpa, não entendi. Me diz seu primeiro nome, por favor — só o nome.",
-  portao: (nome: string) =>
-    `Obrigado, ${nome}! Você já é paciente ou é o primeiro atendimento?`,
-  cpfPrompt:
-    'Envie apenas os 11 números do seu CPF.\nPara voltar ao menu, escreva "menu".',
-  primeiraConsulta: (link: string) =>
-    [
-      "Que ótimo! Para agendar sua primeira consulta, é bem rápido:",
-      "",
-      `1. Acesse: ${link}`,
-      "2. Seu nome e telefone já chegam preenchidos — complete o restante.",
-      "",
-      'Se preferir, escreva "atendente" para falar com a nossa equipe.',
-    ].join("\n"),
-} as const
-
-/** Palavras do próprio bot que nunca são nome de pessoa. */
-const NON_NAME_WORDS = new Set([
-  "menu",
-  "opcoes",
-  "inicio",
-  "atendente",
-  "humano",
-  "oi",
-  "ola",
-  "hey",
-  "opa",
-  "bom dia",
-  "boa tarde",
-  "boa noite",
-  "tudo bem",
-  "tudo bom",
-  "tchau",
-  "obrigado",
-  "obrigada",
-  "valeu",
-  "ok",
-  "certo",
-  "cancelar",
-  "sair",
-  "voltar",
-])
-
-/** Extrai um nome plausível da mensagem (null = pedir de novo). */
-function parseNameFromMessage(content: string): string | null {
-  const trimmed = content.trim().replace(/\s+/g, " ")
-  if (trimmed.length < 2 || trimmed.length > 60) return null
-  if (/^\d+$/.test(trimmed)) return null
-  if (trimmed.replace(/\D/g, "").length >= 6) return null // telefone/CPF
-  if (NON_NAME_WORDS.has(normalizeText(trimmed))) return null
-  return trimmed
-}
-
-function hasAny(text: string, keywords: string[]): boolean {
-  return keywords.some((k) => text.includes(k))
-}
 
 /** Grava o estado da sessão do bot (upsert por telefone). */
 async function saveBotSession(phone: string, state: BotState): Promise<void> {
@@ -193,22 +129,22 @@ export async function handleBotMessage(
   if (await isPhonePaused(phone)) return
 
   // Estado da sessão (ignora sessões expiradas)
-  let state: BotState = "MENU"
   const session = await prisma.botSession.findUnique({ where: { phone } })
-  if (session && Date.now() - session.updatedAt.getTime() <= SESSION_TTL_MS) {
-    state = VALID_STATES.includes(session.state as BotState)
+  const state: BotState =
+    session && Date.now() - session.updatedAt.getTime() <= SESSION_TTL_MS &&
+    VALID_STATES.includes(session.state as BotState)
       ? (session.state as BotState)
       : "MENU"
-  }
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
 
   const provider = await getWhatsAppProvider()
 
-  // ---- Portão de identificação: quem ainda não é paciente informa o nome
-  // e escolhe entre "já sou paciente" e "primeira consulta" antes do menu.
-  // Pacientes (mensagem registrada, telefone cadastrado ou contato já
-  // convertido) seguem direto para o fluxo normal — nada muda para eles. ----
+  // ---- Portão de identificação (nós PEDIR_NOME/PORTAO no grafo do bot):
+  // quem ainda não é paciente informa o nome e escolhe entre "já sou
+  // paciente" e "primeira consulta" antes do menu. Pacientes (mensagem
+  // registrada, telefone cadastrado ou contato já convertido) seguem
+  // direto para o menu — nada muda para eles. ----
   const contact = await prisma.whatsAppContact.findUnique({ where: { phone } })
   const patientByPhone = await prisma.patient.findFirst({
     where: { phone: { contains: phone.slice(2) } },
@@ -219,7 +155,10 @@ export async function handleBotMessage(
     Boolean(patientByPhone) ||
     contact?.converted === true
 
+  const flow = await loadBotFlow(clinic)
+
   let leadLink: string | null = null
+  let knownName = contact?.name?.trim() ?? ""
   if (!isPatient) {
     // Garante o contato para o link personalizado. O follow-up de silêncio
     // já ignora quem tem tentativa de cadastro aberta — sem duplicar.
@@ -228,125 +167,37 @@ export async function handleBotMessage(
       update: {},
       create: { phone },
     })
-    const link = `${baseUrl}/cadastro?lead=${ensured.id}`
-    leadLink = link
-
-    if (state === "AGUARDANDO_NOME") {
-      const name = parseNameFromMessage(content)
-      const pediuAtendente = hasAny(text, [
-        "atendente",
-        "humano",
-        "secretaria",
-        "recepcionista",
-      ])
-      if (name) {
-        await prisma.whatsAppContact.update({
+    leadLink = `${baseUrl}/cadastro?lead=${ensured.id}`
+    knownName = ensured.name?.trim() ?? ""
+    if (!knownName) {
+      // Aproveita o nome informado no cadastro online: segue para o portão.
+      const attemptName = (
+        await prisma.registrationAttempt.findUnique({
           where: { phone },
-          data: { name, lastMessageAt: new Date(), followUpStage: 0 },
+          select: { name: true },
         })
-        const sent = await sendTextSmart(
-          provider,
-          phone,
-          GATEWAY_TEXTS.portao(name.split(" ")[0]),
-          [
-            { type: "REPLY", label: "Já sou paciente" },
-            { type: "REPLY", label: "Primeira consulta" },
-          ]
-        )
-        await saveBotSession(phone, "AGUARDANDO_TIPO")
-        if (!sent.ok) {
-          console.error(`[Bot] Falha ao responder ${phone}: ${sent.error}`)
-        }
-        return
-      }
-      if (!pediuAtendente) {
-        const sent = await sendTextSmart(provider, phone, GATEWAY_TEXTS.nomeInvalido)
-        await saveBotSession(phone, "AGUARDANDO_NOME")
-        if (!sent.ok) {
-          console.error(`[Bot] Falha ao responder ${phone}: ${sent.error}`)
-        }
-        return
-      }
-      // Pediu atendente sem informar nome: o motor assume (ramo atendente).
-      state = "MENU"
-    } else if (state === "AGUARDANDO_TIPO") {
-      if (text === "1" || hasAny(text, ["ja sou paciente", "sou paciente"])) {
-        const sent = await sendTextSmart(provider, phone, GATEWAY_TEXTS.cpfPrompt)
-        await saveBotSession(phone, "AGUARDANDO_CPF")
-        if (!sent.ok) {
-          console.error(`[Bot] Falha ao responder ${phone}: ${sent.error}`)
-        }
-        return
-      }
-      if (
-        text === "2" ||
-        hasAny(text, ["primeira consulta", "quero agendar", "quero marcar"])
-      ) {
-        const sent = await sendTextSmart(
-          provider,
-          phone,
-          GATEWAY_TEXTS.primeiraConsulta(link),
-          [{ type: "URL", label: "Fazer agendamento", url: link }]
-        )
-        await saveBotSession(phone, "MENU")
-        if (!sent.ok) {
-          console.error(`[Bot] Falha ao responder ${phone}: ${sent.error}`)
-        }
-        return
-      }
-      // Qualquer outra resposta cai no motor (menu, atendente...).
-      state = "MENU"
-    } else if (state === "MENU") {
-      // Desconhecido sem nome: pede o nome antes do primeiro menu.
-      const knownName = ensured.name?.trim() ?? ""
-      const attemptName = knownName
-        ? null
-        : (
-            await prisma.registrationAttempt.findUnique({
-              where: { phone },
-              select: { name: true },
-            })
-          )?.name?.trim()
-      if (!knownName && attemptName) {
-        // Aproveita o nome informado no cadastro online: segue para o portão.
+      )?.name?.trim()
+      if (attemptName) {
         await prisma.whatsAppContact.update({
           where: { phone },
           data: { name: attemptName, lastMessageAt: new Date(), followUpStage: 0 },
         })
-        const sent = await sendTextSmart(
-          provider,
-          phone,
-          GATEWAY_TEXTS.portao(attemptName.split(" ")[0]),
-          [
-            { type: "REPLY", label: "Já sou paciente" },
-            { type: "REPLY", label: "Primeira consulta" },
-          ]
-        )
-        await saveBotSession(phone, "AGUARDANDO_TIPO")
-        if (!sent.ok) {
-          console.error(`[Bot] Falha ao responder ${phone}: ${sent.error}`)
-        }
-        return
-      }
-      if (!knownName && !attemptName) {
-        const sent = await sendTextSmart(
-          provider,
-          phone,
-          GATEWAY_TEXTS.pedirNome(clinic.name)
-        )
-        await saveBotSession(phone, "AGUARDANDO_NOME")
-        if (!sent.ok) {
-          console.error(`[Bot] Falha ao responder ${phone}: ${sent.error}`)
-        }
-        return
+        knownName = attemptName
       }
     }
   }
 
-  const flow = await loadBotFlow(clinic)
+  // Fluxo com portão: desconhecido sem nome começa no PEDIR_NOME; os
+  // demais (pacientes e contatos com nome) caem direto no menu.
+  const hasGateway = flow.nodes.some((n) => n.kind === "PEDIR_NOME")
+  const startNodeId =
+    hasGateway && !isPatient && !knownName
+      ? undefined
+      : (menuNodeId(flow) ?? undefined)
+
   const result = runBotFlow(
     state,
-    text,
+    content,
     {
       clinicName: clinic.name,
       address: clinic.address,
@@ -354,15 +205,34 @@ export async function handleBotMessage(
       email: clinic.email,
       horarioAtendimento: clinic.horarioAtendimento,
       baseUrl,
+      firstName: knownName.split(" ")[0] || null,
+      leadLink,
     },
-    flow
+    flow,
+    startNodeId
   )
+
+  // Nome capturado pelo portão: grava no contato do lead.
+  if (result.capturedName) {
+    await prisma.whatsAppContact.update({
+      where: { phone },
+      data: { name: result.capturedName, lastMessageAt: new Date(), followUpStage: 0 },
+    })
+  }
 
   let reply = result.reply
   // Lead (não paciente): todo link de cadastro vira o link personalizado
-  // do contato — nome e telefone chegam preenchidos na página.
-  if (leadLink && reply.includes(`${baseUrl}/cadastro`)) {
-    reply = reply.replaceAll(`${baseUrl}/cadastro`, leadLink)
+  // do contato — nome e telefone chegam preenchidos na página. O marcador
+  // evita dupla personalização: {{link_lead}} já virou o link com ?lead=X
+  // no motor, e um replaceAll simples criaria ?lead=X?lead=X.
+  if (leadLink) {
+    const marker = "\u0001"
+    reply = reply
+      .split(leadLink)
+      .join(marker)
+      .replaceAll(`${baseUrl}/cadastro`, leadLink)
+      .split(marker)
+      .join(leadLink)
   }
   if (result.cpfLookup) {
     reply = await buildCpfReply(
@@ -407,18 +277,21 @@ export async function handleBotMessage(
   }
 
   if (reply) {
-    // Respostas com link (ex.: /cadastro) viram texto com botão de rótulo
-    // intuitivo conforme o destino; se o botão falhar, cai automaticamente
-    // para texto puro.
-    const buttons = extractLinks(reply).map((url) => ({
-      type: "URL" as const,
-      label: url.includes("/cadastro")
-        ? "Fazer agendamento"
-        : url.includes("/cancelar")
-          ? "Remarcar consulta"
-          : "Abrir link",
-      url,
-    }))
+    // Botões de resposta rápida do portão + botões de link das respostas
+    // (ex.: /cadastro vira "Fazer agendamento"); se o botão falhar, cai
+    // automaticamente para texto puro.
+    const buttons: WhatsAppButton[] = [...(result.buttons ?? [])]
+    for (const url of extractLinks(reply)) {
+      buttons.push({
+        type: "URL",
+        label: url.includes("/cadastro")
+          ? "Fazer agendamento"
+          : url.includes("/cancelar")
+            ? "Remarcar consulta"
+            : "Abrir link",
+        url,
+      })
+    }
     // Nó com mídia (imagem/vídeo): envia a mídia com o texto de legenda;
     // se o provedor não suporta ou falha, cai para texto puro.
     let sent: Awaited<ReturnType<typeof sendTextSmart>> | undefined

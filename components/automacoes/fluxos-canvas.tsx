@@ -20,12 +20,14 @@ import {
 } from "@xyflow/react"
 import {
   Bot,
+  DoorOpen,
   Loader2,
   MessageSquareText,
   Plus,
   Power,
   Save,
   Trash2,
+  UserPlus,
   Workflow,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -51,6 +53,8 @@ import {
   AcaoNode,
   GatilhoNode,
   MensagemNode,
+  PedirNomeNode,
+  PortaoNode,
   RamoNode,
   type CanvasNode,
 } from "@/components/automacoes/flows/flow-nodes"
@@ -85,6 +89,8 @@ const nodeTypes = {
   mensagem: MensagemNode,
   ramo: RamoNode,
   acao: AcaoNode,
+  pedirNome: PedirNomeNode,
+  portao: PortaoNode,
 }
 
 const KIND_LABELS: Record<FlowKind, string> = {
@@ -139,7 +145,11 @@ function toCanvasNodes(flowNodes: FlowNode[]): CanvasNode[] {
           ? "mensagem"
           : node.kind === "RAMO"
             ? "ramo"
-            : "acao",
+            : node.kind === "PEDIR_NOME"
+              ? "pedirNome"
+              : node.kind === "PORTAO"
+                ? "portao"
+                : "acao",
     position: node.position,
     data: node,
   }))
@@ -202,17 +212,34 @@ function blankFlow(kind: "AUTOMACAO" | "JORNADA"): Draft {
 }
 
 /** Novo nó solto no canvas (tipo do drag). */
-function newCanvasNode(kind: "MENSAGEM" | "RAMO" | "ACAO", x: number, y: number): CanvasNode {
+function newCanvasNode(
+  kind: "MENSAGEM" | "PEDIR_NOME" | "PORTAO" | "RAMO" | "ACAO",
+  x: number,
+  y: number
+): CanvasNode {
   const id = nextNodeId(kind.toLowerCase())
   const data: FlowNode =
     kind === "MENSAGEM"
       ? { id, kind: "MENSAGEM", content: "", mediaUrl: null, mediaType: null, position: { x, y } }
-      : kind === "RAMO"
-        ? { id, kind: "RAMO", label: "Novo ramo", keywords: [], optionNumber: null, position: { x, y } }
-        : { id, kind: "ACAO", acao: "PEDIR_CPF", position: { x, y } }
+      : kind === "PEDIR_NOME"
+        ? { id, kind: "PEDIR_NOME", content: "", position: { x, y } }
+        : kind === "PORTAO"
+          ? { id, kind: "PORTAO", content: "", position: { x, y } }
+          : kind === "RAMO"
+            ? { id, kind: "RAMO", label: "Novo ramo", keywords: [], optionNumber: null, position: { x, y } }
+            : { id, kind: "ACAO", acao: "PEDIR_CPF", position: { x, y } }
   return {
     id,
-    type: kind === "MENSAGEM" ? "mensagem" : kind === "RAMO" ? "ramo" : "acao",
+    type:
+      kind === "MENSAGEM"
+        ? "mensagem"
+        : kind === "RAMO"
+          ? "ramo"
+          : kind === "PEDIR_NOME"
+            ? "pedirNome"
+            : kind === "PORTAO"
+              ? "portao"
+              : "acao",
     position: { x, y },
     data,
   }
@@ -526,6 +553,8 @@ function CanvasArea({
     event.preventDefault()
     const kind = event.dataTransfer.getData("application/fluxo-nodo") as
       | "MENSAGEM"
+      | "PEDIR_NOME"
+      | "PORTAO"
       | "RAMO"
       | "ACAO"
       | ""
@@ -577,44 +606,52 @@ function CanvasArea({
             <p className="text-xs font-medium text-muted-foreground">
               Arrastar para o canvas:
             </p>
-            {(["MENSAGEM", "RAMO", "ACAO"] as const).map((kind) => {
-              const disabled =
-                (kind === "RAMO" || kind === "ACAO") &&
-                draft.kind !== "BOT"
-              return (
-                <div
-                  key={kind}
-                  draggable={!disabled}
-                  onDragStart={(event) => {
-                    event.dataTransfer.setData("application/fluxo-nodo", kind)
-                    event.dataTransfer.effectAllowed = "move"
-                  }}
-                  className={`flex cursor-grab items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-medium ${
-                    disabled
-                      ? "cursor-not-allowed opacity-40"
-                      : "hover:bg-muted"
-                  }`}
-                  title={
-                    disabled
-                      ? "Ramos e ações só existem no fluxo do bot"
-                      : "Arraste para o canvas"
-                  }
-                >
-                  {kind === "MENSAGEM" ? (
-                    <MessageSquareText className="h-3.5 w-3.5 text-emerald-600" />
-                  ) : kind === "RAMO" ? (
-                    <Plus className="h-3.5 w-3.5 text-amber-600" />
-                  ) : (
-                    <Workflow className="h-3.5 w-3.5 text-violet-600" />
-                  )}
-                  {kind === "MENSAGEM"
-                    ? "Mensagem"
-                    : kind === "RAMO"
-                      ? "Ramo"
-                      : "Ação"}
-                </div>
-              )
-            })}
+            {(["MENSAGEM", "PEDIR_NOME", "PORTAO", "RAMO", "ACAO"] as const).map(
+              (kind) => {
+                const disabled = kind !== "MENSAGEM" && draft.kind !== "BOT"
+                return (
+                  <div
+                    key={kind}
+                    draggable={!disabled}
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData("application/fluxo-nodo", kind)
+                      event.dataTransfer.effectAllowed = "move"
+                    }}
+                    className={`flex cursor-grab items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-medium ${
+                      disabled
+                        ? "cursor-not-allowed opacity-40"
+                        : "hover:bg-muted"
+                    }`}
+                    title={
+                      disabled
+                        ? "Este nó só existe no fluxo do bot"
+                        : "Arraste para o canvas"
+                    }
+                  >
+                    {kind === "MENSAGEM" ? (
+                      <MessageSquareText className="h-3.5 w-3.5 text-emerald-600" />
+                    ) : kind === "PEDIR_NOME" ? (
+                      <UserPlus className="h-3.5 w-3.5 text-fuchsia-600" />
+                    ) : kind === "PORTAO" ? (
+                      <DoorOpen className="h-3.5 w-3.5 text-teal-600" />
+                    ) : kind === "RAMO" ? (
+                      <Plus className="h-3.5 w-3.5 text-amber-600" />
+                    ) : (
+                      <Workflow className="h-3.5 w-3.5 text-violet-600" />
+                    )}
+                    {kind === "MENSAGEM"
+                      ? "Mensagem"
+                      : kind === "PEDIR_NOME"
+                        ? "Pedir nome"
+                        : kind === "PORTAO"
+                          ? "Portão"
+                          : kind === "RAMO"
+                            ? "Ramo"
+                            : "Ação"}
+                  </div>
+                )
+              }
+            )}
             {!mediaConfigured && (
               <p className="max-w-40 text-[10px] text-muted-foreground">
                 Mídias desativadas: configure a API de mídias em Configurações →
@@ -669,6 +706,14 @@ function Inspector({
       : null
   const acaoNode =
     node && node.data.kind === "ACAO" ? { id: node.id, data: node.data } : null
+  const pedirNomeNode =
+    node && node.data.kind === "PEDIR_NOME"
+      ? { id: node.id, data: node.data }
+      : null
+  const portaoNode =
+    node && node.data.kind === "PORTAO"
+      ? { id: node.id, data: node.data }
+      : null
 
   function updateNodeData(id: string, patch: Partial<FlowNode>) {
     onDraftChange({
@@ -958,6 +1003,48 @@ function Inspector({
               />
             </Field>
           )}
+        </>
+      )}
+
+      {/* ===== PEDIR_NOME ===== */}
+      {pedirNomeNode && (
+        <>
+          <Field>
+            <FieldLabel>Boas-vindas que pede o nome</FieldLabel>
+            <Textarea
+              value={pedirNomeNode.data.content}
+              onChange={(event) =>
+                updateNodeData(pedirNomeNode.id, { content: event.target.value })
+              }
+              placeholder="Ex.: Olá! 👋 Seja bem-vindo(a) à {{clinica}}!"
+              className="min-h-24"
+            />
+          </Field>
+          <p className="text-xs text-muted-foreground">
+            Enviado para quem ainda não é paciente e não informou o nome.
+            Variáveis: {"{{clinica}}"}.
+          </p>
+        </>
+      )}
+
+      {/* ===== PORTAO ===== */}
+      {portaoNode && (
+        <>
+          <Field>
+            <FieldLabel>Pergunta do portão</FieldLabel>
+            <Textarea
+              value={portaoNode.data.content}
+              onChange={(event) =>
+                updateNodeData(portaoNode.id, { content: event.target.value })
+              }
+              placeholder="Ex.: Obrigado, {{nome}}! Você já é paciente?"
+              className="min-h-24"
+            />
+          </Field>
+          <p className="text-xs text-muted-foreground">
+            Os ramos filhos com opção numerada viram botões de resposta rápida.
+            Variáveis: {"{{nome}}"}.
+          </p>
         </>
       )}
 

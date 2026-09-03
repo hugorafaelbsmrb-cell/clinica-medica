@@ -1,0 +1,2 @@
+cd /opt/clinica-medica
+docker compose run --rm --no-deps -v /opt/clinica-medica/scripts/migrate-bot-gateway.js:/tmp/migrate.js:ro -T app sh -c 'cd /app && NODE_PATH=/app/node_modules node /tmp/migrate.js'

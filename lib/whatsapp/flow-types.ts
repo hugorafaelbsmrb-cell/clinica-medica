@@ -49,6 +49,27 @@ export type FlowNode =
   | {
       id: string
       position: { x: number; y: number }
+      kind: "PEDIR_NOME"
+      /**
+       * BOT: boas-vindas que pede o nome de quem ainda não é paciente.
+       * Variáveis: {{clinica}}.
+       */
+      content: string
+    }
+  | {
+      id: string
+      position: { x: number; y: number }
+      kind: "PORTAO"
+      /**
+       * BOT: pergunta "já é paciente ou primeira consulta?". Os RAMOs
+       * filhos (com opção numerada) viram botões de resposta rápida.
+       * Variáveis: {{nome}}.
+       */
+      content: string
+    }
+  | {
+      id: string
+      position: { x: number; y: number }
       kind: "RAMO"
       label: string
       /** Palavras que ativam o ramo ("contém"). Vazio = fallback. */
@@ -144,6 +165,33 @@ export function rootNodeId(flow: FlowRecord): string | null {
   const trigger = triggerNode(flow)
   if (!trigger) return null
   return outgoingEdges(flow, trigger.id)[0]?.target ?? null
+}
+
+/** Primeiro nó do fluxo com o kind informado (portão de identificação). */
+export function nodeOfKind<K extends "PEDIR_NOME" | "PORTAO">(
+  flow: FlowRecord,
+  kind: K
+): Extract<FlowNode, { kind: K }> | null {
+  const node = flow.nodes.find((n) => n.kind === kind)
+  return node ? (node as Extract<FlowNode, { kind: K }>) : null
+}
+
+/**
+ * Hub do menu do bot: o nó "menu" por convenção; em fluxos com portão,
+ * o alvo do RAMO fallback do portão; senão, o primeiro nó do gatilho.
+ */
+export function menuNodeId(flow: FlowRecord): string | null {
+  const named = findNode(flow, "menu")
+  if (named && named.kind === "MENSAGEM") return "menu"
+  const portao = nodeOfKind(flow, "PORTAO")
+  if (portao) {
+    const fallback = childrenOf(flow, portao.id).find(
+      (n) => n.kind === "RAMO" && n.keywords.length === 0 && n.optionNumber == null
+    )
+    const target = fallback ? outgoingEdges(flow, fallback.id)[0]?.target : null
+    if (target) return target
+  }
+  return rootNodeId(flow)
 }
 
 /**

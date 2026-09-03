@@ -10,9 +10,12 @@
  * ao comportamento histórico do bot).
  */
 import type { FlowNode, FlowRecord } from "./flow-types"
+import type { WhatsAppButton } from "./provider"
 import {
   childrenOf,
   findNode,
+  menuNodeId,
+  nodeOfKind,
   outgoingEdges,
   rootNodeId,
   walkChain,
@@ -31,6 +34,10 @@ export type BotFlowContext = {
   email?: string | null
   horarioAtendimento?: string | null
   baseUrl: string
+  /** Primeiro nome do contato (substitui {{nome}} no portão). */
+  firstName?: string | null
+  /** Link de cadastro personalizado do lead (substitui {{link_lead}}). */
+  leadLink?: string | null
 }
 
 export type BotFlowResult = {
@@ -42,6 +49,10 @@ export type BotFlowResult = {
   /** Mídia do nó MENSAGEM casado (envio de imagem/vídeo no lugar do texto). */
   mediaUrl?: string | null
   mediaType?: "IMAGEM" | "VIDEO" | null
+  /** Botões de resposta rápida do PORTAO (o serviço envia junto com o texto). */
+  buttons?: WhatsAppButton[]
+  /** Nome capturado pelo PEDIR_NOME: o serviço grava no contato. */
+  capturedName?: string | null
 }
 
 const MENU_FOOTER =
@@ -53,8 +64,51 @@ const CPF_PEDIDO =
 const CPF_INCOMPLETO =
   'Este CPF está incompleto. O CPF tem 11 números — confira e envie de novo.\nPara voltar ao menu, escreva "menu".'
 
+const NOME_INVALIDO =
+  "Desculpa, não entendi. Me diz seu primeiro nome, por favor — só o nome."
+
+/** Palavras que escapam do pedido de nome direto para o motor. */
+const ATENDENTE_KEYWORDS = ["atendente", "humano", "secretaria", "recepcionista"]
+
 /** Saudações curtas avaliadas pelo motor (regex, como no bot histórico). */
 const SHORT_GREETING = /^(oi|ola|hey|opa|eai|e ai)(\s|$)/
+
+/** Palavras do próprio bot que nunca são nome de pessoa. */
+const NON_NAME_WORDS = new Set([
+  "menu",
+  "opcoes",
+  "inicio",
+  "atendente",
+  "humano",
+  "oi",
+  "ola",
+  "hey",
+  "opa",
+  "bom dia",
+  "boa tarde",
+  "boa noite",
+  "tudo bem",
+  "tudo bom",
+  "tchau",
+  "obrigado",
+  "obrigada",
+  "valeu",
+  "ok",
+  "certo",
+  "cancelar",
+  "sair",
+  "voltar",
+])
+
+/** Extrai um nome plausível da mensagem (null = pedir de novo). */
+export function parseNameFromMessage(content: string): string | null {
+  const trimmed = content.trim().replace(/\s+/g, " ")
+  if (trimmed.length < 2 || trimmed.length > 60) return null
+  if (/^\d+$/.test(trimmed)) return null
+  if (trimmed.replace(/\D/g, "").length >= 6) return null // telefone/CPF
+  if (NON_NAME_WORDS.has(normalizeText(trimmed))) return null
+  return trimmed
+}
 
 /** Normaliza o texto: minúsculas, sem acentos, espaços únicos. */
 export function normalizeText(text: string): string {
@@ -74,11 +128,13 @@ function hasAny(text: string, keywords: string[]): boolean {
   return keywords.some((k) => text.includes(k))
 }
 
-/** Substitui {{clinica}} e {{link_cadastro}} nos textos do fluxo. */
+/** Substitui as variáveis {{clinica}}, {{link_cadastro}}, {{link_lead}} e {{nome}}. */
 function applyBotVariables(text: string, ctx: BotFlowContext): string {
   return text
     .replaceAll("{{clinica}}", ctx.clinicName)
     .replaceAll("{{link_cadastro}}", `${ctx.baseUrl}/cadastro`)
+    .replaceAll("{{link_lead}}", ctx.leadLink ?? `${ctx.baseUrl}/cadastro`)
+    .replaceAll("{{nome}}", ctx.firstName ?? "")
 }
 
 /** Nó RAMO (narrowing explícito do union). */
@@ -101,11 +157,11 @@ function renderMenuNode(flow: FlowRecord, nodeId: string, ctx: BotFlowContext): 
   const node = findNode(flow, nodeId)
   if (!node || node.kind !== "MENSAGEM") return ""
   const content = applyBotVariables(node.content, ctx)
-  // Sem opções próprias, usa as do hub inicial (ex.: resposta "não entendi").
+  // Sem opções próprias, usa as do hub do menu (ex.: resposta "não entendi").
   let options = optionsOf(flow, nodeId)
   if (options.length === 0) {
-    const rootId = rootNodeId(flow)
-    if (rootId && rootId !== nodeId) options = optionsOf(flow, rootId)
+    const menuId = menuNodeId(flow)
+    if (menuId && menuId !== nodeId) options = optionsOf(flow, menuId)
   }
   if (options.length === 0) return content
   const lines = options.map(
@@ -137,6 +193,14 @@ function matchRamo(
   return ramos.find((r) => r.keywords.length === 0) ?? null
 }
 
+/** Botões de resposta rápida do PORTAO (um por RAMO filho numerado). */
+function gatewayButtons(flow: FlowRecord, portaoId: string): WhatsAppButton[] {
+  return optionsOf(flow, portaoId).map((r) => ({
+    type: "REPLY",
+    label: r.label,
+  }))
+}
+
 /** Executa a cadeia de resposta a partir do nó-alvo do RAMO. */
 function evaluateChain(
   flow: FlowRecord,
@@ -161,6 +225,21 @@ function evaluateChain(
         result.mediaType = node.mediaType ?? null
       }
       continue
+    }
+    if (node.kind === "PEDIR_NOME") {
+      result.nextState = "AGUARDANDO_NOME"
+      const content = applyBotVariables(node.content, ctx)
+      if (content) parts.push(content)
+      // O nome chega na próxima mensagem: para a cadeia aqui.
+      break
+    }
+    if (node.kind === "PORTAO") {
+      result.nextState = "AGUARDANDO_TIPO"
+      const content = applyBotVariables(node.content, ctx)
+      if (content) parts.push(content)
+      result.buttons = gatewayButtons(flow, node.id)
+      // Os botões do portão aguardam a escolha: para a cadeia aqui.
+      break
     }
     if (node.kind === "ACAO") {
       switch (node.acao) {
@@ -226,15 +305,20 @@ function evaluateChain(
   return result
 }
 
-/** Avalia o hub inicial (menu) com o texto recebido. */
+/** Avalia um hub do grafo (menu ou nó inicial) com o texto recebido. */
 function evaluateHub(
   flow: FlowRecord,
+  hubId: string,
   text: string,
   ctx: BotFlowContext
 ): BotFlowResult {
-  const hubId = rootNodeId(flow)
-  if (!hubId) {
+  const hubNode = findNode(flow, hubId)
+  if (!hubNode) {
     return { reply: "", nextState: "MENU", needsAttention: false }
+  }
+  // Portão/pedido de nome não são hubs de menu: a cadeia decide o estado.
+  if (hubNode.kind === "PEDIR_NOME" || hubNode.kind === "PORTAO") {
+    return evaluateChain(flow, hubId, ctx)
   }
 
   const matched = matchRamo(flow, hubId, text)
@@ -258,18 +342,24 @@ function evaluateHub(
  * Decide a resposta do bot a partir do fluxo BOT salvo no banco.
  * Se o grafo não existir, o chamador deve passar o fluxo padrão
  * (flow-defaults) — o motor nunca falha por falta de fluxo.
+ *
+ * `startNodeId` substitui o hub de partida (rootNodeId): pacientes e
+ * contatos com nome começam direto no menu; quem ainda não é paciente e
+ * não tem nome começa no PEDIR_NOME do portão.
  */
 export function runBotFlow(
   state: BotState,
   rawText: string,
   ctx: BotFlowContext,
-  flow: FlowRecord
+  flow: FlowRecord,
+  startNodeId?: string | null
 ): BotFlowResult {
   const text = normalizeText(rawText)
+  const menuId = menuNodeId(flow)
+  const hubId = startNodeId ?? rootNodeId(flow)
   if (!text) {
-    const hubId = rootNodeId(flow)
     return {
-      reply: hubId ? renderMenuNode(flow, hubId, ctx) : "",
+      reply: menuId ? renderMenuNode(flow, menuId, ctx) : "",
       nextState: "MENU",
       needsAttention: false,
     }
@@ -286,10 +376,9 @@ export function runBotFlow(
         cpfLookup: digits,
       }
     }
-    const hubId = rootNodeId(flow)
     if (hasAny(text, ["menu", "voltar", "sair", "cancelar"])) {
       return {
-        reply: hubId ? renderMenuNode(flow, hubId, ctx) : "",
+        reply: menuId ? renderMenuNode(flow, menuId, ctx) : "",
         nextState: "MENU",
         needsAttention: false,
       }
@@ -300,16 +389,77 @@ export function runBotFlow(
     return { reply: CPF_PEDIDO, nextState: "AGUARDANDO_CPF", needsAttention: false }
   }
 
-  // 2) Saudações curtas (regex do bot histórico: "oi", "olá", "opa"...)
+  // 2) Portão: contato no passo "me diz seu nome"
+  if (state === "AGUARDANDO_NOME") {
+    const pedirNome = nodeOfKind(flow, "PEDIR_NOME")
+    if (pedirNome) {
+      const name = parseNameFromMessage(rawText)
+      if (name) {
+        // Nome válido: segue a cadeia (o nó seguinte é o PORTAO).
+        const next = outgoingEdges(flow, pedirNome.id)[0]?.target
+        const named = {
+          ...ctx,
+          firstName: name.split(" ")[0],
+        }
+        return {
+          ...(next ? evaluateChain(flow, next, named) : { reply: "", nextState: "MENU" as BotState, needsAttention: false }),
+          capturedName: name,
+        }
+      }
+      if (hasAny(text, ATENDENTE_KEYWORDS)) {
+        // Pediu atendente sem informar nome: o motor assume (ramo atendente).
+        return menuId
+          ? evaluateHub(flow, menuId, text, ctx)
+          : { reply: "", nextState: "MENU", needsAttention: false }
+      }
+      return { reply: NOME_INVALIDO, nextState: "AGUARDANDO_NOME", needsAttention: false }
+    }
+    // Fluxo sem portão: cai no motor normalmente.
+    return hubId
+      ? evaluateHub(flow, hubId, text, ctx)
+      : { reply: "", nextState: "MENU", needsAttention: false }
+  }
+
+  // 3) Portão: contato no passo "já é paciente ou primeira consulta?"
+  if (state === "AGUARDANDO_TIPO") {
+    const portao = nodeOfKind(flow, "PORTAO")
+    if (portao) {
+      const matched = matchRamo(flow, portao.id, text)
+      if (matched) {
+        const chainStart = outgoingEdges(flow, matched.id)[0]?.target
+        if (chainStart) {
+          return evaluateChain(flow, chainStart, ctx)
+        }
+      }
+      // Qualquer outra resposta cai no motor (menu, atendente...).
+      return menuId
+        ? evaluateHub(flow, menuId, text, ctx)
+        : { reply: "", nextState: "MENU", needsAttention: false }
+    }
+    return hubId
+      ? evaluateHub(flow, hubId, text, ctx)
+      : { reply: "", nextState: "MENU", needsAttention: false }
+  }
+
+  // 4) Saudações curtas (regex do bot histórico: "oi", "olá", "opa"...)
   if (SHORT_GREETING.test(text)) {
-    const hubId = rootNodeId(flow)
+    // Desconhecido sem nome ainda não passou pelo portão: a saudação
+    // também dispara o pedido de nome (como no fluxo antigo).
+    if (hubId) {
+      const startNode = findNode(flow, hubId)
+      if (startNode && (startNode.kind === "PEDIR_NOME" || startNode.kind === "PORTAO")) {
+        return evaluateHub(flow, hubId, text, ctx)
+      }
+    }
     return {
-      reply: hubId ? renderMenuNode(flow, hubId, ctx) : "",
+      reply: menuId ? renderMenuNode(flow, menuId, ctx) : "",
       nextState: "MENU",
       needsAttention: false,
     }
   }
 
-  // 3) Avaliação normal pelo grafo (opções → palavras-chave → fallback)
-  return evaluateHub(flow, text, ctx)
+  // 5) Avaliação normal pelo grafo (opções → palavras-chave → fallback)
+  return hubId
+    ? evaluateHub(flow, hubId, text, ctx)
+    : { reply: "", nextState: "MENU", needsAttention: false }
 }
