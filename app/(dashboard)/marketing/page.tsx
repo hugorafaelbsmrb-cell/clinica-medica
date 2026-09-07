@@ -8,6 +8,7 @@ import { normalizeAudience } from "@/lib/marketing/service"
 import { CampaignForm } from "@/components/marketing/campaign-form"
 import { CampaignList } from "@/components/marketing/campaign-list"
 import { CouponsSection } from "@/components/marketing/coupons-section"
+import { MarketingTabs } from "@/components/marketing/marketing-tabs"
 
 export const metadata: Metadata = { title: "Marketing" }
 
@@ -35,57 +36,68 @@ export default async function MarketingPage({
         <p className="text-muted-foreground">
           Campanhas de mensagem em massa pelo WhatsApp — alcançam pacientes
           com WhatsApp habilitado, telefone e consentimento LGPD, e também
-          leads capturados pelo bot que ainda não viraram pacientes.
+          leads capturados pelo bot que ainda não viraram pacientes — e
+          cupons de desconto aplicáveis no checkout do agendamento.
         </p>
       </div>
 
-      <CampaignForm
-        doctors={doctors}
-        coupons={activeCoupons.map((c) => ({
-          id: c.id,
-          code: c.code,
-          enabled: c.enabled,
-        }))}
-        initial={
-          editing
-            ? {
-                id: editing.id,
-                name: editing.name,
-                tone: editing.tone,
-                body: editing.body,
-                linkUrl: editing.linkUrl ?? "",
-                imageDataUrl: editing.imageDataUrl ?? "",
-                couponId: editing.couponId ?? "",
-                scheduledAt: format(editing.scheduledFor, "yyyy-MM-dd'T'HH:mm"),
-                audienceKind: normalizeAudience(editing.audience).kind,
-                audienceDoctorId:
-                  normalizeAudience(editing.audience).doctorId ?? "",
-                audienceDays: String(
-                  normalizeAudience(editing.audience).days ?? ""
-                ),
-                status: editing.status,
+      <MarketingTabs
+        campanhas={
+          <div className="flex flex-col gap-6">
+            <CampaignForm
+              doctors={doctors}
+              coupons={activeCoupons.map((c) => ({
+                id: c.id,
+                code: c.code,
+                enabled: c.enabled,
+              }))}
+              initial={
+                editing
+                  ? {
+                      id: editing.id,
+                      name: editing.name,
+                      tone: editing.tone,
+                      body: editing.body,
+                      linkUrl: editing.linkUrl ?? "",
+                      imageDataUrl: editing.imageDataUrl ?? "",
+                      couponId: editing.couponId ?? "",
+                      scheduledAt: format(
+                        editing.scheduledFor,
+                        "yyyy-MM-dd'T'HH:mm"
+                      ),
+                      audienceKind: normalizeAudience(editing.audience).kind,
+                      audienceDoctorId:
+                        normalizeAudience(editing.audience).doctorId ?? "",
+                      audienceDays: String(
+                        normalizeAudience(editing.audience).days ?? ""
+                      ),
+                      status: editing.status,
+                    }
+                  : undefined
               }
-            : undefined
+            />
+
+            <CampaignList campaigns={campaigns} doctors={doctors} />
+          </div>
         }
-      />
-
-      <CampaignList campaigns={campaigns} doctors={doctors} />
-
-      <CouponsSection
-        coupons={coupons.map((c) => ({
-          id: c.id,
-          code: c.code,
-          description: c.description,
-          discountType: c.discountType,
-          discountValue: Number(c.discountValue),
-          minValue: c.minValue != null ? Number(c.minValue) : null,
-          maxDiscount: c.maxDiscount != null ? Number(c.maxDiscount) : null,
-          validFrom: c.validFrom,
-          validUntil: c.validUntil,
-          maxUses: c.maxUses,
-          usedCount: c.usedCount,
-          enabled: c.enabled,
-        }))}
+        cupons={
+          <CouponsSection
+            coupons={coupons.map((c) => ({
+              id: c.id,
+              code: c.code,
+              description: c.description,
+              discountType: c.discountType,
+              discountValue: Number(c.discountValue),
+              minValue: c.minValue != null ? Number(c.minValue) : null,
+              maxDiscount: c.maxDiscount != null ? Number(c.maxDiscount) : null,
+              validFrom: c.validFrom,
+              validUntil: c.validUntil,
+              maxUses: c.maxUses,
+              usedCount: c.usedCount,
+              enabled: c.enabled,
+            }))}
+          />
+        }
       />
     </div>
   )
