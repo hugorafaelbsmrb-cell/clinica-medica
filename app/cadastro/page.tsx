@@ -21,11 +21,11 @@ export const dynamic = "force-dynamic"
 export default async function CadastroPage({
   searchParams,
 }: {
-  searchParams: Promise<{ lead?: string }>
+  searchParams: Promise<{ lead?: string; cupom?: string }>
 }) {
   const clinic = await getClinicSettings()
 
-  const { lead } = await searchParams
+  const { lead, cupom } = await searchParams
   const contact = lead
     ? await prisma.whatsAppContact.findUnique({
         where: { id: lead },
@@ -59,7 +59,10 @@ export default async function CadastroPage({
         <p className="text-lg text-muted-foreground">Pré-cadastro de paciente</p>
       </div>
 
-      <CadastroWizard initialData={initialData} />
+      <CadastroWizard
+        initialData={initialData}
+        initialCouponCode={cupom?.trim().toUpperCase().slice(0, 30) || undefined}
+      />
 
       <p className="mt-6 max-w-md text-center text-sm text-muted-foreground">
         Seus dados são protegidos conforme a Lei Geral de Proteção de Dados

@@ -274,11 +274,9 @@ function evaluateChain(
           )
           break
         case "ENDERECO": {
-          const extra = ctx.phone ? `\nTelefone: ${ctx.phone}` : ""
+          // Atendimento 100% domiciliar: não há unidade física para visitar.
           parts.push(
-            ctx.address
-              ? `Nossa unidade fica em:\n${ctx.address}${extra}`
-              : 'O endereço ainda não foi cadastrado no sistema. Escreva "atendente" para falar com a nossa equipe.'
+            `A ${ctx.clinicName} atende exclusivamente em domicílio! 💙 Nossa equipe médica vai até você — em casa, no trabalho, onde você estiver. Quer agendar sua consulta? Escreva "agendar" ou "atendente" para falar com a gente.`
           )
           break
         }

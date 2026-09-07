@@ -36,6 +36,7 @@ const campaignSchema = z.object({
     .union([z.string().trim().url("Link inválido — use uma URL https"), z.literal("")])
     .optional(),
   imageDataUrl: z.string().optional(),
+  couponId: z.string().optional(),
   scheduledAt: z.string().min(1, "Informe a data e hora do envio"),
   audienceKind: z.enum(AUDIENCE_KINDS),
   audienceDoctorId: z.string().optional(),
@@ -119,6 +120,7 @@ async function parseCampaignForm(
         body: string
         linkUrl: string | null
         imageDataUrl: string | null
+        couponId: string | null
         scheduledFor: Date
         status: "RASCUNHO" | "AGENDADA"
         audience: MarketingAudience
@@ -131,6 +133,7 @@ async function parseCampaignForm(
     body: formData.get("body"),
     linkUrl: formData.get("linkUrl") || "",
     imageDataUrl: formData.get("imageDataUrl") || undefined,
+    couponId: formData.get("couponId") || undefined,
     scheduledAt: formData.get("scheduledAt"),
     audienceKind: formData.get("audienceKind"),
     audienceDoctorId: formData.get("audienceDoctorId") || undefined,
@@ -160,6 +163,18 @@ async function parseCampaignForm(
     return { success: false, message: "Audiência inválida" }
   }
 
+  // Cupom vinculado (opcional): precisa existir e estar ativo.
+  const couponId = data.couponId?.trim() || null
+  if (couponId) {
+    const coupon = await prisma.coupon.findFirst({
+      where: { id: couponId, enabled: true },
+      select: { id: true },
+    })
+    if (!coupon) {
+      return { success: false, message: "Cupom vinculado inválido ou desativado" }
+    }
+  }
+
   // Rascunho não tem hora de envio; senão a data precisa ser futura.
   const asDraft = data.asDraft === "on"
   const scheduledFor = asDraft
@@ -183,6 +198,7 @@ async function parseCampaignForm(
       body: data.body,
       linkUrl: data.linkUrl || null,
       imageDataUrl: image.imageDataUrl,
+      couponId,
       scheduledFor,
       status: asDraft ? "RASCUNHO" : "AGENDADA",
       audience: parsedAudience.audience,
@@ -213,6 +229,7 @@ export async function createMarketingCampaign(
       body: data.body,
       linkUrl: data.linkUrl,
       imageDataUrl: data.imageDataUrl,
+      couponId: data.couponId,
       scheduledFor: data.scheduledFor,
       status: data.status,
       audience: data.audience as unknown as object,
@@ -279,6 +296,7 @@ export async function updateMarketingCampaign(
       body: data.body,
       linkUrl: data.linkUrl,
       imageDataUrl: data.imageDataUrl,
+      couponId: data.couponId,
       scheduledFor: data.scheduledFor,
       status: data.status,
       audience: data.audience as unknown as object,

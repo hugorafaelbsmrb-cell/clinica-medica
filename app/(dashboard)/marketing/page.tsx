@@ -7,6 +7,7 @@ import { listActiveDoctors } from "@/lib/doctor"
 import { normalizeAudience } from "@/lib/marketing/service"
 import { CampaignForm } from "@/components/marketing/campaign-form"
 import { CampaignList } from "@/components/marketing/campaign-list"
+import { CouponsSection } from "@/components/marketing/coupons-section"
 
 export const metadata: Metadata = { title: "Marketing" }
 
@@ -18,12 +19,14 @@ export default async function MarketingPage({
   requireRole(await auth(), ["ADMIN"])
 
   const { edit } = await searchParams
-  const [campaigns, doctors] = await Promise.all([
+  const [campaigns, doctors, coupons] = await Promise.all([
     prisma.marketingCampaign.findMany({ orderBy: { createdAt: "desc" } }),
     listActiveDoctors(),
+    prisma.coupon.findMany({ orderBy: { createdAt: "desc" } }),
   ])
 
   const editing = edit ? campaigns.find((c) => c.id === edit) : undefined
+  const activeCoupons = coupons.filter((c) => c.enabled)
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
@@ -38,6 +41,11 @@ export default async function MarketingPage({
 
       <CampaignForm
         doctors={doctors}
+        coupons={activeCoupons.map((c) => ({
+          id: c.id,
+          code: c.code,
+          enabled: c.enabled,
+        }))}
         initial={
           editing
             ? {
@@ -47,6 +55,7 @@ export default async function MarketingPage({
                 body: editing.body,
                 linkUrl: editing.linkUrl ?? "",
                 imageDataUrl: editing.imageDataUrl ?? "",
+                couponId: editing.couponId ?? "",
                 scheduledAt: format(editing.scheduledFor, "yyyy-MM-dd'T'HH:mm"),
                 audienceKind: normalizeAudience(editing.audience).kind,
                 audienceDoctorId:
@@ -61,6 +70,23 @@ export default async function MarketingPage({
       />
 
       <CampaignList campaigns={campaigns} doctors={doctors} />
+
+      <CouponsSection
+        coupons={coupons.map((c) => ({
+          id: c.id,
+          code: c.code,
+          description: c.description,
+          discountType: c.discountType,
+          discountValue: Number(c.discountValue),
+          minValue: c.minValue != null ? Number(c.minValue) : null,
+          maxDiscount: c.maxDiscount != null ? Number(c.maxDiscount) : null,
+          validFrom: c.validFrom,
+          validUntil: c.validUntil,
+          maxUses: c.maxUses,
+          usedCount: c.usedCount,
+          enabled: c.enabled,
+        }))}
+      />
     </div>
   )
 }

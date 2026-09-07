@@ -301,6 +301,7 @@ model Patient {
   messages           Message[]
   notifications      Notification[]  @relation("NotificationPatient")
   payments           Payment[]
+  couponUses         CouponUse[]
   followUp           FollowUpConfig?
   followUpPrograms   FollowUpProgram[]
   auditLogs          AuditLog[]        @relation("AuditLogPatient")
@@ -343,6 +344,7 @@ model Attendance {
   financialEntries FinancialEntry[]
   messages         Message[]
   payments         Payment[]
+  couponUses       CouponUse[]
   notifications    Notification[]
 
   @@index([patientId])
@@ -822,6 +824,8 @@ model MarketingCampaign {
   body         String                  @db.Text // suporta {{nome}}
   imageDataUrl String?                 @db.Text // data URL PNG/JPEG (até 2 MB)
   linkUrl      String?
+  couponId     String? // cupom de desconto veiculado pela campanha ({{cupom}} / ?cupom=)
+  coupon       Coupon?                 @relation(fields: [couponId], references: [id], onDelete: SetNull)
   scheduledFor DateTime
   status       MarketingCampaignStatus @default(RASCUNHO)
   audience     Json?
@@ -832,6 +836,60 @@ model MarketingCampaign {
   updatedAt    DateTime                @updatedAt
 
   @@index([status])
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+/**
+ * Cupom de desconto aplicável no agendamento público.
+ * PERCENT usa discountValue como % (com teto maxDiscount em R$);
+ * FIXED desconta discountValue em R$ (limitado ao valor da compra).
+ * maxUses null = ilimitado; @@unique([couponId, patientId]) em CouponUse
+ * garante 1 uso por paciente.
+ */
+model Coupon {
+  id            String       @id @default(cuid())
+  code          String       @unique // alfanumérico, sempre uppercase
+  description   String?      @db.Text
+  discountType  DiscountType
+  discountValue Decimal      @db.Decimal(10, 2) // % (PERCENT) ou R$ (FIXED)
+  minValue      Decimal?     @db.Decimal(10, 2) // compra mínima em R$
+  maxDiscount   Decimal?     @db.Decimal(10, 2) // teto em R$ para PERCENT
+  validFrom     DateTime?
+  validUntil    DateTime?
+  maxUses       Int? // null = ilimitado
+  usedCount     Int          @default(0)
+  enabled       Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  uses          CouponUse[]
+  campaigns     MarketingCampaign[]
+
+  @@index([enabled])
+}
+
+/**
+ * Registro de uso de cupom (1 linha por cupom+paciente).
+ * Criado dentro da transação do agendamento para proteger maxUses e o
+ * reuso contra corridas.
+ */
+model CouponUse {
+  id            String      @id @default(cuid())
+  couponId      String
+  coupon        Coupon      @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  patientId     String
+  patient       Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  attendanceId  String?
+  attendance    Attendance? @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  originalValue Decimal     @db.Decimal(10, 2)
+  discountValue Decimal     @db.Decimal(10, 2)
+  createdAt     DateTime    @default(now())
+
+  @@unique([couponId, patientId])
+  @@index([patientId])
 }
 
 // Trava simples de concorrência do cron: uma linha por job com início/fim.

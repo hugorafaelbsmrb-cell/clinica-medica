@@ -11,6 +11,7 @@
  * - cancelarConsultaPublica: cancelamento pelo link enviado na confirmação.
  */
 import { z } from "zod"
+import type { Attendance, Coupon } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { groupSlotsByDay } from "@/lib/agenda/slots"
 import { getAvailableSlots, isSlotFree } from "@/lib/agenda/service"
@@ -18,6 +19,7 @@ import { queueAppointmentConfirmation } from "@/lib/whatsapp/message-service"
 import { queuePaymentLinkMessage } from "@/lib/whatsapp/flow-automations"
 import { getAppointmentSettings } from "@/lib/agenda/service"
 import { createCharge, payChargeWithCard, replacePaymentMethod, simulatePaymentPaid } from "@/lib/payments/router"
+import { round2, validateCouponFor } from "@/lib/payments/coupons"
 import { getClientIp } from "@/lib/payments/ip"
 import { paymentPageUrl } from "@/lib/payments/url"
 import { cancelPendingPaymentAndEntry } from "@/lib/payments/cancellation"
@@ -102,6 +104,60 @@ export async function lookupPatientByCpf(cpf: string): Promise<LookupCpfResult> 
     patientId: patient.id,
     name: patient.name.split(" ")[0],
     lgpdConsent: patient.lgpdConsent,
+  }
+}
+
+export type CouponCheckoutResult = {
+  ok: boolean
+  message: string
+  /** Código normalizado (uppercase) quando o cupom existe. */
+  code?: string
+  discount: number
+  finalPrice: number
+}
+
+/**
+ * Validação pública de cupom no checkout (sem sessão): o wizard chama ao
+ * clicar em "Aplicar" e exibe desconto + preço final. A aplicação real
+ * acontece só no agendarPublico (fonte da verdade, com patientId).
+ */
+export async function validateCouponForCheckout(
+  code: string,
+  price: number
+): Promise<CouponCheckoutResult> {
+  const normalized = (code ?? "").trim().toUpperCase()
+  if (!normalized) {
+    return {
+      ok: false,
+      message: "Informe o código do cupom.",
+      discount: 0,
+      finalPrice: price,
+    }
+  }
+  if (!(price > 0)) {
+    return {
+      ok: false,
+      message: "O valor da consulta ainda não está definido para aplicar o cupom.",
+      discount: 0,
+      finalPrice: price,
+    }
+  }
+  const coupon = await prisma.coupon.findUnique({ where: { code: normalized } })
+  if (!coupon) {
+    return {
+      ok: false,
+      message: "Cupom não encontrado. Confira o código digitado.",
+      discount: 0,
+      finalPrice: price,
+    }
+  }
+  const validation = await validateCouponFor(coupon, price)
+  return {
+    ok: validation.ok,
+    message: validation.message,
+    code: coupon.code,
+    discount: validation.discount,
+    finalPrice: validation.finalPrice,
   }
 }
 
@@ -326,6 +382,13 @@ const agendarSchema = z.object({
       (value) => value.length === 0 || isValidCpf(value),
       "Este CPF não é válido — confira os números digitados"
     ),
+  /** Cupom de desconto aplicado no checkout — revalidado no servidor. */
+  couponCode: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .max(30, "Código de cupom inválido")
+    .default(""),
 })
 
 export type AgendarState = {
@@ -470,9 +533,29 @@ export async function agendarPublico(
         ? paymentSettings.consultaPrecoTeleconsulta
         : paymentSettings.consultaPrecoPresencial
   }
+  // Cupom de desconto: o servidor é a fonte da verdade — revalida tudo
+  // (validade, usos, mínimo e reuso pelo paciente) antes de aplicar.
+  let coupon: Coupon | null = null
+  let couponDiscount = 0
+  if (parsed.data.couponCode) {
+    coupon = await prisma.coupon.findUnique({
+      where: { code: parsed.data.couponCode },
+    })
+    if (!coupon) {
+      return { success: false, message: "Cupom não encontrado. Confira o código." }
+    }
+    const validation = await validateCouponFor(coupon, price, patientId)
+    if (!validation.ok) {
+      return { success: false, message: validation.message }
+    }
+    couponDiscount = validation.discount
+  }
+
   // Com dinheiro não há cobrança antecipada: o valor fica registrado no
   // atendimento para recebimento no ato (o médico confirma depois).
-  const cobrar = price > 0 && !isCash
+  // Cupom zerando o valor dispensa cobrança: confirma direto (AGENDADO).
+  const finalPrice = round2(price - couponDiscount)
+  const cobrar = finalPrice > 0 && !isCash
 
   // O gateway exige CPF válido do cliente/titular para gerar a cobrança:
   // vale o do cadastro ou, em branco, o informado agora na confirmação.
@@ -526,7 +609,9 @@ export async function agendarPublico(
       }
     }
 
-    const attendance = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction<
+      { ok: true; attendance: Attendance } | { ok: false; error: string }
+    >(async (tx) => {
       // Proteção contra corrida: re-checagem dentro da transação.
       // Com médico escolhido, só conflita com horários dele ou sem médico
       // (legado); sem médico, qualquer ocupação no horário conflita.
@@ -537,7 +622,12 @@ export async function agendarPublico(
           ...(doctorId ? { OR: [{ doctorId }, { doctorId: null }] } : {}),
         },
       })
-      if (conflict) return null
+      if (conflict) {
+        return {
+          ok: false,
+          error: "Este horário acabou de ser preenchido. Escolha outro horário, por favor.",
+        }
+      }
 
       const created = await tx.attendance.create({
         data: {
@@ -555,7 +645,7 @@ export async function agendarPublico(
           pricingZone: domiciliarZone,
           // Dinheiro: valor cobrado no ato do atendimento. Online: o valor
           // fica no lançamento financeiro do webhook (value permanece 0).
-          value: isCash ? price : 0,
+          value: isCash ? finalPrice : 0,
           paymentMethod: isCash ? "DINHEIRO" : null,
           teleconsentAcceptedAt:
             typeInput === "TELECONSULTA" ? new Date() : null,
@@ -595,6 +685,42 @@ export async function agendarPublico(
         })
       }
 
+      // Cupom: registra o uso e incrementa usedCount dentro da transação.
+      // O updateMany condicional protege maxUses contra corrida (só uma
+      // transação consegue o incremento quando o limite é atingido) e o
+      // unique (couponId, patientId) bloqueia reuso pelo mesmo paciente.
+      if (coupon) {
+        const alreadyUsed = await tx.couponUse.findUnique({
+          where: { couponId_patientId: { couponId: coupon.id, patientId } },
+          select: { id: true },
+        })
+        if (alreadyUsed) {
+          return { ok: false, error: "Este cupom já foi utilizado por você." }
+        }
+        const bumped = await tx.coupon.updateMany({
+          where: {
+            id: coupon.id,
+            enabled: true,
+            ...(coupon.maxUses !== null
+              ? { usedCount: { lt: coupon.maxUses } }
+              : {}),
+          },
+          data: { usedCount: { increment: 1 } },
+        })
+        if (bumped.count !== 1) {
+          return { ok: false, error: "Este cupom não está mais disponível." }
+        }
+        await tx.couponUse.create({
+          data: {
+            couponId: coupon.id,
+            patientId,
+            attendanceId: created.id,
+            originalValue: price,
+            discountValue: couponDiscount,
+          },
+        })
+      }
+
       await tx.auditLog.create({
         data: {
           action: "CREATE",
@@ -611,20 +737,20 @@ export async function agendarPublico(
               : cobrar
                 ? "pagamento antecipado"
                 : "sem cobrança",
+            cupom: coupon
+              ? { codigo: coupon.code, desconto: couponDiscount }
+              : null,
           },
         },
       })
 
-      return created
+      return { ok: true, attendance: created }
     })
 
-    if (!attendance) {
-      return {
-        success: false,
-        message:
-          "Este horário acabou de ser preenchido. Escolha outro horário, por favor.",
-      }
+    if (!result.ok) {
+      return { success: false, message: result.error }
     }
+    const attendance = result.attendance
 
     // Com cobrança: gera o pagamento no gateway e devolve o link/QR para
     // o wizard exibir. A confirmação da consulta sai só quando pagar.
@@ -642,9 +768,9 @@ export async function agendarPublico(
                 : "CONSULTA_PRESENCIAL",
           description:
             typeInput === "DOMICILIAR" && domiciliarZone === "FORA"
-              ? `Consulta domiciliar (fora do raio urbano) — ${patient.name}`
-              : `Consulta — ${patient.name}`,
-          value: price,
+              ? `Consulta domiciliar (fora do raio urbano) — ${patient.name}${coupon ? ` (cupom ${coupon.code})` : ""}`
+              : `Consulta — ${patient.name}${coupon ? ` (cupom ${coupon.code})` : ""}`,
+          value: finalPrice,
           dueDate: new Date(),
           status: "PENDENTE",
           attendanceId: attendance.id,
@@ -653,7 +779,7 @@ export async function agendarPublico(
 
       const charge = await createCharge({
         method,
-        amountCents: Math.round(price * 100),
+        amountCents: Math.round(finalPrice * 100),
         description: `Consulta — ${patient.name}`,
         customerName: patient.name,
         customerCpf: effectiveCpf ?? undefined,
@@ -686,7 +812,7 @@ export async function agendarPublico(
           // Sempre a página de pagamento do próprio sistema (transparente),
           // em vez do checkout hospedado do gateway.
           paymentUrl: charge.paymentId ? paymentPageUrl(charge.paymentId) : null,
-          amount: price,
+          amount: finalPrice,
         })
       }
 
@@ -701,7 +827,7 @@ export async function agendarPublico(
           attendanceId: attendance.id,
           token: attendance.cancelToken ?? "",
           method,
-          amount: price,
+          amount: finalPrice,
           checkoutUrl: charge.checkoutUrl ?? null,
           pixCopiaCola: charge.pixCopiaCola ?? null,
           pixQrCodeUrl: charge.pixQrCodeUrl ?? null,

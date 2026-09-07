@@ -42,11 +42,18 @@ export type CampaignInitialData = {
   body: string
   linkUrl: string
   imageDataUrl: string
+  couponId: string
   scheduledAt: string
   audienceKind: string
   audienceDoctorId: string
   audienceDays: string
   status?: string
+}
+
+export type CouponOption = {
+  id: string
+  code: string
+  enabled: boolean
 }
 
 /** Data/hora local no formato do input datetime-local (Brasília). */
@@ -60,9 +67,11 @@ function toLocalInput(date: Date): string {
 export function CampaignForm({
   initial,
   doctors,
+  coupons,
 }: {
   initial?: CampaignInitialData
   doctors: DoctorOption[]
+  coupons: CouponOption[]
 }) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -72,6 +81,7 @@ export function CampaignForm({
   const [body, setBody] = useState(initial?.body ?? "")
   const [linkUrl, setLinkUrl] = useState(initial?.linkUrl ?? "")
   const [image, setImage] = useState(initial?.imageDataUrl ?? "")
+  const [couponId, setCouponId] = useState(initial?.couponId ?? "")
   const [scheduledAt, setScheduledAt] = useState(
     initial?.scheduledAt || toLocalInput(new Date(Date.now() + 60 * 60 * 1000))
   )
@@ -218,9 +228,7 @@ export function CampaignForm({
             />
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
-                Use {"{{nome}}"} para o primeiro nome do paciente e{" "}
-                {"{{clinica}}"} para o nome da clínica — cada mensagem
-                sai personalizada.
+                Use {"{{nome}}"} para o primeiro nome do paciente, {"{{clinica}}"} para o nome da clínica e {"{{cupom}}"} para o código do cupom vinculado — cada mensagem sai personalizada.
               </p>
               <Button
                 type="button"
@@ -301,7 +309,30 @@ export function CampaignForm({
               type="url"
             />
             <p className="text-xs text-muted-foreground">
-              O link entra no final da mensagem.
+              O link entra no final da mensagem. Com cupom vinculado, ganha
+              ?cupom=CODE automaticamente no envio.
+            </p>
+          </Field>
+
+          <Field>
+            <FieldLabel>Cupom de desconto (opcional)</FieldLabel>
+            <select
+              name="couponId"
+              value={couponId}
+              onChange={(e) => setCouponId(e.target.value)}
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+            >
+              <option value="">Nenhum</option>
+              {coupons.map((coupon) => (
+                <option key={coupon.id} value={coupon.id}>
+                  {coupon.code}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              O código entra no corpo via {"{{cupom}}"} e o link da campanha
+              leva o desconto direto para o checkout (?cupom=CODE). Só cupons
+              ativos aparecem aqui.
             </p>
           </Field>
 

@@ -94,6 +94,12 @@ export async function countMarketingAudience(
   })
 }
 
+/** Anexa ?cupom=CODE ao link preservando query existente. */
+function withCouponParam(url: string, code: string): string {
+  const separator = url.includes("?") ? "&" : "?"
+  return `${url}${separator}cupom=${encodeURIComponent(code)}`
+}
+
 /**
  * Dispara campanhas AGENDADA vencidas: calcula o total do público uma vez,
  * marca ENVIANDO e cria as mensagens em lotes de MARKETING_BATCH_SIZE.
@@ -113,6 +119,15 @@ export async function queueDueMarketingCampaigns(
   for (const campaign of due) {
     const audience = normalizeAudience(campaign.audience)
     const isLeads = audience.kind === "LEADS"
+
+    // Cupom vinculado (opcional): código no corpo ({{cupom}}) e no link
+    // (?cupom=CODE). Só vale se o cupom continuar ativo no envio.
+    const coupon = campaign.couponId
+      ? await prisma.coupon.findFirst({
+          where: { id: campaign.couponId, enabled: true },
+          select: { code: true },
+        })
+      : null
 
     // Conta o público uma única vez, no primeiro ciclo da campanha.
     let total = audience.total
@@ -148,9 +163,13 @@ export async function queueDueMarketingCampaigns(
         let content = renderTemplate(campaign.body, {
           nome: firstName || "cliente",
           clinica: clinic.name,
+          cupom: coupon?.code ?? "",
         })
-        if (campaign.linkUrl) {
-          content = `${content}\n\n${campaign.linkUrl}`
+        const linkUrl = campaign.linkUrl
+        const link =
+          coupon && linkUrl ? withCouponParam(linkUrl, coupon.code) : linkUrl
+        if (link) {
+          content = `${content}\n\n${link}`
         }
 
         await prisma.message.create({
@@ -182,9 +201,13 @@ export async function queueDueMarketingCampaigns(
         let content = renderTemplate(campaign.body, {
           nome: patient.name.split(" ")[0],
           clinica: clinic.name,
+          cupom: coupon?.code ?? "",
         })
-        if (campaign.linkUrl) {
-          content = `${content}\n\n${campaign.linkUrl}`
+        const linkUrl = campaign.linkUrl
+        const link =
+          coupon && linkUrl ? withCouponParam(linkUrl, coupon.code) : linkUrl
+        if (link) {
+          content = `${content}\n\n${link}`
         }
 
         await prisma.message.create({

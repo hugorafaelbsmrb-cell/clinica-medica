@@ -55,6 +55,7 @@ import {
   reverseGeocodeCoordinates,
   simularPagamentoAgendamento,
   trocarMetodoPagamentoAgendamento,
+  validateCouponForCheckout,
   verificarPagamentoAgendamento,
   type AgendarState,
   type ConsultasPublicasResult,
@@ -184,8 +185,11 @@ type ExistingPatient = {
  */
 export function CadastroWizard({
   initialData,
+  initialCouponCode,
 }: {
   initialData?: { name: string; phone: string } | null
+  /** Código de cupom vindo do link (?cupom=CODE) — pré-preenche o checkout. */
+  initialCouponCode?: string
 }) {
   // Visitante vindo do link do bot: nome e telefone chegam preenchidos e
   // o CPF fica de fora do cadastro (pedido só no pagamento online).
@@ -279,6 +283,16 @@ export function CadastroWizard({
   >(null)
   const [paymentDate, setPaymentDate] = useState("")
   const paymentPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Cupom de desconto do checkout (pré-preenchido via ?cupom=CODE)
+  const [couponInput, setCouponInput] = useState(initialCouponCode ?? "")
+  const [couponApplied, setCouponApplied] = useState<{
+    code: string
+    discount: number
+    finalPrice: number
+  } | null>(null)
+  const [couponError, setCouponError] = useState("")
+  const [couponPending, startCoupon] = useTransition()
 
   // Cartão de crédito transparente (checkout direto no sistema)
   const [cardHolder, setCardHolder] = useState("")
@@ -724,15 +738,21 @@ export function CadastroWizard({
       )
       return
     }
-    if (tipoConsultaPreco > 0 && metodosDisponiveis.length === 0) {
+    if (precoFinal > 0 && metodosDisponiveis.length === 0) {
       setAgendarError(
         "Nenhuma forma de pagamento disponível para esta consulta. Fale com a clínica, por favor."
       )
       return
     }
-    if (tipoConsultaPreco > 0 && metodoPagamento !== "DINHEIRO" && !cpfValido) {
+    if (precoFinal > 0 && metodoPagamento !== "DINHEIRO" && !cpfValido) {
       setAgendarError(
         "Para concluir o agendamento, informe seu CPF — ele é necessário para gerar o pagamento."
+      )
+      return
+    }
+    if (tipoConsultaPreco > 0 && couponInput.trim() && !couponApplied) {
+      setAgendarError(
+        "Clique em 'Aplicar' para validar o cupom ou limpe o campo."
       )
       return
     }
@@ -746,6 +766,7 @@ export function CadastroWizard({
         type: tipoConsulta || "PRESENCIAL",
         doctorId: selectedDoctorId || undefined,
         cpf: cpfValido ? cpfDigits : "",
+        couponCode: couponApplied?.code ?? "",
         lgpdConsent:
           existingPatient && !existingPatient.lgpdConsent ? lgpdAgend : true,
         teleconsent: tipoConsulta === "TELECONSULTA" ? teleconsent : true,
@@ -959,8 +980,65 @@ export function CadastroWizard({
   const tipoConsultaInfo = agenda?.modalities.find((m) => m.id === tipoConsulta)
   const tipoConsultaLabel = tipoConsultaInfo?.label ?? ""
   const tipoConsultaPreco = tipoConsultaInfo?.price ?? 0
+  // Preço efetivo da confirmação: cupom aplicado reduz o valor (0 = sem cobrança).
+  const precoFinal = couponApplied?.finalPrice ?? tipoConsultaPreco
   const medicoNome =
     agenda?.doctors.find((d) => d.id === selectedDoctorId)?.name ?? ""
+
+  // Valida o cupom no servidor (sem sessão) e guarda o desconto para o
+  // resumo; a aplicação real acontece só no agendarPublico.
+  function aplicarCupom() {
+    setCouponError("")
+    const code = couponInput.trim().toUpperCase()
+    if (couponApplied && couponApplied.code === code) {
+      setCouponApplied(null)
+      return
+    }
+    if (!code) {
+      setCouponApplied(null)
+      return
+    }
+    startCoupon(async () => {
+      const result = await validateCouponForCheckout(code, tipoConsultaPreco)
+      if (result.ok) {
+        setCouponApplied({
+          code: result.code ?? code,
+          discount: result.discount,
+          finalPrice: result.finalPrice,
+        })
+        toast.success(result.message)
+      } else {
+        setCouponApplied(null)
+        setCouponError(result.message)
+      }
+    })
+  }
+
+  // Se o preço da consulta mudar (outro tipo escolhido), o cupom aplicado é
+  // revalidado contra o novo valor — o desconto exibido nunca fica defasado.
+  useEffect(() => {
+    if (!couponApplied) return
+    let cancelled = false
+    validateCouponForCheckout(couponApplied.code, tipoConsultaPreco).then(
+      (result) => {
+        if (cancelled) return
+        if (result.ok) {
+          setCouponApplied({
+            code: result.code ?? couponApplied.code,
+            discount: result.discount,
+            finalPrice: result.finalPrice,
+          })
+        } else {
+          setCouponApplied(null)
+          setCouponError(result.message)
+        }
+      }
+    )
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipoConsultaPreco])
 
   // CPF digitado no passo 0 (ou na confirmação). Obrigatório para gerar o
   // pagamento online — o gateway exige CPF válido do cliente/titular.
@@ -968,7 +1046,7 @@ export function CadastroWizard({
   const cpfDigits = cpf.replace(/\D/g, "")
   const cpfValido = cpfDigits.length === 11 && isValidCpf(cpfDigits)
   const exigeCpfPagamento =
-    tipoConsultaPreco > 0 && metodoPagamento !== "DINHEIRO" && !cpfValido
+    precoFinal > 0 && metodoPagamento !== "DINHEIRO" && !cpfValido
 
   // Meios de pagamento liberados para o cliente (admin + gateways).
   // Dinheiro só vale para presencial/domiciliar (pago no atendimento).
@@ -2268,7 +2346,33 @@ export function CadastroWizard({
                     <div className="flex justify-between gap-4 border-t border-border pt-3 text-base">
                       <span className="text-muted-foreground">Valor</span>
                       <span className="font-medium">
-                        R${tipoConsultaPreco.toLocaleString("pt-BR", {
+                        {couponApplied ? (
+                          <>
+                            <s className="font-normal text-muted-foreground">
+                              R$
+                              {tipoConsultaPreco.toLocaleString("pt-BR", {
+                                minimumFractionDigits: 2,
+                              })}
+                            </s>{" "}
+                            R$
+                            {precoFinal.toLocaleString("pt-BR", {
+                              minimumFractionDigits: 2,
+                            })}
+                          </>
+                        ) : (
+                          `R$${tipoConsultaPreco.toLocaleString("pt-BR", {
+                            minimumFractionDigits: 2,
+                          })}`
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  {couponApplied && (
+                    <div className="flex justify-between gap-4 text-sm font-medium text-green-600">
+                      <span>Cupom {couponApplied.code}</span>
+                      <span>
+                        -R$
+                        {couponApplied.discount.toLocaleString("pt-BR", {
                           minimumFractionDigits: 2,
                         })}
                       </span>
@@ -2277,6 +2381,56 @@ export function CadastroWizard({
                 </div>
 
                 {tipoConsultaPreco > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-base font-medium">Tem cupom de desconto?</p>
+                    <div className="flex gap-2">
+                      <Input
+                        id="checkout-cupom"
+                        value={couponInput}
+                        onChange={(event) => {
+                          setCouponInput(event.target.value.toUpperCase())
+                          setCouponError("")
+                          // Código alterado: o desconto anterior deixa de valer
+                          setCouponApplied(null)
+                        }}
+                        placeholder="CÓDIGO"
+                        className="h-12 uppercase"
+                        autoComplete="off"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={aplicarCupom}
+                        disabled={couponPending || !couponInput.trim()}
+                        className="h-12 shrink-0 px-5"
+                      >
+                        {couponPending
+                          ? "Validando…"
+                          : couponApplied
+                            ? "Remover"
+                            : "Aplicar"}
+                      </Button>
+                    </div>
+                    {couponError && (
+                      <p className="text-sm font-medium text-red-600">
+                        {couponError}
+                      </p>
+                    )}
+                    {couponApplied && (
+                      <p className="flex items-center gap-2 text-sm font-medium text-green-600">
+                        <CheckCircle2 className="h-4 w-4" />
+                        {couponApplied.discount > 0
+                          ? `Cupom aplicado: você economiza R$${couponApplied.discount.toLocaleString(
+                              "pt-BR",
+                              { minimumFractionDigits: 2 }
+                            )}`
+                          : "Cupom aplicado: consulta sem custo"}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {precoFinal > 0 && (
                   <div className="flex flex-col gap-2">
                     <p className="text-base font-medium">Como prefere pagar?</p>
                     <div className="grid grid-cols-2 gap-3">
@@ -2491,8 +2645,7 @@ export function CadastroWizard({
                       <Loader2 className="h-5 w-5 animate-spin" />
                       Confirmando...
                     </>
-                  ) : tipoConsultaPreco > 0 &&
-                    metodoPagamento !== "DINHEIRO" ? (
+                  ) : precoFinal > 0 && metodoPagamento !== "DINHEIRO" ? (
                     "Reservar horário e pagar"
                   ) : (
                     "Confirmar consulta"
