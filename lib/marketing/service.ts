@@ -109,8 +109,15 @@ export async function queueDueMarketingCampaigns(
   now = new Date()
 ): Promise<{ started: number; queued: number }> {
   const clinic = await getClinicSettings()
+  // Campanhas AGENDADA vencidas iniciam; campanhas ENVIANDO continuam o
+  // fan-out nos próximos ciclos (50 por vez) até esgotar o público.
   const due = await prisma.marketingCampaign.findMany({
-    where: { status: "AGENDADA", scheduledFor: { lte: now } },
+    where: {
+      OR: [
+        { status: "AGENDADA", scheduledFor: { lte: now } },
+        { status: "ENVIANDO" },
+      ],
+    },
     orderBy: { scheduledFor: "asc" },
     take: 3, // no máximo 3 campanhas iniciam por ciclo
   })
@@ -119,6 +126,10 @@ export async function queueDueMarketingCampaigns(
   for (const campaign of due) {
     const audience = normalizeAudience(campaign.audience)
     const isLeads = audience.kind === "LEADS"
+
+    // Fan-out já concluído: nada a enfileirar — a conclusão da campanha
+    // fica por conta do worker, quando a fila esvaziar.
+    if (audience.fanoutDone) continue
 
     // Cupom vinculado (opcional): código no corpo ({{cupom}}) e no link
     // (?cupom=CODE). Só vale se o cupom continuar ativo no envio.
