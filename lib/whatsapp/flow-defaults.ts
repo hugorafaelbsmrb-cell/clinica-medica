@@ -14,19 +14,22 @@ import type { FlowEdge, FlowNode, FlowRecord } from "./flow-types"
 export const BOT_DEFAULT_TEXTS = {
   boasVindas:
     "Olá! 👋 Sou o assistente virtual da {{clinica}}. Como posso ajudar?",
-  pedirNome: [
+  // Portão de preços: primeiro contato mostra os valores e pede a escolha
+  // por botões ({{precos}} vem das modalidades habilitadas da clínica).
+  portao: [
     "Olá! 👋 Seja bem-vindo(a) à {{clinica}}!",
-    "Antes de começar, como posso te chamar?",
+    "",
+    "{{precos}}",
+    "",
+    "Qual consulta você prefere? Escolha uma das opções abaixo:",
   ].join("\n"),
-  portao:
-    "Obrigado, {{nome}}! Você já é paciente ou é o primeiro atendimento?",
-  primeiraConsulta: [
-    "Que ótimo! Para agendar sua primeira consulta, é bem rápido:",
+  pedirNome: [
+    "Perfeito! Para o agendamento, me diz seu nome completo, por favor.",
+  ].join("\n"),
+  msgAgenda: [
+    "Perfeito, {{nome}}! Vou te enviar a agenda para você escolher o melhor dia e horário da sua consulta:",
     "",
-    "1. Acesse: {{link_lead}}",
-    "2. Seu nome e telefone já chegam preenchidos — complete o restante.",
-    "",
-    'Se preferir, escreva "atendente" para falar com a nossa equipe.',
+    "{{link_cadastro}}",
   ].join("\n"),
   agendar: [
     "Para agendar sua consulta, é simples:",
@@ -222,12 +225,12 @@ export function buildBotFlow(opts: BotFlowOptions): FlowRecord {
 
   const nodes: FlowNode[] = [
     { id: "gatilho", kind: "GATILHO", gatilho: "mensagem_recebida", position: { x: 0, y: 300 } },
-    // Portão de identificação: quem ainda não é paciente informa o nome e
-    // escolhe entre "já sou paciente" e "primeira consulta" antes do menu.
-    { id: "pedir_nome", kind: "PEDIR_NOME", content: BOT_DEFAULT_TEXTS.pedirNome, position: { x: 360, y: 300 } },
+    // Portão de preços: primeiro contato de quem ainda não é paciente —
+    // mostra os valores ({{precos}}) e pede a escolha por botões. Depois
+    // da escolha, pede o nome completo e envia o link da agenda.
     { id: "portao", kind: "PORTAO", content: BOT_DEFAULT_TEXTS.portao, position: { x: 720, y: 300 } },
-    m("msg_primeira_consulta", 1440, 460, BOT_DEFAULT_TEXTS.primeiraConsulta),
-    acao("acao_cpf_portao", "PEDIR_CPF", 1440, 140),
+    { id: "pedir_nome", kind: "PEDIR_NOME", content: BOT_DEFAULT_TEXTS.pedirNome, position: { x: 1440, y: 460 } },
+    m("msg_agenda", 1800, 460, BOT_DEFAULT_TEXTS.msgAgenda),
     m("menu", 1800, 300, boasVindas, { showOptions: true }),
     m("resp_agendar", 2520, 60, agendar),
     m("resp_atendente", 2520, 540, atendente),
@@ -254,9 +257,9 @@ export function buildBotFlow(opts: BotFlowOptions): FlowRecord {
   }
 
   const ramos: FlowNode[] = [
-    // Portão: botões de resposta rápida + fallback para o menu.
-    ramo("ramo_g_paciente", "Já sou paciente", ["ja sou paciente", "sou paciente"], 1, 1080, 140),
-    ramo("ramo_g_consulta", "Primeira consulta", ["primeira consulta", "quero agendar", "quero marcar"], 2, 1080, 460),
+    // Portão de preços: botões de resposta rápida + fallback para o menu.
+    ramo("ramo_g_domiciliar", "Consulta domiciliar", ["domiciliar", "casa", "em casa", "visita"], 1, 1080, 140),
+    ramo("ramo_g_tele", "Teleconsulta", ["teleconsulta", "tele", "video", "online", "remoto", "virtual"], 2, 1080, 460),
     ramo("ramo_g_fallback", "Qualquer outra mensagem", [], null, 1080, 780),
     ramo("ramo_op1", "Agendar uma consulta 📅", [], 1, 2160, 60),
     ramo("ramo_op2", "Ver minha consulta 🔎", [], 2, 2160, 180),
@@ -282,13 +285,13 @@ export function buildBotFlow(opts: BotFlowOptions): FlowRecord {
   nodes.push(...ramos)
 
   const edges: FlowEdge[] = [
-    edge("e_gatilho", "gatilho", "pedir_nome"),
-    edge("e_g_nome", "pedir_nome", "portao"),
-    edge("e_g_paciente", "portao", "ramo_g_paciente"),
-    edge("e_g_consulta", "portao", "ramo_g_consulta"),
+    edge("e_gatilho", "gatilho", "portao"),
+    edge("e_g_dom", "portao", "ramo_g_domiciliar"),
+    edge("e_g_tele", "portao", "ramo_g_tele"),
     edge("e_g_fallback", "portao", "ramo_g_fallback"),
-    edge("e_g_cpf", "ramo_g_paciente", "acao_cpf_portao"),
-    edge("e_g_msg", "ramo_g_consulta", "msg_primeira_consulta"),
+    edge("e_g_dom_nome", "ramo_g_domiciliar", "pedir_nome"),
+    edge("e_g_tele_nome", "ramo_g_tele", "pedir_nome"),
+    edge("e_nome_agenda", "pedir_nome", "msg_agenda"),
     edge("e_g_menu", "ramo_g_fallback", "menu"),
     ...ramos.slice(3).map((r, i) => edge(`e_menu_${i}`, "menu", r.id)),
     edge("e_op1", "ramo_op1", "resp_agendar"),

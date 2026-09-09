@@ -16,16 +16,17 @@ export const dynamic = "force-dynamic"
 /**
  * Página pública de pré-cadastro (autoatendimento).
  * O link pode ser enviado ao paciente no primeiro contato; vindo do bot,
- * `?lead=` traz o nome e o telefone do contato já preenchidos.
+ * `?lead=` traz o nome e o telefone do contato já preenchidos e `?tipo=`
+ * pré-seleciona a modalidade escolhida nos botões (DOMICILIAR/TELECONSULTA).
  */
 export default async function CadastroPage({
   searchParams,
 }: {
-  searchParams: Promise<{ lead?: string; cupom?: string }>
+  searchParams: Promise<{ lead?: string; cupom?: string; tipo?: string }>
 }) {
   const clinic = await getClinicSettings()
 
-  const { lead, cupom } = await searchParams
+  const { lead, cupom, tipo } = await searchParams
   const contact = lead
     ? await prisma.whatsAppContact.findUnique({
         where: { id: lead },
@@ -39,6 +40,15 @@ export default async function CadastroPage({
           phone: contact.phone.replace(/^55/, ""),
         }
       : null
+
+  // Modalidade vinda do botão do bot: só aceita os ids usados no wizard.
+  const MODALITY_IDS = ["DOMICILIAR", "TELECONSULTA", "PRESENCIAL"] as const
+  const tipoUpper = tipo?.trim().toUpperCase() ?? ""
+  const initialModality = MODALITY_IDS.includes(
+    tipoUpper as (typeof MODALITY_IDS)[number]
+  )
+    ? (tipoUpper as (typeof MODALITY_IDS)[number])
+    : undefined
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-muted/40 p-4">
@@ -62,6 +72,7 @@ export default async function CadastroPage({
       <CadastroWizard
         initialData={initialData}
         initialCouponCode={cupom?.trim().toUpperCase().slice(0, 30) || undefined}
+        initialModality={initialModality}
       />
 
       <p className="mt-6 max-w-md text-center text-sm text-muted-foreground">

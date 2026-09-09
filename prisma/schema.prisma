@@ -472,7 +472,10 @@ model PushSubscription {
 // no WhatsApp (ex.: aguardando o CPF para consultar agendamentos).
 model BotSession {
   phone     String   @id // número normalizado com DDI (ex.: 5511999990000)
-  state     String   @default("MENU") // MENU | AGUARDANDO_CPF
+  state     String   @default("MENU") // MENU | AGUARDANDO_CPF | AGUARDANDO_NOME | AGUARDANDO_TIPO
+  // Modalidade escolhida no portão de preços (ex.: DOMICILIAR) enquanto a
+  // conversa segue para o pedido de nome — o link da agenda sai com &tipo=.
+  modality  String?
   updatedAt DateTime @updatedAt
 }
 

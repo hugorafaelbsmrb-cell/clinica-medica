@@ -186,10 +186,16 @@ type ExistingPatient = {
 export function CadastroWizard({
   initialData,
   initialCouponCode,
+  initialModality,
 }: {
   initialData?: { name: string; phone: string } | null
   /** Código de cupom vindo do link (?cupom=CODE) — pré-preenche o checkout. */
   initialCouponCode?: string
+  /**
+   * Modalidade escolhida nos botões do bot (?tipo=) — pré-seleciona e
+   * pula o passo de escolha quando a clínica a oferece.
+   */
+  initialModality?: "PRESENCIAL" | "DOMICILIAR" | "TELECONSULTA"
 }) {
   // Visitante vindo do link do bot: nome e telefone chegam preenchidos e
   // o CPF fica de fora do cadastro (pedido só no pagamento online).
@@ -632,9 +638,18 @@ export function CadastroWizard({
     const doctors = meta.doctors
     let next = from + 1
     let doctorId = selectedDoctorId
-    if (next === 1 && modalities.length === 1) {
-      setTipoConsulta(modalities[0].id)
-      next = 2
+    if (next === 1) {
+      // Modalidade vinda do botão do bot: já vem escolhida — pula o passo.
+      if (
+        initialModality &&
+        modalities.some((m) => m.id === initialModality)
+      ) {
+        setTipoConsulta(initialModality)
+        next = 2
+      } else if (modalities.length === 1) {
+        setTipoConsulta(modalities[0].id)
+        next = 2
+      }
     }
     if (next === 2 && doctors.length <= 1) {
       if (doctors.length === 1) {

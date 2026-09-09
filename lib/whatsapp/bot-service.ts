@@ -7,6 +7,7 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
+import { getPaymentSettings } from "@/lib/payments/settings"
 import { notifyAttendantNeeded } from "@/lib/notifications"
 import {
   getWhatsAppProvider,
@@ -15,7 +16,7 @@ import {
   type WhatsAppButton,
 } from "./provider"
 import { sendTextSmart, extractLinks, downloadImageAsDataUrl } from "./message-service"
-import { normalizeText, runBotFlow, type BotState } from "./flow-engine"
+import { normalizeText, runBotFlow, type BotModality, type BotState } from "./flow-engine"
 import { buildBotFlow } from "./flow-defaults"
 import {
   menuNodeId,
@@ -36,11 +37,15 @@ const VALID_STATES: BotState[] = [
 ]
 
 /** Grava o estado da sessão do bot (upsert por telefone). */
-async function saveBotSession(phone: string, state: BotState): Promise<void> {
+async function saveBotSession(
+  phone: string,
+  state: BotState,
+  modality: string | null = null
+): Promise<void> {
   await prisma.botSession.upsert({
     where: { phone },
-    update: { state },
-    create: { phone, state },
+    update: { state, modality },
+    create: { phone, state, modality },
   })
 }
 
@@ -130,11 +135,15 @@ export async function handleBotMessage(
 
   // Estado da sessão (ignora sessões expiradas)
   const session = await prisma.botSession.findUnique({ where: { phone } })
+  const sessionValid =
+    session && Date.now() - session.updatedAt.getTime() <= SESSION_TTL_MS
   const state: BotState =
-    session && Date.now() - session.updatedAt.getTime() <= SESSION_TTL_MS &&
-    VALID_STATES.includes(session.state as BotState)
+    sessionValid && VALID_STATES.includes(session.state as BotState)
       ? (session.state as BotState)
       : "MENU"
+  // Modalidade escolhida na mensagem anterior (link da agenda com &tipo=).
+  const sessionModality: string | null =
+    sessionValid && session.modality ? session.modality : null
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
 
@@ -157,7 +166,27 @@ export async function handleBotMessage(
 
   const flow = await loadBotFlow(clinic)
 
+  // Modalidades habilitadas com preço — alimentam {{precos}} e os botões
+  // de escolha do portão e da ação VALORES.
+  const paymentSettings = await getPaymentSettings()
+  const modalities: BotModality[] = []
+  if (clinic.consultaDomiciliarEnabled) {
+    modalities.push({
+      id: "DOMICILIAR",
+      label: "Consulta domiciliar",
+      price: paymentSettings.consultaPrecoDomiciliar,
+    })
+  }
+  if (clinic.consultaTeleconsultaEnabled) {
+    modalities.push({
+      id: "TELECONSULTA",
+      label: "Teleconsulta",
+      price: paymentSettings.consultaPrecoTeleconsulta,
+    })
+  }
+
   let leadLink: string | null = null
+  let ensuredLeadId: string | null = null
   let knownName = contact?.name?.trim() ?? ""
   if (!isPatient) {
     // Garante o contato para o link personalizado. O follow-up de silêncio
@@ -167,7 +196,10 @@ export async function handleBotMessage(
       update: {},
       create: { phone },
     })
-    leadLink = `${baseUrl}/cadastro?lead=${ensured.id}`
+    ensuredLeadId = ensured.id
+    leadLink = `${baseUrl}/cadastro?lead=${ensured.id}${
+      sessionModality ? `&tipo=${sessionModality}` : ""
+    }`
     knownName = ensured.name?.trim() ?? ""
     if (!knownName) {
       // Aproveita o nome informado no cadastro online: segue para o portão.
@@ -187,8 +219,8 @@ export async function handleBotMessage(
     }
   }
 
-  // Fluxo com portão: desconhecido sem nome começa no PEDIR_NOME; os
-  // demais (pacientes e contatos com nome) caem direto no menu.
+  // Fluxo com portão: desconhecido sem nome começa no portão de preços;
+  // os demais (pacientes e contatos com nome) caem direto no menu.
   const hasGateway = flow.nodes.some((n) => n.kind === "PEDIR_NOME")
   const startNodeId =
     hasGateway && !isPatient && !knownName
@@ -207,6 +239,7 @@ export async function handleBotMessage(
       baseUrl,
       firstName: knownName.split(" ")[0] || null,
       leadLink,
+      modalities,
     },
     flow,
     startNodeId
@@ -221,6 +254,11 @@ export async function handleBotMessage(
   }
 
   let reply = result.reply
+  // Modalidade escolhida agora (botão do portão): o link desta mesma
+  // resposta já sai com &tipo= (contato com nome não passa pelo nome).
+  if (result.chosenModality && ensuredLeadId) {
+    leadLink = `${baseUrl}/cadastro?lead=${ensuredLeadId}&tipo=${result.chosenModality}`
+  }
   // Lead (não paciente): todo link de cadastro vira o link personalizado
   // do contato — nome e telefone chegam preenchidos na página. O marcador
   // evita dupla personalização: {{link_lead}} já virou o link com ?lead=X
@@ -243,8 +281,12 @@ export async function handleBotMessage(
     )
   }
 
-  // Persiste o próximo estado da sessão
-  await saveBotSession(phone, result.nextState)
+  // Persiste o próximo estado da sessão. A modalidade escolhida no portão
+  // fica guardada até a próxima mensagem (o nome chega depois da escolha)
+  // e é limpa quando a conversa volta ao menu.
+  const nextModality =
+    result.nextState === "MENU" ? null : (result.chosenModality ?? null)
+  await saveBotSession(phone, result.nextState, nextModality)
 
   // Marca a mensagem no painel para a equipe dar atenção e avisa a
   // equipe pelo sino de notificações

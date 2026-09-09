@@ -27,6 +27,16 @@ export type BotState =
   | "AGUARDANDO_NOME"
   | "AGUARDANDO_TIPO"
 
+/** Modalidade de consulta escolhida pelo cliente no bot. */
+export type BotModalityId = "PRESENCIAL" | "DOMICILIAR" | "TELECONSULTA"
+
+/** Modalidade habilitada com preço — alimenta {{precos}} e os botões. */
+export type BotModality = {
+  id: BotModalityId
+  label: string
+  price: number
+}
+
 export type BotFlowContext = {
   clinicName: string
   address?: string | null
@@ -38,6 +48,11 @@ export type BotFlowContext = {
   firstName?: string | null
   /** Link de cadastro personalizado do lead (substitui {{link_lead}}). */
   leadLink?: string | null
+  /**
+   * Modalidades habilitadas da clínica com os preços — viram o texto de
+   * {{precos}} e os botões de escolha do portão e da ação VALORES.
+   */
+  modalities?: BotModality[]
 }
 
 export type BotFlowResult = {
@@ -53,6 +68,8 @@ export type BotFlowResult = {
   buttons?: WhatsAppButton[]
   /** Nome capturado pelo PEDIR_NOME: o serviço grava no contato. */
   capturedName?: string | null
+  /** Modalidade escolhida no portão — o serviço monta o link com &tipo=. */
+  chosenModality?: BotModalityId
 }
 
 const MENU_FOOTER =
@@ -65,7 +82,7 @@ const CPF_INCOMPLETO =
   'Este CPF está incompleto. O CPF tem 11 números — confira e envie de novo.\nPara voltar ao menu, escreva "menu".'
 
 const NOME_INVALIDO =
-  "Desculpa, não entendi. Me diz seu primeiro nome, por favor — só o nome."
+  "Desculpa, não entendi. Me diz seu nome completo, por favor."
 
 /** Palavras que escapam do pedido de nome direto para o motor. */
 const ATENDENTE_KEYWORDS = ["atendente", "humano", "secretaria", "recepcionista"]
@@ -128,13 +145,43 @@ function hasAny(text: string, keywords: string[]): boolean {
   return keywords.some((k) => text.includes(k))
 }
 
-/** Substitui as variáveis {{clinica}}, {{link_cadastro}}, {{link_lead}} e {{nome}}. */
+/** Emoji de cada modalidade na lista de preços do bot. */
+const MODALITY_EMOJI: Record<BotModalityId, string> = {
+  DOMICILIAR: "🏠",
+  TELECONSULTA: "💻",
+  PRESENCIAL: "🏥",
+}
+
+/** Lista de preços formatada em pt-BR (vira o texto de {{precos}}). */
+function formatPricesText(ctx: BotFlowContext): string {
+  const modalities = ctx.modalities ?? []
+  return modalities
+    .map(
+      (m) =>
+        `${MODALITY_EMOJI[m.id]} ${m.label}: ${m.price.toLocaleString("pt-BR", {
+          style: "currency",
+          currency: "BRL",
+        })}`
+    )
+    .join("\n")
+}
+
+/** Botões de escolha de modalidade (um por modalidade habilitada). */
+function choiceButtons(ctx: BotFlowContext): WhatsAppButton[] {
+  return (ctx.modalities ?? []).map((m) => ({
+    type: "REPLY",
+    label: m.label,
+  }))
+}
+
+/** Substitui as variáveis {{clinica}}, {{link_cadastro}}, {{link_lead}}, {{nome}} e {{precos}}. */
 function applyBotVariables(text: string, ctx: BotFlowContext): string {
   return text
     .replaceAll("{{clinica}}", ctx.clinicName)
     .replaceAll("{{link_cadastro}}", `${ctx.baseUrl}/cadastro`)
     .replaceAll("{{link_lead}}", ctx.leadLink ?? `${ctx.baseUrl}/cadastro`)
     .replaceAll("{{nome}}", ctx.firstName ?? "")
+    .replaceAll("{{precos}}", formatPricesText(ctx))
 }
 
 /** Nó RAMO (narrowing explícito do union). */
@@ -142,6 +189,17 @@ type RamoNode = Extract<FlowNode, { kind: "RAMO" }>
 
 function asRamo(node: FlowNode): RamoNode | null {
   return node.kind === "RAMO" ? node : null
+}
+
+/** Modalidade do ramo do portão, inferida pelas palavras-chave. */
+function modalityOfRamo(ramo: RamoNode): BotModalityId | undefined {
+  const kw = ramo.keywords.join(" ")
+  if (/domiciliar|casa|visita/.test(kw)) return "DOMICILIAR"
+  if (/teleconsulta|\btele\b|video|online|remoto|virtual/.test(kw)) {
+    return "TELECONSULTA"
+  }
+  if (/presencial/.test(kw)) return "PRESENCIAL"
+  return undefined
 }
 
 /** Opções numeradas dos RAMOs filhos de um nó (menu). */
@@ -175,7 +233,7 @@ function matchRamo(
   flow: FlowRecord,
   hubId: string,
   text: string
-): FlowNode | null {
+): RamoNode | null {
   const ramos = childrenOf(flow, hubId)
     .map(asRamo)
     .filter((n): n is RamoNode => n !== null)
@@ -237,11 +295,27 @@ function evaluateChain(
       result.nextState = "AGUARDANDO_TIPO"
       const content = applyBotVariables(node.content, ctx)
       if (content) parts.push(content)
-      result.buttons = gatewayButtons(flow, node.id)
+      // Botões derivados das modalidades habilitadas (preços da clínica);
+      // sem modalidades no contexto, cai nos RAMOs numerados do portão.
+      const modalities = ctx.modalities ?? []
+      result.buttons =
+        modalities.length > 0 ? choiceButtons(ctx) : gatewayButtons(flow, node.id)
+      if (result.buttons.length === 0) {
+        // Sem opção de escolha (clínica sem modalidade habilitada):
+        // reapresenta o menu em vez de travar o contato no portão.
+        const menuId = menuNodeId(flow)
+        const menuContent = menuId ? renderMenuNode(flow, menuId, ctx) : ""
+        if (menuContent) parts.push(menuContent)
+        result.nextState = "MENU"
+        result.buttons = []
+      }
       // Os botões do portão aguardam a escolha: para a cadeia aqui.
       break
     }
     if (node.kind === "ACAO") {
+      // VALORES com preços vira escolha por botões: a cadeia para aqui e
+      // o motor passa a aguardar a modalidade (estado AGUARDANDO_TIPO).
+      let stopChain = false
       switch (node.acao) {
         case "PEDIR_CPF":
           result.nextState = "AGUARDANDO_CPF"
@@ -263,16 +337,34 @@ function evaluateChain(
               : 'O horário de atendimento ainda não foi cadastrado no sistema. Escreva "atendente" para falar com a nossa equipe.'
           )
           break
-        case "VALORES":
-          parts.push(
-            [
-              "Fico feliz em ajudar! 🤗",
-              "Os valores variam conforme o tipo de atendimento. Para conhecer os valores e já garantir a sua consulta, faça o cadastro rapidinho:",
-              `${ctx.baseUrl}/cadastro`,
-              'Se preferir, escreva "atendente" para falar com a nossa equipe. 💙',
-            ].join("\n")
-          )
+        case "VALORES": {
+          const prices = formatPricesText(ctx)
+          if (prices) {
+            parts.push(
+              [
+                "Nossos valores:",
+                "",
+                prices,
+                "",
+                "Escolha uma das opções abaixo:",
+              ].join("\n")
+            )
+            result.buttons = choiceButtons(ctx)
+            result.nextState = "AGUARDANDO_TIPO"
+            stopChain = true
+          } else {
+            // Sem preços cadastrados: mantém o convite ao cadastro.
+            parts.push(
+              [
+                "Fico feliz em ajudar! 🤗",
+                "Os valores variam conforme o tipo de atendimento. Para conhecer os valores e já garantir a sua consulta, faça o cadastro rapidinho:",
+                `${ctx.baseUrl}/cadastro`,
+                'Se preferir, escreva "atendente" para falar com a nossa equipe. 💙',
+              ].join("\n")
+            )
+          }
           break
+        }
         case "ENDERECO": {
           // Atendimento 100% domiciliar: não há unidade física para visitar.
           parts.push(
@@ -296,6 +388,7 @@ function evaluateChain(
           // Só é alcançado pelo estado AGUARDANDO_CPF (tratado em runBotFlow).
           break
       }
+      if (stopChain) break
     }
   }
 
@@ -418,15 +511,26 @@ export function runBotFlow(
       : { reply: "", nextState: "MENU", needsAttention: false }
   }
 
-  // 3) Portão: contato no passo "já é paciente ou primeira consulta?"
+  // 3) Portão: contato no passo de escolha da modalidade (botões de preço)
   if (state === "AGUARDANDO_TIPO") {
     const portao = nodeOfKind(flow, "PORTAO")
     if (portao) {
       const matched = matchRamo(flow, portao.id, text)
       if (matched) {
-        const chainStart = outgoingEdges(flow, matched.id)[0]?.target
+        let chainStart = outgoingEdges(flow, matched.id)[0]?.target
         if (chainStart) {
-          return evaluateChain(flow, chainStart, ctx)
+          const startNode = findNode(flow, chainStart)
+          // Quem já tem nome não passa de novo pelo PEDIR_NOME: a cadeia
+          // pula direto para o nó seguinte (a mensagem com o link da agenda).
+          if (startNode?.kind === "PEDIR_NOME" && ctx.firstName) {
+            chainStart =
+              outgoingEdges(flow, startNode.id)[0]?.target ?? undefined
+          }
+          if (chainStart) {
+            const result = evaluateChain(flow, chainStart, ctx)
+            result.chosenModality = modalityOfRamo(matched)
+            return result
+          }
         }
       }
       // Qualquer outra resposta cai no motor (menu, atendente...).
