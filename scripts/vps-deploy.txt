@@ -1,0 +1,6 @@
+cd /opt/clinica-medica
+git pull origin master
+docker compose up -d --build app cron
+sleep 25
+docker compose ps
+docker logs clinica-medica --since 1m 2>&1 | grep -iE "error|fail" | tail -10

@@ -28,8 +28,8 @@ export const runtime = "nodejs"
 const LOCK_NAME = "send-messages"
 /** Execução sem término por mais de 10 min é assumida como travada (crash). */
 const LOCK_IN_PROGRESS_MS = 10 * 60 * 1000
-/** Pula execuções com menos de 5 min desde a última concluída. */
-const LOCK_MIN_INTERVAL_MS = 5 * 60 * 1000
+/** Pula execuções com menos de 2 min desde a última concluída (cron a cada 3 min). */
+const LOCK_MIN_INTERVAL_MS = 2 * 60 * 1000
 
 function isAuthorized(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
 /**
  * Tenta adquirir a trava do job. Retorna false quando outra execução está
  * em andamento (início recente sem término) ou a última terminou há menos
- * de 5 minutos. Linhas travadas por crash são retomadas após 10 minutos.
+ * de 2 minutos. Linhas travadas por crash são retomadas após 10 minutos.
  */
 async function claimCronRun(name: string, now: Date): Promise<boolean> {
   const last = await prisma.cronRun.findUnique({ where: { name } })

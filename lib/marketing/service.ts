@@ -5,14 +5,19 @@
  *  1. O admin cria/agenda a campanha na tela /marketing (status AGENDADA).
  *  2. O cron (/api/cron/send-messages) chama queueDueMarketingCampaigns():
  *     campanhas AGENDADA vencidas passam a ENVIANDO e o público vira
- *     mensagens na fila (tipo MARKETING) em lotes de 50 por ciclo.
- *  3. processPendingMessages envia cada mensagem (imagem + legenda quando
- *     houver, com fallback para texto) e atualiza sentCount/failedCount.
+ *     mensagens na fila (tipo MARKETING) em lotes de 50 por ciclo, com o
+ *     scheduledFor espaçado em 3 min entre uma e outra (proteção do número).
+ *  3. processPendingMessages envia 1 mensagem automatizada por ciclo (imagem
+ *     + legenda quando houver, com fallback para texto) e atualiza
+ *     sentCount/failedCount.
  *  4. Com o fan-out concluído e a fila zerada, a campanha vira CONCLUIDA.
  */
 import { prisma } from "@/lib/prisma"
 import { getClinicSettings } from "@/lib/clinic"
-import { renderTemplate } from "@/lib/whatsapp/message-service"
+import {
+  renderTemplate,
+  AUTOMATED_SPACING_MS,
+} from "@/lib/whatsapp/message-service"
 import { isValidIndividualPhone } from "@/lib/whatsapp/provider"
 
 /** Lote de fan-out por ciclo do cron (evita picos no WhatsApp). */
@@ -169,7 +174,13 @@ export async function queueDueMarketingCampaigns(
         .filter((c) => isValidIndividualPhone(c.phone))
         .slice(0, MARKETING_BATCH_SIZE)
 
-      for (const contact of contacts) {
+      // Posição na fila espaçada: mensagens já criadas definem o início do
+      // escalonamento (3 min entre envios) — lotes novos não sobrepõem.
+      const alreadyQueued = await prisma.message.count({
+        where: { marketingCampaignId: campaign.id },
+      })
+
+      for (const [i, contact] of contacts.entries()) {
         const firstName = (contact.name ?? "").trim().split(" ")[0]
         let content = renderTemplate(campaign.body, {
           nome: firstName || "cliente",
@@ -190,7 +201,9 @@ export async function queueDueMarketingCampaigns(
             direction: "OUT",
             content,
             status: "PENDENTE",
-            scheduledFor: now,
+            scheduledFor: new Date(
+              now.getTime() + (alreadyQueued + i) * AUTOMATED_SPACING_MS
+            ),
             marketingCampaignId: campaign.id,
           },
         })
@@ -208,7 +221,12 @@ export async function queueDueMarketingCampaigns(
         take: MARKETING_BATCH_SIZE,
       })
 
-      for (const patient of patients) {
+      // Mesmo escalonamento dos leads: 3 min entre uma mensagem e outra.
+      const alreadyQueued = await prisma.message.count({
+        where: { marketingCampaignId: campaign.id },
+      })
+
+      for (const [i, patient] of patients.entries()) {
         let content = renderTemplate(campaign.body, {
           nome: patient.name.split(" ")[0],
           clinica: clinic.name,
@@ -228,7 +246,9 @@ export async function queueDueMarketingCampaigns(
             direction: "OUT",
             content,
             status: "PENDENTE",
-            scheduledFor: now,
+            scheduledFor: new Date(
+              now.getTime() + (alreadyQueued + i) * AUTOMATED_SPACING_MS
+            ),
             marketingCampaignId: campaign.id,
           },
         })

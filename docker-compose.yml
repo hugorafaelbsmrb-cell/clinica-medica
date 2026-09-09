@@ -40,7 +40,9 @@ services:
       retries: 3
       start_period: 30s
 
-  # Cron interno (WhatsApp): chama a rota /api/cron a cada 10 minutos.
+  # Cron interno (WhatsApp): chama a rota /api/cron a cada 3 minutos.
+  # O worker envia 1 mensagem automatizada por ciclo → 3 min entre envios
+  # (proteção do número contra bloqueio).
   # O segredo é gravado no crontab na inicialização do container.
   cron:
     image: alpine:3.20
@@ -54,4 +56,4 @@ services:
     entrypoint:
       - /bin/sh
       - -c
-      - 'echo "*/10 * * * * wget -q -O- http://app:3000/api/cron/send-messages?secret=$$CRON_SECRET" > /etc/crontabs/root && exec crond -f -l 8'
+      - 'echo "*/3 * * * * wget -q -O- http://app:3000/api/cron/send-messages?secret=$$CRON_SECRET" > /etc/crontabs/root && exec crond -f -l 8'

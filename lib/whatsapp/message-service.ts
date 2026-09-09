@@ -4,7 +4,8 @@
  * Fluxo:
  *  1. Mensagens são enfileiradas na tabela Message com status PENDENTE.
  *  2. O worker (app/api/cron/send-messages) chama processPendingMessages()
- *     e envia tudo que está PENDENTE e com scheduledFor vencido.
+ *     e envia o que está PENDENTE e com scheduledFor vencido — 1 mensagem
+ *     automatizada por ciclo (cron a cada 3 min = 3 min entre envios).
  *  3. queueFollowUps() verifica FollowUpConfig e enfileira novas mensagens
  *     de acompanhamento para pacientes que venceram a periodicidade.
  */
@@ -563,8 +564,15 @@ async function maybeCompleteMarketingCampaign(campaignId: string): Promise<void>
   })
 }
 
+export const AUTOMATED_SPACING_MS = 3 * 60 * 1000
+
 /**
- * Processa a fila: envia todas as mensagens PENDENTE cujo scheduledFor já venceu.
+ * Processa a fila: envia as mensagens PENDENTE cujo scheduledFor já venceu.
+ *
+ * Proteção do número: no máximo 1 mensagem automatizada por execução — com o
+ * cron a cada 3 minutos, o espaçamento entre envios fica em ~3 minutos.
+ * Mensagens da equipe (MANUAL/DOCUMENTO) e as de envio imediato
+ * (sendImmediateMessage) não passam por esse limite.
  * Retorna o resumo de sucessos/falhas.
  */
 export async function processPendingMessages(
@@ -579,7 +587,7 @@ export async function processPendingMessages(
       direction: "OUT",
     },
     include: { patient: true, whatsAppContact: true },
-    orderBy: { createdAt: "asc" },
+    orderBy: { scheduledFor: "asc" },
     take: 100,
   })
 
@@ -600,6 +608,7 @@ export async function processPendingMessages(
 
   let sent = 0
   let failed = 0
+  let automatedSent = 0 // limite de 1 mensagem automatizada por execução
   const touchedCampaigns = new Set<string>()
 
   // Números com o bot pausado (atendimento humano): mensagens
@@ -625,6 +634,11 @@ export async function processPendingMessages(
     const campaign = message.marketingCampaignId
       ? campaignById.get(message.marketingCampaignId)
       : null
+
+    // Ritmo de envio: mensagens automatizadas saem 1 por ciclo do cron
+    // (3 min entre uma e outra). Mensagens da equipe saem sempre.
+    const isManual = message.type === "MANUAL" || message.type === "DOCUMENTO"
+    if (!isManual && automatedSent >= 1) continue
 
     if (!phone) {
       await prisma.message.update({
@@ -676,6 +690,7 @@ export async function processPendingMessages(
     // princípio: tenta a mídia e cai para o texto da legenda.
     // Mensagens com link ganham botão URL; se o botão falhar, o envio cai
     // automaticamente para texto puro (sem perder a entrega).
+    if (!isManual) automatedSent++
     let result: SendResult | undefined
     if (campaign?.imageDataUrl && provider.sendImage) {
       result = await provider.sendImage(phone, message.content, campaign.imageDataUrl)
