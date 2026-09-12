@@ -8,10 +8,13 @@ const nextConfig: NextConfig = {
   // O proxy reescreve o Host upstream, o que derrubaria a checagem CSRF de
   // Server Actions do Next (Origin ≠ x-forwarded-host). Liberamos apenas o
   // domínio definitivo em produção (painel.medicoemdomicilio.com).
+  // clinica.vps10746.panel.icontainer.run: acesso emergencial do painel do
+  // provedor — usado enquanto o domínio definitivo estiver suspenso/fora do ar.
   experimental: {
     serverActions: {
       allowedOrigins: [
         "painel.medicoemdomicilio.com",
+        "clinica.vps10746.panel.icontainer.run",
       ],
     },
   },
