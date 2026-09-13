@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { invalidateClinicCache } from "@/lib/clinic"
 import { checkSignerHealth } from "@/lib/signing/signer-client"
 import { geocodeAddress } from "@/lib/geo"
 
@@ -148,6 +149,7 @@ export async function saveClinicSettings(
       consultaTeleconsultaEnabled,
     },
   })
+  invalidateClinicCache()
 
   await prisma.auditLog.create({
     data: {
@@ -181,7 +183,10 @@ export async function geocodeClinicAddress(address?: string): Promise<{
     }
   }
 
-  const clinic = await prisma.clinicSettings.findUnique({ where: { id: 1 } })
+  const clinic = await prisma.clinicSettings.findUnique({
+    where: { id: 1 },
+    omit: { logoDataUrl: true },
+  })
   const query = address?.trim() || clinic?.address?.trim() || ""
   if (!query) {
     return {
@@ -203,6 +208,7 @@ export async function geocodeClinicAddress(address?: string): Promise<{
     where: { id: 1 },
     data: { latitude: coords.latitude, longitude: coords.longitude },
   })
+  invalidateClinicCache()
 
   revalidatePath("/", "layout")
   return {
@@ -282,6 +288,7 @@ export async function saveBotSettings(
       botMsgAgendar: data.botMsgAgendar?.trim() || null,
     },
   })
+  invalidateClinicCache()
 
   await prisma.auditLog.create({
     data: {

@@ -10,7 +10,7 @@ import {
   HeartPulse,
   Phone,
 } from "lucide-react"
-import { getClinicSettings } from "@/lib/clinic"
+import { getClinicSettingsWithLogo } from "@/lib/clinic"
 import { getConsultasPublicas } from "@/lib/actions/agendamento-publico"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -52,7 +52,7 @@ export default async function ConsultasPage({
   const consultas = await getConsultasPublicas(token)
   if (!consultas.found) notFound()
 
-  const clinic = await getClinicSettings()
+  const clinic = await getClinicSettingsWithLogo()
   const next = consultas.next
 
   return (

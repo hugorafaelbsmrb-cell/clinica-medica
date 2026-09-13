@@ -25,6 +25,7 @@ import {
   type FlowRecord,
 } from "./flow-types"
 import { isPhonePaused, pauseBotForPhone } from "./bot-pause"
+import { getCachedBotFlowRow } from "./flow-cache"
 
 const SESSION_TTL_MS = 15 * 60 * 1000 // sessão expira após 15 minutos
 
@@ -57,9 +58,7 @@ async function saveBotSession(
 async function loadBotFlow(
   clinic: Awaited<ReturnType<typeof getClinicSettings>>
 ): Promise<FlowRecord> {
-  const row = await prisma.messageFlow.findFirst({
-    where: { kind: "BOT", enabled: true },
-  })
+  const row = await getCachedBotFlowRow()
   if (row) {
     return {
       id: row.id,

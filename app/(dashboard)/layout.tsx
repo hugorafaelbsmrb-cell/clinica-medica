@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
-import { getClinicSettings } from "@/lib/clinic"
+import { getClinicSettingsWithLogo } from "@/lib/clinic"
 import { Sidebar } from "@/components/layout/sidebar"
 import { UserMenu } from "@/components/layout/user-menu"
 import { NotificationBell } from "@/components/layout/notification-bell"
@@ -14,7 +14,7 @@ export default async function DashboardLayout({
   const session = await auth()
   if (!session?.user) redirect("/login")
 
-  const clinic = await getClinicSettings()
+  const clinic = await getClinicSettingsWithLogo()
 
   return (
     <div className="flex min-h-screen w-full">

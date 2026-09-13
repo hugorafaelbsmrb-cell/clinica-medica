@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
-import { getClinicSettings } from "@/lib/clinic"
+import { getClinicSettingsWithLogo } from "@/lib/clinic"
 import { getIntegrationSettings } from "@/lib/integrations"
 import { getPaymentSettings } from "@/lib/payments/settings"
 import { ClinicaForm } from "@/components/configuracoes/clinica-form"
@@ -16,7 +16,7 @@ export default async function ConfiguracoesPage() {
   const session = requireRole(await auth(), ["ADMIN"])
   void session
   const [clinic, integrations, payments] = await Promise.all([
-    getClinicSettings(),
+    getClinicSettingsWithLogo(),
     getIntegrationSettings(),
     getPaymentSettings(),
   ])

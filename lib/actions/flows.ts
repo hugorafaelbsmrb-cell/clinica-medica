@@ -16,6 +16,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { getClinicSettings } from "@/lib/clinic"
 import { isPhonePaused } from "@/lib/whatsapp/bot-pause"
+import { invalidateFlowCache } from "@/lib/whatsapp/flow-cache"
 import {
   flowMessageChain,
   type FlowNode,
@@ -262,6 +263,7 @@ export async function saveFlow(
     })
   }
 
+  invalidateFlowCache()
   revalidatePath("/automacoes")
   revalidatePath("/whatsapp")
   return {
@@ -285,6 +287,7 @@ export async function deleteFlow(id: string): Promise<ActionState> {
   }
 
   await prisma.messageFlow.delete({ where: { id } })
+  invalidateFlowCache()
   revalidatePath("/automacoes")
   revalidatePath("/whatsapp")
   return { success: true, message: "Fluxo excluído" }
@@ -305,6 +308,7 @@ export async function toggleFlowEnabled(id: string): Promise<ActionState> {
     where: { id },
     data: { enabled: !flow.enabled },
   })
+  invalidateFlowCache()
   revalidatePath("/automacoes")
   revalidatePath("/whatsapp")
   return {

@@ -1,0 +1,1 @@
+for c in clinica-medica clinica-medica-signer clinica-medica-cron; do printf "%s: " "$c"; docker exec "$c" sh -c "cat /proc/net/tcp /proc/net/tcp6 2>/dev/null" 2>/dev/null | awk 'NR>1 && $3=="1538" {n++} END {print n+0}'; done

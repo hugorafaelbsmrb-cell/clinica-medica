@@ -33,7 +33,10 @@ export type BirdIdConfig = {
  * banco (AES-256-GCM) e é decifrado só aqui, em memória.
  */
 export async function getBirdIdConfig(): Promise<BirdIdConfig> {
-  const settings = await prisma.clinicSettings.findUnique({ where: { id: 1 } })
+  const settings = await prisma.clinicSettings.findUnique({
+    where: { id: 1 },
+    omit: { logoDataUrl: true },
+  })
   const baseUrl = (
     settings?.birdIdBaseUrl ||
     process.env.BIRDID_BASE_URL ||

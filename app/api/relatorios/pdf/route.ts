@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { startOfMonth, endOfMonth } from "date-fns"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getClinicSettings } from "@/lib/clinic"
+import { getClinicSettingsWithLogo } from "@/lib/clinic"
 import {
   generateFinancialReportPdf,
   type FinancialReportEntry,
@@ -48,7 +48,7 @@ export async function GET(request: Request) {
       where: { dueDate: { gte: from, lte: to } },
       orderBy: { dueDate: "asc" },
     }),
-    getClinicSettings(),
+    getClinicSettingsWithLogo(),
   ])
 
   // Mesmos indicadores da página de relatórios

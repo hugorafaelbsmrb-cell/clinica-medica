@@ -1,0 +1,1 @@
+docker exec clinica-medica sh -c 'wget -q -O- "http://127.0.0.1:3000/api/cron/send-messages?secret=$CRON_SECRET"'

@@ -5,6 +5,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
+import { invalidateClinicCache } from "@/lib/clinic"
 import {
   createCharge,
   refreshPaymentStatus,
@@ -154,6 +155,7 @@ export async function savePaymentSettings(
   })
 
   invalidatePaymentSettingsCache()
+  invalidateClinicCache()
 
   await prisma.auditLog.create({
     data: {

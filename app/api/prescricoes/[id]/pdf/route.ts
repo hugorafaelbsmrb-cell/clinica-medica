@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { format } from "date-fns"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getClinicSettings } from "@/lib/clinic"
+import { getClinicSettingsWithLogo } from "@/lib/clinic"
 import { generatePrescriptionPdf } from "@/lib/pdf/prescription-pdf"
 import { signPdfIfEnabled } from "@/lib/signing/certificate"
 
@@ -34,7 +34,7 @@ export async function GET(
     return NextResponse.json({ error: "Prescrição não encontrada" }, { status: 404 })
   }
 
-  const clinic = await getClinicSettings()
+  const clinic = await getClinicSettingsWithLogo()
   const generated = await generatePrescriptionPdf({
     patientName: prescription.patient.name,
     patientBirthDate: prescription.patient.birthDate,

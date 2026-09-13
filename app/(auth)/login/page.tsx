@@ -8,7 +8,7 @@ import {
   MessageCircle,
 } from "lucide-react"
 import { auth } from "@/lib/auth"
-import { getClinicSettings } from "@/lib/clinic"
+import { getClinicSettingsWithLogo } from "@/lib/clinic"
 import { LoginForm } from "./login-form"
 
 export const metadata: Metadata = {
@@ -19,7 +19,7 @@ export default async function LoginPage() {
   const session = await auth()
   if (session) redirect("/dashboard")
 
-  const clinic = await getClinicSettings()
+  const clinic = await getClinicSettingsWithLogo()
 
   return (
     <main className="relative flex min-h-screen flex-col bg-background md:flex-row">

@@ -1,0 +1,5 @@
+for p in / /login /cadastro; do
+  curl -s -o /dev/null -w "$p -> %{http_code} (%{time_total}s)\n" "https://painel.medicoemdomicilio.com$p"
+done
+echo ---LOGS---
+docker logs clinica-medica --since 2h 2>&1 | grep -iE "error|ECONN|timeout|P100" | grep -v CSRF | tail -15

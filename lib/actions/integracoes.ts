@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { invalidateClinicCache } from "@/lib/clinic"
 import { encryptSecret } from "@/lib/signing/crypto"
 import {
   getIntegrationSettings,
@@ -106,6 +107,7 @@ export async function saveIntegrations(
   })
 
   invalidateIntegrationCache()
+  invalidateClinicCache()
 
   await prisma.auditLog.create({
     data: {
@@ -190,6 +192,7 @@ export async function testMediaApiKeyAction(
       data: { mediaSlug: result.slug },
     })
     invalidateIntegrationCache()
+    invalidateClinicCache()
   }
   return { success: result.success, message: result.message, slug: result.slug }
 }

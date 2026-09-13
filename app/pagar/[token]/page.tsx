@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { HeartPulse } from "lucide-react"
 import { prisma } from "@/lib/prisma"
-import { getClinicSettings } from "@/lib/clinic"
+import { getClinicSettingsWithLogo } from "@/lib/clinic"
 import {
   PagamentoPublicoForm,
   type PagamentoPublicoData,
@@ -36,7 +36,7 @@ export default async function PagarPage({
   })
   if (!payment) notFound()
 
-  const clinic = await getClinicSettings()
+  const clinic = await getClinicSettingsWithLogo()
 
   const data: PagamentoPublicoData = {
     token: payment.id,

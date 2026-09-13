@@ -74,7 +74,10 @@ export async function signPdfIfEnabled(input: {
   actorId?: string | null
   pdf: Buffer
 }): Promise<{ signed: boolean; pdf: Buffer }> {
-  const clinic = await prisma.clinicSettings.findUnique({ where: { id: 1 } })
+  const clinic = await prisma.clinicSettings.findUnique({
+    where: { id: 1 },
+    omit: { logoDataUrl: true },
+  })
   if (!clinic?.enableDigitalSignature) return { signed: false, pdf: input.pdf }
 
   const defaultReason =

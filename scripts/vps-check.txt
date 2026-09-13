@@ -1,0 +1,2 @@
+cd /opt/clinica-medica
+docker logs clinica-medica --since 20m | grep -E "WhatsApp Webhook" | tail -30

@@ -1,0 +1,8 @@
+cd /opt/clinica-medica
+git pull origin master
+docker compose stop app
+docker compose run --rm --no-deps -v /opt/clinica-medica/prisma/schema.prisma:/tmp/schema.prisma:ro -T app sh -c 'cd /app && DIRECT_URL="$DATABASE_URL" npx prisma db push --schema /tmp/schema.prisma --skip-generate'
+docker compose up -d --build app
+sleep 25
+docker compose ps
+docker logs clinica-medica --since 1m 2>&1 | grep -iE "error|fail" | tail -10

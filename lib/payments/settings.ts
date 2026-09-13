@@ -40,7 +40,10 @@ let cache: PaymentSettings | null = null
 export async function getPaymentSettings(): Promise<PaymentSettings> {
   if (cache) return cache
 
-  const settings = await prisma.clinicSettings.findUnique({ where: { id: 1 } })
+  const settings = await prisma.clinicSettings.findUnique({
+    where: { id: 1 },
+    omit: { logoDataUrl: true },
+  })
   cache = {
     asaasApiKey: settings?.asaasApiKey || process.env.ASAAS_API_KEY || "",
     stripeSecretKey:

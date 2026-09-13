@@ -5,7 +5,7 @@ import { format } from "date-fns"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
-import { getClinicSettings } from "@/lib/clinic"
+import { getClinicSettingsWithLogo } from "@/lib/clinic"
 import { resolveDoctorId } from "@/lib/doctor"
 import { generatePrescriptionPdf } from "@/lib/pdf/prescription-pdf"
 import { signPdfIfEnabled } from "@/lib/signing/certificate"
@@ -104,7 +104,7 @@ export async function createPrescription(
     const patient = full.patient
     if (patient.phone && patient.whatsappEnabled && patient.lgpdConsent) {
       try {
-        const clinic = await getClinicSettings()
+        const clinic = await getClinicSettingsWithLogo()
         const generated = await generatePrescriptionPdf({
           patientName: patient.name,
           patientBirthDate: patient.birthDate,

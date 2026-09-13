@@ -25,7 +25,10 @@ let cache: IntegrationSettings | null = null
 export async function getIntegrationSettings(): Promise<IntegrationSettings> {
   if (cache) return cache
 
-  const settings = await prisma.clinicSettings.findUnique({ where: { id: 1 } })
+  const settings = await prisma.clinicSettings.findUnique({
+    where: { id: 1 },
+    omit: { logoDataUrl: true },
+  })
   cache = {
     deepseekApiKey:
       settings?.deepseekApiKey || process.env.DEEPSEEK_API_KEY || "",

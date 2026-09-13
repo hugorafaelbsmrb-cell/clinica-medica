@@ -9,6 +9,7 @@ import { z } from "zod"
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { invalidateClinicCache } from "@/lib/clinic"
 
 export type AutomationState = {
   success: boolean
@@ -135,6 +136,7 @@ export async function saveMensagensAutomation(
     update: fields,
     create: { id: 1, ...fields },
   })
+  invalidateClinicCache()
 
   await prisma.auditLog.create({
     data: {

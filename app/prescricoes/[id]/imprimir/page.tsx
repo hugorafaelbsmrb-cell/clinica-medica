@@ -4,7 +4,7 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { auth } from "@/lib/auth"
 import { requireRole } from "@/lib/rbac"
-import { getClinicSettings } from "@/lib/clinic"
+import { getClinicSettingsWithLogo } from "@/lib/clinic"
 import { prisma } from "@/lib/prisma"
 import { PrintButton } from "@/components/prescricoes/print-button"
 
@@ -23,7 +23,7 @@ export default async function PrescricaoImprimirPage({
   const { id } = await params
 
   const [clinic, prescription] = await Promise.all([
-    getClinicSettings(),
+    getClinicSettingsWithLogo(),
     prisma.prescription.findUnique({
       where: { id },
       include: {

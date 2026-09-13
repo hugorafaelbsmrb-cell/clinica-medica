@@ -35,6 +35,7 @@ import {
   type FlowRecord,
   type GatilhoTipo,
 } from "./flow-types"
+import { getCachedAutomacaoFlowRows } from "./flow-cache"
 
 export type AutomationCounts = {
   cadastro: number
@@ -105,9 +106,7 @@ export function defaultWhatsappFollowUpMessage(stage: 1 | 2 | 3): string {
 export async function getFlowByGatilho(
   gatilho: GatilhoTipo
 ): Promise<FlowRecord | null> {
-  const rows = await prisma.messageFlow.findMany({
-    where: { kind: "AUTOMACAO", enabled: true },
-  })
+  const rows = await getCachedAutomacaoFlowRows()
   for (const row of rows) {
     const nodes = parseFlowNodes(row.nodes)
     const trigger = nodes.find((n) => n.kind === "GATILHO")

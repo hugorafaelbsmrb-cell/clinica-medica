@@ -5,7 +5,7 @@ import { format } from "date-fns"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
-import { getClinicSettings } from "@/lib/clinic"
+import { getClinicSettingsWithLogo } from "@/lib/clinic"
 import { resolveDoctorId } from "@/lib/doctor"
 import { generatePlanSummary } from "@/lib/ai/therapeutic-plan"
 import { isAIEnabled } from "@/lib/ai/provider"
@@ -167,7 +167,7 @@ export async function approvePlan(planId: string): Promise<ActionState> {
     plan.patient.lgpdConsent
   ) {
     try {
-      const clinic = await getClinicSettings()
+      const clinic = await getClinicSettingsWithLogo()
       const generated = await generatePlanPdf({
         patientName: plan.patient.name,
         doctorName: plan.doctor?.name,

@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { HeartPulse } from "lucide-react"
 import { prisma } from "@/lib/prisma"
-import { getClinicSettings } from "@/lib/clinic"
+import { getClinicSettingsWithLogo } from "@/lib/clinic"
 import { CadastroWizard } from "@/components/cadastro/cadastro-wizard"
 
 export const metadata: Metadata = {
@@ -24,7 +24,7 @@ export default async function CadastroPage({
 }: {
   searchParams: Promise<{ lead?: string; cupom?: string; tipo?: string }>
 }) {
-  const clinic = await getClinicSettings()
+  const clinic = await getClinicSettingsWithLogo()
 
   const { lead, cupom, tipo } = await searchParams
   const contact = lead

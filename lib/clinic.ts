@@ -76,10 +76,38 @@ const DEFAULTS: ClinicInfo = {
   consultaTeleconsultaEnabled: true,
 }
 
-/** Carrega as configurações da clínica, com fallback para o padrão. */
+/**
+ * TTL dos caches em memória (60s). O registro da clínica é lido dezenas de
+ * vezes por minuto (bot, cron e páginas) e refazê-lo a cada chamada era o
+ * maior ofensor de egress do Supabase — a logo (dezenas de KB) viajava em
+ * quase todas as leituras.
+ */
+const CACHE_TTL_MS = 60_000
+
+let settingsCache: { data: ClinicInfo; expiresAt: number } | null = null
+let logoCache: { data: string | null; expiresAt: number } | null = null
+
+/** Limpa os caches da clínica (chamar após escrita em ClinicSettings). */
+export function invalidateClinicCache(): void {
+  settingsCache = null
+  logoCache = null
+}
+
+/**
+ * Carrega as configurações da clínica, com fallback para o padrão.
+ * A logo fica fora do retorno (omit) e é buscada à parte quando a tela ou
+ * o PDF for exibi-la — use getClinicSettingsWithLogo() nesses casos.
+ */
 export async function getClinicSettings(): Promise<ClinicInfo> {
-  const settings = await prisma.clinicSettings.findUnique({ where: { id: 1 } })
-  return settings
+  if (settingsCache && settingsCache.expiresAt > Date.now()) {
+    return settingsCache.data
+  }
+
+  const settings = await prisma.clinicSettings.findUnique({
+    where: { id: 1 },
+    omit: { logoDataUrl: true },
+  })
+  const data = settings
     ? {
         name: settings.name,
         address: settings.address,
@@ -87,7 +115,6 @@ export async function getClinicSettings(): Promise<ClinicInfo> {
         email: settings.email,
         cnpj: settings.cnpj,
         horarioAtendimento: settings.horarioAtendimento,
-        logoDataUrl: settings.logoDataUrl,
         botEnabled: settings.botEnabled,
         botMsgAtendente: settings.botMsgAtendente,
         botMsgSaude: settings.botMsgSaude,
@@ -162,4 +189,32 @@ export async function getClinicSettings(): Promise<ClinicInfo> {
         consultaTeleconsultaEnabled: settings.consultaTeleconsultaEnabled,
       }
     : DEFAULTS
+
+  settingsCache = { data, expiresAt: Date.now() + CACHE_TTL_MS }
+  return data
+}
+
+/** Logo da clínica (data URL) para telas e PDFs; null se não houver. */
+export async function getClinicLogoDataUrl(): Promise<string | null> {
+  if (logoCache && logoCache.expiresAt > Date.now()) {
+    return logoCache.data
+  }
+
+  const row = await prisma.clinicSettings.findUnique({
+    where: { id: 1 },
+    select: { logoDataUrl: true },
+  })
+  const data = row?.logoDataUrl ?? null
+
+  logoCache = { data, expiresAt: Date.now() + CACHE_TTL_MS }
+  return data
+}
+
+/** Configurações COM a logo — só para telas/PDFs que exibem a marca. */
+export async function getClinicSettingsWithLogo(): Promise<ClinicInfo> {
+  const [clinic, logoDataUrl] = await Promise.all([
+    getClinicSettings(),
+    getClinicLogoDataUrl(),
+  ])
+  return { ...clinic, logoDataUrl }
 }
