@@ -53,6 +53,27 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // A W-API entrega o MESMO evento duas vezes (dois IPs, ~1s de diferença).
+  // Sem deduplicação o bot responde em dobro à mesma mensagem e duplica o
+  // registro no painel. Guarda os messageId já processados por 10 min.
+  const dedupeGlobal = globalThis as unknown as {
+    processedWebhookIds?: Map<string, number>
+  }
+  const processedIds: Map<string, number> = (dedupeGlobal.processedWebhookIds ??= new Map())
+  const messageId = (payload as { messageId?: string }).messageId
+  if (messageId) {
+    const now = Date.now()
+    if (processedIds.size > 5000) {
+      for (const [id, at] of processedIds) {
+        if (now - at > 10 * 60_000) processedIds.delete(id)
+      }
+    }
+    if (processedIds.has(messageId)) {
+      return NextResponse.json({ ok: true, duplicate: true })
+    }
+    processedIds.set(messageId, now)
+  }
+
   const provider = await getWhatsAppProvider()
   const messages = await provider.parseWebhook(payload)
   const outgoing = await provider.parseOutgoing(payload)

@@ -1,0 +1,9 @@
+echo "aguardando 90s pelos eventos do teste (celular da clinica + pessoa externa)..."
+sleep 90
+echo "=== [wa-diag] ultimos 5 min ==="
+docker logs clinica-medica --since 5m 2>&1 | grep -a "wa-diag" | tail -40
+echo "=== [wa-diag-payload] ultimos 5 min (payload cru) ==="
+docker logs clinica-medica --since 5m 2>&1 | grep -a "wa-diag-payload" | grep -av '"status"' | tail -15 | cut -c1-1500
+echo "=== eventos processados (5 min) ==="
+docker logs clinica-medica --since 5m 2>&1 | grep -aiE "cadastrado|bot-pause|Botoes falharam|Botões falharam|pausado" | tail -20
+echo "=== FIM ==="

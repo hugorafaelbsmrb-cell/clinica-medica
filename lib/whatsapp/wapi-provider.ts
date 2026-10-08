@@ -262,6 +262,7 @@ export class WApiProvider implements WhatsAppProvider {
     const body = payload as {
       event?: string
       fromMe?: boolean
+      isGroup?: boolean
       chat?: { id?: string }
       sender?: { id?: string }
       msgContent?: {
@@ -280,7 +281,19 @@ export class WApiProvider implements WhatsAppProvider {
       return []
     }
 
-    const from = (body.sender?.id ?? body.chat?.id ?? "").split("@")[0]
+    // Stories ("status") e grupos não são conversas 1:1 do bot — o texto de
+    // legenda de um story já foi tratado como mensagem de paciente.
+    const chatId = body.chat?.id ?? ""
+    if (
+      body.isGroup === true ||
+      chatId === "status" ||
+      chatId.includes("g.us") ||
+      chatId.includes("broadcast")
+    ) {
+      return []
+    }
+
+    const from = (body.sender?.id ?? chatId ?? "").split("@")[0]
     const content = this.extractText(body.msgContent)
 
     if (!from || !content) {
@@ -306,6 +319,7 @@ export class WApiProvider implements WhatsAppProvider {
     const body = payload as {
       event?: string
       fromMe?: boolean
+      isGroup?: boolean
       chat?: { id?: string }
       msgContent?: {
         conversation?: string
@@ -322,10 +336,16 @@ export class WApiProvider implements WhatsAppProvider {
       return []
     }
 
-    // Chat da conversa = destinatário. Ignora grupos e transmissões.
+    // Chat da conversa = destinatário. Ignora grupos, transmissões e status.
     const chatId = body.chat?.id ?? ""
     const to = chatId.split("@")[0]
-    if (!to || chatId.includes("g.us") || chatId.includes("broadcast")) {
+    if (
+      !to ||
+      body.isGroup === true ||
+      chatId === "status" ||
+      chatId.includes("g.us") ||
+      chatId.includes("broadcast")
+    ) {
       return []
     }
 
