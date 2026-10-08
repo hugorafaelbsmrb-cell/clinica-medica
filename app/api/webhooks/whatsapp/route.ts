@@ -25,6 +25,22 @@ export async function POST(request: NextRequest) {
   // com fromMe=true, webhookDisconnected etc.): loga para diagnóstico da
   // entrega (sucesso/falha de envios) — parseWebhook já ignora a maioria.
   const eventName = (payload as { event?: string }).event
+
+  // DIAGNÓSTICO TEMPORÁRIO (investigação "bot não para ao assumir"):
+  // registra os campos-chave do payload cru — sem conteúdo das mensagens —
+  // para identificar o formato dos eventos de mensagens enviadas (fromMe).
+  if (eventName === "webhookReceived") {
+    const p = payload as {
+      fromMe?: unknown
+      chat?: { id?: string }
+      sender?: { id?: string }
+      msgContent?: Record<string, unknown>
+    }
+    console.log(
+      `[wa-diag] keys=${Object.keys(p as object).join(",")} fromMe=${JSON.stringify(p.fromMe)} chat=${JSON.stringify(p.chat?.id ?? null)} sender=${JSON.stringify(p.sender?.id ?? null)} msgKeys=${Object.keys(p.msgContent ?? {}).join("|")}`
+    )
+  }
+
   if (eventName && eventName !== "webhookReceived") {
     console.log(
       `[WhatsApp Webhook] ${eventName}: ${JSON.stringify(payload).slice(0, 700)}`
