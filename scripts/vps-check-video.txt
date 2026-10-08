@@ -1,0 +1,7 @@
+echo "=== container ==="
+docker ps --filter name=clinica-medica --format '{{.Status}}'
+echo "=== video local (8080) ==="
+curl -s -o /dev/null -w "http=%{http_code} bytes=%{size_download} type=%{content_type}\n" http://localhost:8080/boas-vindas.mp4
+echo "=== video via dominio publico ==="
+curl -s -o /dev/null -w "http=%{http_code} bytes=%{size_download} type=%{content_type}\n" https://painel.medicoemdomicilio.com/boas-vindas.mp4
+echo "=== FIM ==="
