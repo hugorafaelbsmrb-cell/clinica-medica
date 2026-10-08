@@ -32,12 +32,14 @@ export async function POST(request: NextRequest) {
   if (eventName === "webhookReceived") {
     const p = payload as {
       fromMe?: unknown
+      fromApi?: unknown
+      isGroup?: unknown
       chat?: { id?: string }
       sender?: { id?: string }
       msgContent?: Record<string, unknown>
     }
     console.log(
-      `[wa-diag] keys=${Object.keys(p as object).join(",")} fromMe=${JSON.stringify(p.fromMe)} chat=${JSON.stringify(p.chat?.id ?? null)} sender=${JSON.stringify(p.sender?.id ?? null)} msgKeys=${Object.keys(p.msgContent ?? {}).join("|")}`
+      `[wa-diag] fromMe=${JSON.stringify(p.fromMe)} fromApi=${JSON.stringify(p.fromApi)} isGroup=${JSON.stringify(p.isGroup)} chat=${JSON.stringify(p.chat?.id ?? null)} sender=${JSON.stringify(p.sender?.id ?? null)} msgKeys=${Object.keys(p.msgContent ?? {}).join("|")}`
     )
   }
 
