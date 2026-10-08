@@ -12,7 +12,8 @@ export const config = {
     // Ícones do App Router e assets do PWA (manifest, service worker,
     // ícones de instalação) precisam ficar públicos.
     // /pagar é a página pública de pagamento enviada ao paciente pelo link.
-    "/((?!api|_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|sw.js|manifest.webmanifest|icons/|login-cover.jpg|pitch|pagamento|pagar).*)",
+    // /boas-vindas.mp4 é o vídeo do bot, baixado pela W-API ao enviar mídia.
+    "/((?!api|_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|sw.js|manifest.webmanifest|icons/|login-cover.jpg|pitch|pagamento|pagar|boas-vindas.mp4).*)",
   ],
 }
 
