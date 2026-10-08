@@ -27,8 +27,9 @@ export async function POST(request: NextRequest) {
   const eventName = (payload as { event?: string }).event
 
   // DIAGNÓSTICO TEMPORÁRIO (investigação "bot não para ao assumir"):
-  // registra os campos-chave do payload cru — sem conteúdo das mensagens —
-  // para identificar o formato dos eventos de mensagens enviadas (fromMe).
+  // registra os campos-chave e o payload cru dos eventos de conversa (exceto
+  // "status") para identificar o formato real dos eventos enviados pela
+  // equipe pelo celular e dos envios feitos via API.
   if (eventName === "webhookReceived") {
     const p = payload as {
       fromMe?: unknown
@@ -41,6 +42,9 @@ export async function POST(request: NextRequest) {
     console.log(
       `[wa-diag] fromMe=${JSON.stringify(p.fromMe)} fromApi=${JSON.stringify(p.fromApi)} isGroup=${JSON.stringify(p.isGroup)} chat=${JSON.stringify(p.chat?.id ?? null)} sender=${JSON.stringify(p.sender?.id ?? null)} msgKeys=${Object.keys(p.msgContent ?? {}).join("|")}`
     )
+    if (p.chat?.id !== "status") {
+      console.log(`[wa-diag-payload] ${JSON.stringify(payload).slice(0, 1500)}`)
+    }
   }
 
   if (eventName && eventName !== "webhookReceived") {

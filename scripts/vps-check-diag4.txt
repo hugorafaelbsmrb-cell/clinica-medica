@@ -1,0 +1,11 @@
+echo "=== hora VPS (UTC) ==="
+date -u
+echo "=== [wa-diag] desde o deploy (SEM status) ==="
+docker logs clinica-medica 2>&1 | grep -a "wa-diag" | grep -av 'chat="status"' | tail -30
+echo "=== [wa-diag] contagem por assinatura (todos) ==="
+docker logs clinica-medica 2>&1 | grep -a "wa-diag" | sed 's/.*wa-diag\] //' | sort | uniq -c | sort -rn | head -20
+echo "=== eventos de mensagem processados ==="
+docker logs clinica-medica 2>&1 | grep -aE "cadastrado|bot-pause|Botões falharam|pausado" | tail -25
+echo "=== POSTs webhook no proxy (agora) ==="
+docker exec ic-openresty-3xPL sh -c "grep -a 'POST /api/webhooks/whatsapp' /www/sites/painel.medicoemdomicilio.com/log/access.log | tail -6 | cut -c1-160"
+echo "=== FIM ==="
