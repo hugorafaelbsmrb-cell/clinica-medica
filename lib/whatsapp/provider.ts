@@ -42,6 +42,22 @@ export type WhatsAppOutgoing = {
   sentAt: Date
 }
 
+/**
+ * Evento de entrega (webhookDelivery): mensagem que saiu do número
+ * conectado. `fromApi` separa o que partiu da própria API (bot, fila,
+ * painel) do que foi enviado pelo celular vinculado (equipe respondendo
+ * fora do painel) — o segundo caso pausa o bot da conversa.
+ */
+export type WhatsAppDelivery = {
+  /** Destinatário como número (vazio quando o chat só expõe LID). */
+  to: string
+  /** Identificador @lid do destinatário, quando o chat vier nesse formato. */
+  toLid: string | null
+  /** true = envio da API (não pausa); false = celular/equipe (pausa). */
+  fromApi: boolean
+  sentAt: Date
+}
+
 /** Botão de ação anexado a uma mensagem de texto (máx. 3 por mensagem). */
 export type WhatsAppButton =
   | { type: "URL"; label: string; url: string }
@@ -99,6 +115,11 @@ export interface WhatsAppProvider {
    * da API, ex.: equipe respondendo pelo WhatsApp vinculado à instância).
    */
   parseOutgoing(payload: unknown): Promise<WhatsAppOutgoing[]>
+  /**
+   * Devolve os eventos de entrega (mensagem efetivamente enviada pelo
+   * número conectado), separando os envios da API dos feitos pelo celular.
+   */
+  parseDelivery?(payload: unknown): Promise<WhatsAppDelivery[]>
 }
 
 /** Provedor ativo com base nas credenciais configuradas (banco ou .env). */

@@ -6,12 +6,27 @@
  * URL para configurar no painel da W-API: /api/webhooks/whatsapp
  */
 import { NextRequest, NextResponse } from "next/server"
-import { getWhatsAppProvider } from "@/lib/whatsapp/provider"
+import {
+  getWhatsAppProvider,
+  isValidIndividualPhone,
+} from "@/lib/whatsapp/provider"
 import { registerIncoming } from "@/lib/whatsapp/message-service"
 import { handleBotMessage } from "@/lib/whatsapp/bot-service"
-import { pauseFromWhatsAppOutgoing } from "@/lib/whatsapp/bot-pause"
+import {
+  pauseBotForPhone,
+  pauseFromWhatsAppOutgoing,
+} from "@/lib/whatsapp/bot-pause"
 
 export const runtime = "nodejs"
+
+/**
+ * Mapa LID → telefone, alimentado pelos eventos recebidos (o WhatsApp
+ * identifica contatos por @lid em parte das conversas). Serve para pausar
+ * o bot quando a equipe responde pelo celular em conversas que só expõem o
+ * LID no evento de entrega.
+ */
+const lidGlobal = globalThis as unknown as { lidToPhone?: Map<string, string> }
+const lidToPhone: Map<string, string> = (lidGlobal.lidToPhone ??= new Map())
 
 export async function POST(request: NextRequest) {
   let payload: unknown
@@ -45,11 +60,18 @@ export async function POST(request: NextRequest) {
     if (p.chat?.id !== "status") {
       console.log(`[wa-diag-payload] ${JSON.stringify(payload).slice(0, 1500)}`)
     }
+    // Registra o LID da conversa para resolver o destinatário nos eventos
+    // de entrega (webhookDelivery).
+    const chatId = p.chat?.id ?? ""
+    const senderId = (p.sender?.id ?? "").split("@")[0]
+    if (chatId.endsWith("@lid") && isValidIndividualPhone(senderId)) {
+      lidToPhone.set(chatId, senderId)
+    }
   }
 
   if (eventName && eventName !== "webhookReceived") {
     console.log(
-      `[WhatsApp Webhook] ${eventName}: ${JSON.stringify(payload).slice(0, 700)}`
+      `[WhatsApp Webhook] ${eventName}: ${JSON.stringify(payload).slice(0, 2500)}`
     )
   }
 
@@ -75,6 +97,31 @@ export async function POST(request: NextRequest) {
   }
 
   const provider = await getWhatsAppProvider()
+
+  // Evento de entrega: a W-API avisa toda mensagem que sai do número.
+  // Quando o envio partiu do celular vinculado (fromApi = false), a equipe
+  // assumiu a conversa pelo WhatsApp → pausa o bot daquele número.
+  if (eventName === "webhookDelivery") {
+    const deliveries = provider.parseDelivery
+      ? await provider.parseDelivery(payload)
+      : []
+    for (const delivery of deliveries) {
+      const phone =
+        delivery.to ||
+        (delivery.toLid ? lidToPhone.get(delivery.toLid) ?? "" : "")
+      console.log(
+        `[wa-delivery] fromApi=${delivery.fromApi} to=${JSON.stringify(phone)} lid=${JSON.stringify(delivery.toLid)}`
+      )
+      if (delivery.fromApi) continue
+      if (!isValidIndividualPhone(phone)) {
+        console.log("[wa-delivery] destinatário não resolvido — pausa ignorada")
+        continue
+      }
+      await pauseBotForPhone(phone, "atendimento_humano")
+      console.log(`[bot-pause] pausado via webhookDelivery (${phone})`)
+    }
+  }
+
   const messages = await provider.parseWebhook(payload)
   const outgoing = await provider.parseOutgoing(payload)
 

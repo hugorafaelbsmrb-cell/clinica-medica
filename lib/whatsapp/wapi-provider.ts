@@ -18,6 +18,7 @@ import type {
   PhoneValidationResult,
   SendResult,
   WhatsAppButton,
+  WhatsAppDelivery,
   WhatsAppIncoming,
   WhatsAppOutgoing,
   WhatsAppProvider,
@@ -354,6 +355,61 @@ export class WApiProvider implements WhatsAppProvider {
       {
         to,
         content: this.extractText(body.msgContent),
+        sentAt: moment > 0 ? new Date(moment * 1000) : new Date(),
+      },
+    ]
+  }
+
+  /**
+   * Evento "webhookDelivery": dispara para toda mensagem que sai do número
+   * conectado (celular e API). O discriminador da origem é o remetente:
+   * pelo celular vinculado o envio sai com o número da instância
+   * (connectedPhone); pela API sai com o LID da instância. Assim dá para
+   * pausar o bot só quando a equipe responde por fora do painel.
+   */
+  async parseDelivery(payload: unknown): Promise<WhatsAppDelivery[]> {
+    const body = payload as {
+      event?: string
+      fromMe?: boolean
+      fromApi?: boolean
+      isGroup?: boolean
+      connectedPhone?: string
+      chat?: { id?: string }
+      sender?: { id?: string }
+      moment?: number
+    }
+
+    if (body.event !== "webhookDelivery" || !body.fromMe) {
+      return []
+    }
+
+    // Destinatário = chat da conversa. Grupos, transmissões e status ficam fora.
+    const chatId = body.chat?.id ?? ""
+    if (
+      !chatId ||
+      chatId === "status" ||
+      body.isGroup === true ||
+      chatId.includes("g.us") ||
+      chatId.includes("broadcast")
+    ) {
+      return []
+    }
+
+    const senderId = (body.sender?.id ?? "").split("@")[0]
+    const connectedPhone = (body.connectedPhone ?? "").replace(/\D/g, "")
+    const fromApi =
+      body.fromApi === true ||
+      (senderId !== "" &&
+        connectedPhone !== "" &&
+        senderId !== connectedPhone)
+
+    const isLid = chatId.endsWith("@lid")
+    const moment = Number(body.moment)
+    return [
+      {
+        to: isLid ? "" : chatId.split("@")[0],
+        toLid: isLid ? chatId : null,
+        fromApi,
         sentAt: moment > 0 ? new Date(moment * 1000) : new Date(),
       },
     ]
