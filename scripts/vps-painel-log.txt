@@ -1,0 +1,13 @@
+echo "=== LOG PAINEL (dentro do container) ==="
+docker exec ic-openresty-3xPL ls -la /www/sites/painel.medicoemdomicilio.com/log/ 2>/dev/null
+echo "=== TOTAL POSTs webhook ==="
+docker exec ic-openresty-3xPL sh -c "grep -ac 'POST /api/webhooks/whatsapp' /www/sites/painel.medicoemdomicilio.com/log/access.log 2>/dev/null"
+echo "=== POR DIA ==="
+docker exec ic-openresty-3xPL sh -c "grep -a 'POST /api/webhooks/whatsapp' /www/sites/painel.medicoemdomicilio.com/log/access.log | cut -d' ' -f4 | cut -c2-12 | sort | uniq -c | tail -25"
+echo "=== ULTIMOS 10 POSTs AO WEBHOOK ==="
+docker exec ic-openresty-3xPL sh -c "grep -a 'POST /api/webhooks/whatsapp' /www/sites/painel.medicoemdomicilio.com/log/access.log | tail -10 | cut -c1-280"
+echo "=== IPs QUE POSTAM ==="
+docker exec ic-openresty-3xPL sh -c "grep -a 'POST /api/webhooks/whatsapp' /www/sites/painel.medicoemdomicilio.com/log/access.log | cut -d' ' -f1 | sort | uniq -c | sort -rn | head -8"
+echo "=== MEU TESTE DE AGORA ==="
+docker exec ic-openresty-3xPL sh -c "grep -a 'webhookDelivery' /www/sites/painel.medicoemdomicilio.com/log/access.log | tail -3 | cut -c1-280"
+echo "=== FIM ==="

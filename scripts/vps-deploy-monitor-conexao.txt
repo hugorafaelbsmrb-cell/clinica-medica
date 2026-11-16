@@ -1,0 +1,16 @@
+cd /opt/clinica-medica
+git pull
+docker compose up -d --build app cron
+sleep 25
+docker ps --filter name=clinica-medica --format "{{.Names}} | {{.Status}}"
+git log --oneline -2
+echo "--- verifica conexao (cron) ---"
+docker exec clinica-medica-cron sh -c 'wget -q -O- "http://app:3000/api/cron/check-connection?secret=$CRON_SECRET"'
+echo ""
+echo "--- fila de mensagens (deve pular com WhatsApp offline) ---"
+docker exec clinica-medica-cron sh -c 'wget -q -O- "http://app:3000/api/cron/send-messages?secret=$CRON_SECRET"'
+echo ""
+echo "--- logs app (conexao) ---"
+docker logs clinica-medica --tail 40 2>&1 | grep -i -E "whatsapp|conex|guard" | tail -15
+echo "--- crontab do container ---"
+docker exec clinica-medica-cron cat /etc/crontabs/root

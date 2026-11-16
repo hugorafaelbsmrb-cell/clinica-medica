@@ -1,0 +1,11 @@
+echo "=== CONTAINERS ==="
+docker ps --format "table {{.Names}}|{{.Status}}"
+echo "=== URLs no env do app ==="
+docker exec clinica-medica env 2>/dev/null | grep -E "APP_URL|AUTH_URL|NEXTAUTH_URL|WEBHOOK" 
+echo "=== HEALTH local ==="
+wget -q -O- http://127.0.0.1:8080/login -S 2>&1 | head -3
+echo "=== LOGS 72h: erros ==="
+docker logs --since 72h clinica-medica 2>&1 | grep -iE "error|erro|fail|exception|timeout" | tail -40
+echo "=== LOGS 72h: bot/webhook/wapi ==="
+docker logs --since 72h clinica-medica 2>&1 | grep -iE "bot|webhook|wapi|whatsapp" | tail -50
+echo "=== FIM ==="

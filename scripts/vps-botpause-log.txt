@@ -1,0 +1,9 @@
+echo "=== total linhas de log ==="
+docker logs clinica-medica 2>&1 | wc -l
+echo "=== [bot-pause] historico (ultimos 30) ==="
+docker logs clinica-medica 2>&1 | grep -a "bot-pause" | tail -30
+echo "=== eventos 'WhatsApp Webhook' historico (ultimos 20) ==="
+docker logs clinica-medica 2>&1 | grep -a "WhatsApp Webhook" | tail -20
+echo "=== fromMe nos logs (ultimos 10) ==="
+docker logs clinica-medica 2>&1 | grep -a "fromMe" | tail -10
+echo "=== FIM ==="

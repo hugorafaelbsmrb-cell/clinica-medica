@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/sidebar"
 import { UserMenu } from "@/components/layout/user-menu"
 import { NotificationBell } from "@/components/layout/notification-bell"
 import { BottomNav } from "@/components/layout/bottom-nav"
+import { WhatsAppConnectionBanner } from "@/components/layout/whatsapp-connection-banner"
 
 export default async function DashboardLayout({
   children,
@@ -35,6 +36,13 @@ export default async function DashboardLayout({
             />
           </div>
         </header>
+        {/* Queda do WhatsApp: avisa a equipe em qualquer tela do painel. */}
+        {clinic.waConnected === false ? (
+          <WhatsAppConnectionBanner
+            disconnectedAt={clinic.waDisconnectedAt ?? null}
+            checkedAt={clinic.waStatusCheckedAt ?? null}
+          />
+        ) : null}
         <main className="min-w-0 flex-1 bg-muted/30 p-4 pb-[calc(5.25rem+env(safe-area-inset-bottom))] md:p-6 md:pb-[calc(5.25rem+env(safe-area-inset-bottom))] lg:pb-6">
           {children}
         </main>

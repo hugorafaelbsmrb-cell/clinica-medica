@@ -1,0 +1,7 @@
+echo "=== uptime containers ==="
+docker ps --format "table {{.Names}}\t{{.Status}}" | grep -iE "clinica|NAMES"
+echo "=== [WhatsApp Webhook] eventos nao-webhookReceived (60 min) ==="
+docker logs clinica-medica --since 60m 2>&1 | grep -a "WhatsApp Webhook" | tail -50
+echo "=== inicio dos logs do app (container atual) ==="
+docker logs clinica-medica 2>&1 | head -3
+echo "=== FIM ==="

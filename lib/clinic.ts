@@ -19,6 +19,10 @@ export type ClinicInfo = {
   botMsgBoasVindas?: string | null
   botMsgAgendar?: string | null
   botPauseHours?: number
+  /** Estado da conexão do WhatsApp (null = nunca verificado). */
+  waConnected?: boolean | null
+  waDisconnectedAt?: Date | null
+  waStatusCheckedAt?: Date | null
   autoCadastroEnabled?: boolean
   autoCadastroDelayHours?: number
   autoCadastroMsg?: string | null
@@ -122,6 +126,9 @@ export async function getClinicSettings(): Promise<ClinicInfo> {
         botMsgBoasVindas: settings.botMsgBoasVindas,
         botMsgAgendar: settings.botMsgAgendar,
         botPauseHours: settings.botPauseHours,
+        waConnected: settings.waConnected,
+        waDisconnectedAt: settings.waDisconnectedAt,
+        waStatusCheckedAt: settings.waStatusCheckedAt,
         autoCadastroEnabled: settings.autoCadastroEnabled,
         autoCadastroDelayHours: settings.autoCadastroDelayHours,
         autoCadastroMsg: settings.autoCadastroMsg,

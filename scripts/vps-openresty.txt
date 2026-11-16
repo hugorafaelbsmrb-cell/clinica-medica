@@ -1,0 +1,11 @@
+echo "=== OPENRESTY CONTAINER ==="
+docker exec ic-openresty-3xPL sh -c 'ls -la /usr/local/openresty/nginx/logs/ 2>/dev/null | head -12; echo ---; ls /var/log/nginx 2>/dev/null | head -12; echo ---; grep -rln "medicoemdomicilio" /usr/local/openresty/nginx/conf 2>/dev/null | head -8'
+echo "=== MOUNTS OPENRESTY ==="
+docker inspect ic-openresty-3xPL --format '{{json .Mounts}}' | head -c 1200
+echo ""
+echo "=== DIRETORIO /opt ==="
+ls /opt 2>/dev/null | head -25
+echo "=== ARQUIVOS DE LOG DO PROXY ==="
+find /opt -maxdepth 5 -iname "*access*log*" 2>/dev/null | head -12
+find /opt/icontainer -maxdepth 5 -iname "*.conf" 2>/dev/null | head -12
+echo "=== FIM ==="

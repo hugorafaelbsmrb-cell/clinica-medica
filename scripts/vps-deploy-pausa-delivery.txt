@@ -1,0 +1,6 @@
+cd /opt/clinica-medica
+git pull
+docker compose up -d --build app
+sleep 20
+docker ps --filter name=clinica-medica --format "{{.Names}} | {{.Status}}"
+git log --oneline -2

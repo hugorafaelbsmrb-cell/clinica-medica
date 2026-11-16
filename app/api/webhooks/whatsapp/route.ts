@@ -16,6 +16,11 @@ import {
   pauseBotForPhone,
   pauseFromWhatsAppOutgoing,
 } from "@/lib/whatsapp/bot-pause"
+import {
+  applyWhatsAppConnection,
+  getWhatsAppConnection,
+  invalidateWhatsAppConnectionCache,
+} from "@/lib/whatsapp/connection"
 
 export const runtime = "nodejs"
 
@@ -94,6 +99,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, duplicate: true })
     }
     processedIds.set(messageId, now)
+  }
+
+  // Eventos de conexão da instância (webhookConnected/webhookDisconnected):
+  // atualizam o estado na hora, sem esperar o ciclo de 5 min do cron.
+  if (eventName && /connect/i.test(eventName)) {
+    const payloadConnected = (payload as { connected?: unknown }).connected
+    const connected =
+      typeof payloadConnected === "boolean"
+        ? payloadConnected
+        : !/disconnect/i.test(eventName)
+    invalidateWhatsAppConnectionCache()
+    const changed = await applyWhatsAppConnection(connected, new Date())
+    console.log(
+      `[WhatsApp] Evento de conexão (${eventName}): connected=${connected} changed=${changed}`
+    )
+    return NextResponse.json({ ok: true, connected, changed })
+  }
+
+  // Mensagem chegando prova que a instância está online: se o estado gravado
+  // era "desconectada", corrige imediatamente (banner some, envios voltam).
+  if (eventName === "webhookReceived") {
+    const state = await getWhatsAppConnection()
+    if (!state.connected) {
+      invalidateWhatsAppConnectionCache()
+      await applyWhatsAppConnection(true, new Date())
+      console.log("[WhatsApp] Conexão restabelecida (mensagem recebida)")
+    }
   }
 
   const provider = await getWhatsAppProvider()

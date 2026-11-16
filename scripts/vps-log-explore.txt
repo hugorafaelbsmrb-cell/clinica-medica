@@ -1,0 +1,18 @@
+LOG=/etc/icontainer/apps/openresty/openresty/log/access.log
+echo "=== TAIL 4 (formato do log) ==="
+tail -4 $LOG | cut -c1-320
+echo "=== HEAD 2 ==="
+head -2 $LOG | cut -c1-320
+echo "=== TOTAL LINHAS ==="
+wc -l < $LOG
+echo "=== linha com POST (qualquer) - ultimas 4 ==="
+grep -a "POST" $LOG | tail -4 | cut -c1-320
+echo "=== linhas com webhook - contagem ==="
+grep -ac "webhook" $LOG
+echo "=== linhas com 'whatsapp' - contagem ==="
+grep -ac "whatsapp" $LOG
+echo "=== linhas com 'medicoemdomicilio' no host - contagem ==="
+grep -ac "medicoemdomicilio" $LOG
+echo "=== ULTIMAS 3 linhas mencionando whatsapp ==="
+grep -a "whatsapp" $LOG | tail -3 | cut -c1-320
+echo "=== FIM ==="

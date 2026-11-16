@@ -1,0 +1,5 @@
+echo "=== [bot-pause] / [WhatsApp Webhook] HOJE (desde meia-noite UTC) ==="
+docker logs --since 2026-10-08T03:00:00Z clinica-medica 2>&1 | grep -aE "bot-pause|WhatsApp Webhook" | tail -20
+echo "=== nao cadastrado HOJE (ultimos 15) ==="
+docker logs --since 2026-10-08T03:00:00Z clinica-medica 2>&1 | grep -a "cadastrado" | tail -15
+echo "=== FIM ==="

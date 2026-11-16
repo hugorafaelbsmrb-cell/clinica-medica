@@ -8,6 +8,7 @@
  */
 
 import { getIntegrationSettings } from "@/lib/integrations"
+import { getWhatsAppConnection } from "./connection"
 import { MockProvider } from "./mock-provider"
 import { WApiProvider } from "./wapi-provider"
 
@@ -15,6 +16,12 @@ export type SendResult = {
   ok: boolean
   providerMessageId?: string
   error?: string
+  /**
+   * true = a instância do WhatsApp está desconectada e NADA foi enviado.
+   * O chamador deve manter a mensagem na fila (não é falha de envio) e
+   * sinalizar o problema na tela.
+   */
+  offline?: boolean
 }
 
 export type PhoneValidationResult = {
@@ -122,11 +129,110 @@ export interface WhatsAppProvider {
   parseDelivery?(payload: unknown): Promise<WhatsAppDelivery[]>
 }
 
+/**
+ * Envolve o provedor real e barra os envios quando a instância está
+ * desconectada. A W-API responde HTTP 200 com messageId mesmo sem conexão,
+ * então sem esta guarda o sistema marcava como ENVIADA (e consumia a fila)
+ * aquilo que nunca saiu.
+ */
+class ConnectionGuardedProvider implements WhatsAppProvider {
+  constructor(private readonly inner: WhatsAppProvider) {}
+
+  get name(): string {
+    return this.inner.name
+  }
+
+  /** Resultado de bloqueio quando o número está offline; null = pode enviar. */
+  private async blocked(): Promise<SendResult | null> {
+    const state = await getWhatsAppConnection()
+    if (state.connected) return null
+    return {
+      ok: false,
+      offline: true,
+      error:
+        "WhatsApp desconectado — envio suspenso até o número ser reconectado",
+    }
+  }
+
+  async sendText(phone: string, message: string): Promise<SendResult> {
+    return (await this.blocked()) ?? this.inner.sendText(phone, message)
+  }
+
+  async sendTextWithButtons(
+    phone: string,
+    message: string,
+    buttons: WhatsAppButton[]
+  ): Promise<SendResult> {
+    const blocked = await this.blocked()
+    if (blocked) return blocked
+    if (!this.inner.sendTextWithButtons) {
+      return { ok: false, error: "Provedor sem suporte a botões de ação" }
+    }
+    return this.inner.sendTextWithButtons(phone, message, buttons)
+  }
+
+  async sendDocument(
+    phone: string,
+    caption: string,
+    document: Buffer,
+    fileName: string
+  ): Promise<SendResult> {
+    return (
+      (await this.blocked()) ??
+      this.inner.sendDocument(phone, caption, document, fileName)
+    )
+  }
+
+  async sendImage(
+    phone: string,
+    caption: string,
+    image: string
+  ): Promise<SendResult> {
+    const blocked = await this.blocked()
+    if (blocked) return blocked
+    if (!this.inner.sendImage) {
+      return { ok: false, error: "Provedor sem suporte a imagens" }
+    }
+    return this.inner.sendImage(phone, caption, image)
+  }
+
+  async sendVideo(
+    phone: string,
+    videoUrl: string,
+    caption: string
+  ): Promise<SendResult> {
+    const blocked = await this.blocked()
+    if (blocked) return blocked
+    if (!this.inner.sendVideo) {
+      return { ok: false, error: "Provedor sem suporte a vídeos" }
+    }
+    return this.inner.sendVideo(phone, videoUrl, caption)
+  }
+
+  validatePhone(phone: string): Promise<PhoneValidationResult> {
+    return this.inner.validatePhone(phone)
+  }
+
+  parseWebhook(payload: unknown): Promise<WhatsAppIncoming[]> {
+    return this.inner.parseWebhook(payload)
+  }
+
+  parseOutgoing(payload: unknown): Promise<WhatsAppOutgoing[]> {
+    return this.inner.parseOutgoing(payload)
+  }
+
+  async parseDelivery(payload: unknown): Promise<WhatsAppDelivery[]> {
+    return this.inner.parseDelivery ? this.inner.parseDelivery(payload) : []
+  }
+}
+
 /** Provedor ativo com base nas credenciais configuradas (banco ou .env). */
 export async function getWhatsAppProvider(): Promise<WhatsAppProvider> {
   const settings = await getIntegrationSettings()
   if (settings.wApiToken && settings.wApiInstance) {
-    return new WApiProvider(settings.wApiInstance, settings.wApiToken)
+    return new ConnectionGuardedProvider(
+      new WApiProvider(settings.wApiInstance, settings.wApiToken)
+    )
   }
   return new MockProvider()
 }

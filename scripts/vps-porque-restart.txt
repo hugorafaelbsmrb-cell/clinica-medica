@@ -1,0 +1,9 @@
+echo "=== inspect container ==="
+docker inspect clinica-medica --format 'Created={{.Created}} StartedAt={{.State.StartedAt}} FinishedAt={{.State.FinishedAt}} RestartCount={{.RestartCount}} Exit={{.State.ExitCode}} OOM={{.State.OOMKilled}}'
+echo "=== docker events (45 min) ==="
+timeout 8 docker events --since 45m --filter container=clinica-medica
+echo "=== git log VPS ==="
+cd /opt/clinica-medica && git log --oneline -4 && echo "--- reflog ---" && git reflog -6 | head -10
+echo "=== OOM no kernel? ==="
+dmesg -T 2>/dev/null | grep -aiE "oom|killed process" | tail -5
+echo "=== FIM ==="

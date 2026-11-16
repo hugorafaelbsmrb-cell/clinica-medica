@@ -1,0 +1,9 @@
+echo "aguardando mais 110s pelo eco do envio API (stamp 22:44:56)..."
+sleep 110
+echo "=== [wa-diag] SEM status (20 min) ==="
+docker logs clinica-medica --since 20m 2>&1 | grep -a "wa-diag" | grep -av 'chat="status"' | tail -20
+echo "=== contagem wa-diag nos ultimos 3 min ==="
+docker logs clinica-medica --since 3m 2>&1 | grep -ac "wa-diag"
+echo "=== eventos de mensagem (20 min) ==="
+docker logs clinica-medica --since 20m 2>&1 | grep -aE "cadastrado|bot-pause|Botões falharam" | tail -15
+echo "=== FIM ==="

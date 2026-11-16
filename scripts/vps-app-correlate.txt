@@ -1,0 +1,12 @@
+echo "=== CONTAGENS DE HOJE (desde 03:00Z) NO APP ==="
+echo "-- 'nao cadastrado':"
+docker logs clinica-medica --since 2026-10-08T03:00:00Z 2>&1 | grep -ac "cadastrado"
+echo "-- 'Botoes falharam':"
+docker logs clinica-medica --since 2026-10-08T03:00:00Z 2>&1 | grep -ac "Botões falharam"
+echo "-- 'WhatsApp Webhook' (eventos nao-recebidos):"
+docker logs clinica-medica --since 2026-10-08T03:00:00Z 2>&1 | grep -ac "WhatsApp Webhook"
+echo "-- 'bot-pause':"
+docker logs clinica-medica --since 2026-10-08T03:00:00Z 2>&1 | grep -ac "bot-pause"
+echo "=== ULTIMAS 45 LINHAS DO APP (agora) ==="
+docker logs clinica-medica --tail 45 2>&1 | cut -c1-220
+echo "=== FIM ==="

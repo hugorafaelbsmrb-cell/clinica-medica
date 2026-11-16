@@ -1,0 +1,32 @@
+echo "=== 1. CONTAINER APP ==="
+docker ps --filter name=clinica-medica --format "{{.Names}} | {{.Status}} | criado: {{.CreatedAt}}"
+echo ""
+echo "=== 2. TIPOS DE EVENTO DE WEBHOOK (7d) ==="
+docker logs clinica-medica --since 168h 2>&1 | grep -a "WhatsApp Webhook" | sed 's/.*WhatsApp Webhook] //' | cut -c1-22 | sort | uniq -c | sort -rn | head -20
+echo ""
+echo "=== 3. DESCONEXOES POR DIA (7d) ==="
+docker logs clinica-medica --since 168h 2>&1 | grep -a "webhookDisconnected" | cut -c1-10 | sort | uniq -c
+echo ""
+echo "=== 4. CONEXOES POR DIA (7d) ==="
+docker logs clinica-medica --since 168h 2>&1 | grep -a "webhookConnected" | cut -c1-10 | sort | uniq -c
+echo ""
+echo "=== 5. ULTIMOS EVENTOS DISCONNECTED (payload) ==="
+docker logs clinica-medica --since 168h 2>&1 | grep -a "webhookDisconnected" | tail -6
+echo ""
+echo "=== 6. ULTIMOS EVENTOS CONNECTED (payload) ==="
+docker logs clinica-medica --since 168h 2>&1 | grep -a "webhookConnected" | tail -4
+echo ""
+echo "=== 7. ERROS DE ENVIO / API (7d) - ultimos 25 ==="
+docker logs clinica-medica --since 168h 2>&1 | grep -aiE "\[\s*erro|error:|failed|nao enviad|falha|401|403|409|428|429|503" | tail -25
+echo ""
+echo "=== 8. ERROS DE ENVIO W-API (send-) 7d - contagem ==="
+docker logs clinica-medica --since 168h 2>&1 | grep -aoiE "send-(text|image|video|document|button-actions)[^ ]*" | sort | uniq -c | sort -rn | head -10
+echo ""
+echo "=== 9. UPTIME / RESTARTS ==="
+docker inspect clinica-medica --format 'Restart={{.RestartCount}} StartedAt={{.State.StartedAt}} OOM={{.State.OOMKilled}} Fim={{.State.FinishedAt}}'
+echo ""
+echo "=== 10. LOGS DO PROXY: POSTs webhook por dia ==="
+docker exec ic-openresty-3xPL sh -c "grep -a 'POST /api/webhooks/whatsapp' /www/sites/painel.medicoemdomicilio.com/log/access.log | cut -c2-12 | cut -c1-11 | sort | uniq -c | tail -12" 2>/dev/null
+echo ""
+echo "=== 11. STATUS HTTP DO WEBHOOK (7d) - contagem ==="
+docker exec ic-openresty-3xPL sh -c "grep -a 'POST /api/webhooks/whatsapp' /www/sites/painel.medicoemdomicilio.com/log/access.log | grep -oE '\" [0-9]{3} ' | sort | uniq -c" 2>/dev/null

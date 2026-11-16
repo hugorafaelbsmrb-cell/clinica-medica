@@ -1,0 +1,10 @@
+echo "=== container ==="
+docker ps --filter name=clinica-medica --format '{{.Status}}'
+echo "=== teste dedupe (mesmo messageId 2x) ==="
+curl -s -X POST -H "Content-Type: application/json" -d '{"event":"webhookDelivery","messageId":"teste-dedupe-probe-001","probe":"dedupe"}' http://localhost:8080/api/webhooks/whatsapp
+echo
+curl -s -X POST -H "Content-Type: application/json" -d '{"event":"webhookDelivery","messageId":"teste-dedupe-probe-001","probe":"dedupe"}' http://localhost:8080/api/webhooks/whatsapp
+echo
+echo "=== wa-diag recentes (pos-deploy, 3 min) ==="
+docker logs clinica-medica --since 3m 2>&1 | grep -a "wa-diag" | tail -10
+echo "=== FIM ==="

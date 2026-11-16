@@ -186,6 +186,14 @@ model ClinicSettings {
   botMsgAgendar          String? @db.Text // resposta ao pedido de novo agendamento (vazio = padrão com link de cadastro)
   botPauseHours          Int     @default(24) // horas de silêncio do bot após a equipe assumir o atendimento
 
+  // Estado da conexão do WhatsApp, mantido pelo cron /api/cron/check-connection
+  // e pelos eventos de conexão do webhook. Sem isso o sistema enviava (e
+  // marcava como ENVIADA) com a instância caída, em silêncio.
+  waConnected       Boolean? // último estado observado da instância (null = nunca verificado)
+  waConnectedAt     DateTime? // desde quando está conectada
+  waDisconnectedAt  DateTime? // desde quando está desconectada
+  waStatusCheckedAt DateTime? // última verificação de estado
+
   // Automações de mensagens (painel Automações)
   autoCadastroEnabled        Boolean @default(true) // lembrete para quem iniciou o cadastro e não finalizou
   autoCadastroDelayHours     Int     @default(24) // legado: o follow-up agora usa estágios fixos de 30min/1h/2h

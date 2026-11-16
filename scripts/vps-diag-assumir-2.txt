@@ -1,0 +1,27 @@
+echo "=== 1. UPTIME DO CONTAINER E DEPLOY ATUAL ==="
+docker ps --filter name=clinica-medica --format "{{.Names}} | {{.Status}} | criado: {{.CreatedAt}}"
+cd /opt/clinica-medica && git log --oneline -3
+
+echo ""
+echo "=== 2. EVENTOS NAO-RECEIVED RECEBIDOS (72h) - ultimos 40 ==="
+docker logs clinica-medica --since 72h 2>&1 | grep -a "WhatsApp Webhook" | tail -40
+
+echo ""
+echo "=== 3. CONTAGEM DE TIPOS DE EVENTO (72h) ==="
+docker logs clinica-medica --since 72h 2>&1 | grep -a "WhatsApp Webhook" | sed 's/.*WhatsApp Webhook. //' | cut -c1-25 | sort | uniq -c | sort -rn | head -25
+
+echo ""
+echo "=== 4. wa-diag fromMe=true (72h) - mensagens enviadas detectadas ==="
+docker logs clinica-medica --since 72h 2>&1 | grep -a "fromMe=true" | tail -20
+
+echo ""
+echo "=== 5. wa-diag ULTIMOS 50 (48h) ==="
+docker logs clinica-medica --since 48h 2>&1 | grep -a "wa-diag\]" | tail -50
+
+echo ""
+echo "=== 6. POSTs NO PROXY (ultimos 30) ==="
+docker exec ic-openresty-3xPL sh -c "grep -a 'POST /api/webhooks/whatsapp' /www/sites/painel.medicoemdomicilio.com/log/access.log | tail -30"
+
+echo ""
+echo "=== 7. TOTAL DE POSTs NO PROXY POR HORA (ultimas 6h) ==="
+docker exec ic-openresty-3xPL sh -c "grep -a 'POST /api/webhooks/whatsapp' /www/sites/painel.medicoemdomicilio.com/log/access.log | tail -200 | cut -c1-14 | uniq -c | tail -20"

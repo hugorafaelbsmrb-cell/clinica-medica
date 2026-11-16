@@ -21,6 +21,7 @@ import {
   type WhatsAppProvider,
 } from "./provider"
 import { isPhonePaused, pauseBotForPhone, refreshBotPause } from "./bot-pause"
+import { getWhatsAppConnection } from "./connection"
 
 /** Substitui variáveis {{nome}}, {{data}} no corpo do template. */
 export function renderTemplate(
@@ -219,6 +220,12 @@ export async function sendImmediateMessage(
       error: result.ok ? null : (result.error ?? "Erro desconhecido"),
     },
   })
+
+  if (result.offline) {
+    console.warn(
+      `[WhatsApp] Envio imediato suspenso (${type}) — instância desconectada`
+    )
+  }
 
   return result.ok
     ? { ok: true }
@@ -573,11 +580,23 @@ export const AUTOMATED_SPACING_MS = 3 * 60 * 1000
  * cron a cada 3 minutos, o espaçamento entre envios fica em ~3 minutos.
  * Mensagens da equipe (MANUAL/DOCUMENTO) e as de envio imediato
  * (sendImmediateMessage) não passam por esse limite.
+ *
+ * Com a instância desconectada nada é enviado nem marcado como FALHA: a fila
+ * fica intacta (antes as mensagens saíam da fila como ENVIADA — ou FALHA —
+ * sem nunca chegar ao paciente).
  * Retorna o resumo de sucessos/falhas.
  */
 export async function processPendingMessages(
   now = new Date()
-): Promise<{ sent: number; failed: number }> {
+): Promise<{ sent: number; failed: number; skipped?: "offline" }> {
+  const connection = await getWhatsAppConnection()
+  if (!connection.connected) {
+    console.warn(
+      "[WhatsApp] Fila não processada — instância desconectada (mensagens seguem PENDENTE)"
+    )
+    return { sent: 0, failed: 0, skipped: "offline" }
+  }
+
   const provider = await getWhatsAppProvider()
 
   const pending = await prisma.message.findMany({
@@ -736,6 +755,12 @@ export async function processPendingMessages(
         touchedCampaigns.add(campaign.id)
       }
       sent++
+    } else if (result.offline) {
+      // Instância caiu no meio do lote: interrompe sem consumir a fila.
+      console.warn(
+        "[WhatsApp] Envio interrompido — instância desconectada (fila preservada)"
+      )
+      break
     } else {
       await prisma.message.update({
         where: { id: message.id },

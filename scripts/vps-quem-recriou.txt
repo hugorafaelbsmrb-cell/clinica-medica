@@ -1,0 +1,15 @@
+echo "=== docker ps -a (todos, clinica) ==="
+docker ps -a --format "table {{.Names}}\t{{.ID}}\t{{.Status}}\t{{.CreatedAt}}" | grep -iE "clinica|NAMES"
+echo "=== imagens da app ==="
+docker image ls --format "table {{.Repository}}\t{{.ID}}\t{{.CreatedAt}}" | grep -iE "clinica|REPOSITORY"
+echo "=== crontab root ==="
+crontab -l 2>/dev/null | head -25
+echo "=== /etc/cron.d ==="
+ls -la /etc/cron.d/ 2>/dev/null
+echo "=== grep deploy script em cron ==="
+grep -rls "clinica-medica" /etc/cron.d/ /etc/crontab 2>/dev/null
+echo "=== mtimes git ==="
+stat -c "%y %n" /opt/clinica-medica/.git/FETCH_HEAD /opt/clinica-medica/.git/HEAD /opt/clinica-medica/docker-compose.yml 2>/dev/null
+echo "=== watchtower ou auto-update? ==="
+docker ps -a --format "{{.Names}} {{.Image}} {{.Status}}" | grep -iE "watch|auto|update"
+echo "=== FIM ==="

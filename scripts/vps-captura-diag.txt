@@ -1,0 +1,9 @@
+echo "aguardando 95s para o eco do envio de teste..."
+sleep 95
+echo "=== [wa-diag] (novos) ==="
+docker logs clinica-medica --since 4m 2>&1 | grep -a "wa-diag" | tail -40
+echo "=== bot-pause / enviados / eventos (4 min) ==="
+docker logs clinica-medica --since 4m 2>&1 | grep -aE "bot-pause|Botões falharam|WhatsApp Webhook" | tail -20
+echo "=== POSTs recentes no webhook (proxy) ==="
+docker exec ic-openresty-3xPL sh -c "grep -a 'POST /api/webhooks/whatsapp' /www/sites/painel.medicoemdomicilio.com/log/access.log | tail -14 | cut -c1-190"
+echo "=== FIM ==="

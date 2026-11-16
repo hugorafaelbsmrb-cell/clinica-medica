@@ -1,0 +1,11 @@
+echo "=== VHOST CONF medicoemdomicilio ==="
+docker exec ic-openresty-3xPL cat /usr/local/openresty/nginx/conf/default/painel.medicoemdomicilio.com.conf 2>/dev/null | head -70
+echo "=== AMOSTRA LINHAS medicoemdomicilio ==="
+grep -a "medicoemdomicilio" /etc/icontainer/apps/openresty/openresty/log/access.log 2>/dev/null | tail -6 | cut -c1-240
+echo "=== OUTROS ARQUIVOS .log no host (icontainer) ==="
+find /etc/icontainer -maxdepth 5 -name "*.log" 2>/dev/null | head -25
+echo "=== TODOS OS VHOSTS ==="
+docker exec ic-openresty-3xPL ls /usr/local/openresty/nginx/conf/default/ 2>/dev/null
+echo "=== DOCKER LOGS DO PROXY (tail) ==="
+docker logs ic-openresty-3xPL --tail 15 2>&1 | cut -c1-200
+echo "=== FIM ==="

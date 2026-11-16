@@ -1,0 +1,6 @@
+echo "=== VALIDACAO PAUSA VIA DELIVERY - inicio: ==="
+date
+( timeout 700 docker logs -f --since 5s clinica-medica 2>&1 | grep --line-buffered -aE "wa-diag\]|wa-delivery|bot-pause|WhatsApp Webhook" ) &
+( timeout 700 docker exec ic-openresty-3xPL sh -c "tail -f /www/sites/painel.medicoemdomicilio.com/log/access.log" | grep --line-buffered -a "webhooks/whatsapp" ) &
+wait
+echo "=== FIM DA CAPTURA ==="

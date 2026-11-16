@@ -1,0 +1,14 @@
+echo "=== PROXY / PORTAS ==="
+docker ps --format '{{.Names}} | {{.Image}} | {{.Ports}}' | head -30
+ss -tlnp 2>/dev/null | head -25
+command -v nginx caddy 2>/dev/null
+echo "=== DIRETORIOS DE LOG RELEVANTES ==="
+ls -la /var/log/nginx 2>/dev/null | head -8
+ls /var/log/caddy 2>/dev/null | head -5
+echo "=== POSTS WEBHOOK /api/webhooks/whatsapp (access.log atual) ==="
+grep -ac "POST /api/webhooks/whatsapp" /var/log/nginx/access.log 2>/dev/null
+echo "=== ULTIMOS 5 POSTS WEBHOOK ==="
+grep -a "POST /api/webhooks/whatsapp" /var/log/nginx/access.log 2>/dev/null | tail -5
+echo "=== CONTAGEM POR HORA - HOJE (UTM) ==="
+grep -a "POST /api/webhooks/whatsapp" /var/log/nginx/access.log 2>/dev/null | awk '{print $4}' | cut -c2-15 | sort | uniq -c | tail -40
+echo "=== FIM ==="

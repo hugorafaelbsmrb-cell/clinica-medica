@@ -1,0 +1,6 @@
+echo "=== CAPTURA EM TEMPO REAL (10 min) - pode enviar a mensagem agora ==="
+date
+( timeout 600 docker logs -f --since 10s clinica-medica 2>&1 | grep --line-buffered -aE "wa-diag\]|wa-diag-payload|WhatsApp Webhook|Webhook recebido" ) &
+( timeout 600 docker exec ic-openresty-3xPL sh -c "tail -f /www/sites/painel.medicoemdomicilio.com/log/access.log" | grep --line-buffered -a "webhooks/whatsapp" ) &
+wait
+echo "=== FIM DA CAPTURA ==="

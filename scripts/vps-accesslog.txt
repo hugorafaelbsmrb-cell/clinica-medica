@@ -1,0 +1,14 @@
+LOG=/etc/icontainer/apps/openresty/openresty/log/access.log
+echo "=== ARQUIVOS DE LOG ==="
+ls -la /etc/icontainer/apps/openresty/openresty/log/ 2>/dev/null | head -12
+echo "=== TOTAL POSTs /api/webhooks/whatsapp ==="
+grep -ac "POST /api/webhooks/whatsapp" $LOG 2>/dev/null
+echo "=== POR DIA ==="
+grep -a "POST /api/webhooks/whatsapp" $LOG 2>/dev/null | awk '{print $4}' | cut -c2-12 | sort | uniq -c
+echo "=== STATUS DOS POSTs (coluna 9) ==="
+grep -a "POST /api/webhooks/whatsapp" $LOG 2>/dev/null | awk '{print $9}' | sort | uniq -c
+echo "=== ULTIMOS 8 POSTs (mostrando ip + user-agent) ==="
+grep -a "POST /api/webhooks/whatsapp" $LOG 2>/dev/null | tail -8 | cut -c1-260
+echo "=== JA EXISTE [wa-diag]? (implantado?) ==="
+docker logs clinica-medica --since 48h 2>&1 | grep -ac "wa-diag" 2>/dev/null
+echo "=== FIM ==="
