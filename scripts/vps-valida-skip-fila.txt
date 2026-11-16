@@ -1,0 +1,7 @@
+cd /opt/clinica-medica
+echo "--- send-messages (deve pular: WhatsApp offline) ---"
+docker exec clinica-medica-cron sh -c 'wget -q -O- "http://app:3000/api/cron/send-messages?secret=$CRON_SECRET"'
+echo ""
+echo "--- fila no banco (PENDENTE nao deve ter sido consumida) ---"
+sleep 5
+docker logs clinica-medica --tail 60 2>&1 | grep -i -E "fila nao processada|instancia desconectada|preservada" | tail -8
